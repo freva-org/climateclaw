@@ -6,7 +6,8 @@ import pymongo
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
-from .helpers import Thread, get_database, summarize_topic
+from .helpers import Thread, get_database
+from .summarize_topic import summarize_topic
 from src.core.settings import get_settings
 from src.services.streaming.stream_variants import (
     StreamVariant,
@@ -76,7 +77,7 @@ class ThreadStorage:
             topic = existing.get("topic", "") or None
 
         # compute topic if missing
-        if not topic:
+        if not topic or topic == "No topic yet":
             topic = await summarize_topic(content)
 
         all_stream = [from_sv_to_json(v) for v in merged_sv] if merged_sv else []
