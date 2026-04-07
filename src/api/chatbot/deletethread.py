@@ -61,6 +61,14 @@ async def delete_thread(
     Storage = await get_thread_storage(vault_url=auth.vault_url)
 
     try:
+        user_id = await Storage.get_user_id_for_thread(thread_id)
+        # Only allow the deletion of the thread if the user is the owner of the thread
+        if user_id != auth.username:
+            raise HTTPException(
+                status_code=403,
+                detail="You are not the owner of this thread.",
+            )
+
         await Storage.delete_thread(thread_id)
         logger.info(
             "Deleted thread from storage",
