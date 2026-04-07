@@ -8,19 +8,34 @@ set -euo pipefail
 #   --debug / --DEBUG          -> DEBUG=1
 #   --debug=0 / --DEBUG=0      -> DEBUG=0
 #   --no-debug                 -> DEBUG=0
-#   --scale             --> to use scaling with load-balancing proxy
+#   --scale                    -> use scaling with load-balancing proxy
 #
 # Everything else is passed through to `docker compose`.
-#
-# Examples:
-#   ./dev.sh up
-#   ./dev.sh up --build -d
-#   ./dev.sh --debug up --build -d
-#   ./dev.sh up --build -d --debug
-#
-# IMPORTANT: A debug launcher (launch.json in VSCode) should be 
-# configured to be able to use DEBUG mode.
 # ------------------------------------------------------------------
+
+print_usage() {
+  cat <<'EOF'
+Usage: ./dev.sh [OPTIONS] [DOCKER_COMPOSE_ARGS...]
+
+Custom options:
+  -h, --help        Show this help message
+  --debug, --DEBUG  Enable debug mode (FREVAGPT_DEBUG=1)
+  --debug=VALUE     Set debug explicitly, e.g. --debug=0 or --debug=1
+  --no-debug        Disable debug mode
+  --scale           Generate and use docker-compose.dev.scaled.yml
+
+Examples:
+  ./dev.sh up
+  ./dev.sh up --build -d
+  ./dev.sh --debug up --build -d
+  ./dev.sh up --build -d --debug
+  ./dev.sh --scale up --build
+
+Notes:
+  All non-custom arguments are passed through to:
+    docker compose -f <compose-file> ...
+EOF
+}
 
 # Set FREVAGPT_DEV flag for everything in this session
 export FREVAGPT_DEV=1
