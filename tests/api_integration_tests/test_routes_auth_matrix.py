@@ -12,6 +12,7 @@ async def test_all_get_routes_require_auth(client):
             "/api/chatbot/getthread",
             "/api/chatbot/getuserthreads",
             "/api/chatbot/streamresponse",
+            "/api/chatbot/editthread",
             "/api/chatbot/userfeedback",
         ]:
             r = await client.get(ep)

@@ -145,17 +145,23 @@ async def user_feedback(
                 feedback_at_thread_index,
                 feedback,
             )
-            logger.info(f"Successfully saved user feedback at index {feedback_at_thread_index}: {thread_id}")
+            logger.info(
+                f"Successfully saved user feedback at index {feedback_at_thread_index}: {thread_id}"
+            )
             return {"Successfully saved user feedback."}
         except Exception:
-            logger.exception(f"Failed to save user feedback at index {feedback_at_thread_index}: {thread_id}")
+            logger.exception(
+                f"Failed to save user feedback at index {feedback_at_thread_index}: {thread_id}"
+            )
             raise HTTPException(
                 status_code=500, detail=f"Failed to save user feedback: {thread_id}"
             )
     else:
         # TODO: delete feedback when user deletes thread?
         if "feedback" not in content_json[feedback_at_thread_index].keys():
-            logger.exception(f"Feedback not found at thread index {feedback_at_thread_index}: {thread_id}")
+            logger.exception(
+                f"Feedback not found at thread index {feedback_at_thread_index}: {thread_id}"
+            )
             raise HTTPException(
                 status_code=404,
                 detail=f"Feedback not found at thread index {feedback_at_thread_index}: {thread_id}",
@@ -168,12 +174,15 @@ async def user_feedback(
                 content_json,
                 feedback_at_thread_index,
             )
-            logger.info(f"Successfully removed user feedback at index {feedback_at_thread_index}: {thread_id}")
+            logger.info(
+                f"Successfully removed user feedback at index {feedback_at_thread_index}: {thread_id}"
+            )
             return {"Successfully removed user feedback."}
         except Exception:
             logger.exception(f"Failed to delete user feedback: {thread_id}")
             raise HTTPException(
-                status_code=500, detail=f"Failed to delete user feedback at index {feedback_at_thread_index}: {thread_id}"
+                status_code=500,
+                detail=f"Failed to delete user feedback at index {feedback_at_thread_index}: {thread_id}",
             )
 
 
