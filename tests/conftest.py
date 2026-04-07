@@ -196,9 +196,10 @@ def patch_mongo_uri(monkeypatch):
 def patch_read_thread(monkeypatch):
     async def _fake(self, thread_id: str):
         return [
-            {"variant": "Prompt", "text": "user prompt should be filtered out"},
-            {"variant": "User", "text": "kept"},
-            {"variant": "Assistant", "text": "also kept"},
+            {"variant": "ServerHint", "content": {'thread_id': thread_id}},
+            {"variant": "Prompt", "content": "user prompt should be filtered out"},
+            {"variant": "User", "content": "kept"},
+            {"variant": "Assistant", "content": "also kept"},
         ]
 
     import src.services.storage.mongodb_storage as mongo_store
@@ -215,11 +216,31 @@ def patch_read_thread(monkeypatch):
 
 @pytest.fixture
 def patch_save_thread(monkeypatch):
-    async def _fake_append(
-        database, thread_id: str, user_id: str, messages, append_to_existing
-    ):
-        return
+    calls = []
 
+    async def _fake_append(
+        self,
+        thread_id: str,
+        user_id: str,
+        content,
+        root_thread_id=None,
+        parent_thread_id=None,
+        fork_from_index=None,
+        append_to_existing=False,
+        **kwargs,
+    ):
+        calls.append(
+            {
+                "thread_id": thread_id,
+                "user_id": user_id,
+                "content": content,
+                "root_thread_id": root_thread_id,
+                "parent_thread_id": parent_thread_id,
+                "fork_from_index": fork_from_index,
+                "append_to_existing": append_to_existing,
+            }
+        )
+        return 
     import src.services.storage.mongodb_storage as mongo_store
 
     monkeypatch.setattr(
@@ -229,7 +250,7 @@ def patch_save_thread(monkeypatch):
         raising=False,
     )
 
-    return _fake_append
+    return calls 
 
 
 @pytest.fixture
