@@ -164,6 +164,10 @@ def main():
         elif name in MCP_SERVICES:
             if name in available_mcp_servers:
                 new_services.update(expand_service(name, svc, mcp_replica_n[name]))
+        elif name == "freva-web":
+            svc.get("environment").remove("CHAT_BOT_URL=http://freva-gpt-backend:8502")
+            svc.get("environment").append("CHAT_BOT_URL=http://haproxy:8502")
+            new_services[name] = svc
         else:
             new_services[name] = svc
 
