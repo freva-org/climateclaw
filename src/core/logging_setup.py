@@ -1,3 +1,4 @@
+import os
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -12,14 +13,18 @@ _NAMED_HANDLERS: Dict[str, RotatingFileHandler] = {}
 
 settings = get_settings()
 
+SERVICE_NAME = os.getenv("HOSTNAME") or "app"
+
 LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
-MAIN_LOG = LOG_DIR / "app.log"
+MAIN_LOG = LOG_DIR / f"{SERVICE_NAME}.log"
 MAIN_MAX_BYTES = 5_000_000
 MAIN_BACKUP_COUNT = 5
 THREAD_MAX_BYTES = 1_000_000
 THREAD_BACKUP_COUNT = 3
 
-LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s [thread=%(thread_id)s user=%(user_id)s] %(message)s"
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s "\
+             f"[service={SERVICE_NAME}]"\
+             "[thread=%(thread_id)s user=%(user_id)s] %(message)s"
 LOG_FORMATTER = logging.Formatter(LOG_FORMAT)
 
 

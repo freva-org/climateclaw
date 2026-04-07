@@ -12,6 +12,7 @@ load_dotenv()
 DEFAULT_MCP_PORTS = {"rag":"8050",
                      "code":"8051",
                      "web_search":"8052"}
+MCP_SERVICES = {"rag", "code", "web-search"}
 
 
 def canonical_service_name(name: str) -> str:
@@ -27,12 +28,15 @@ def expand_service(name, service, replicas):
 
     for i in range(1, replicas + 1):
         s = deepcopy(service)
+        replica_name = f"{name}-{i}"
 
         if "ports" in s:
             ports = s.pop("ports")
             s["expose"] = [p.split("}:")[1] if "}:" in p else p.split(":")[-1] for p in ports]
 
-        services[f"{name}-{i}"] = s
+        s["hostname"] = replica_name + "-${FREVAGPT_INSTANCE_NAME}"
+
+        services[replica_name] = s
 
     return services
 
@@ -76,7 +80,7 @@ def generate_haproxy(backend_n, backend_port, litellm_n, server_list, replica_di
 
     conf.append(
         "frontend fe_litellm\n"
-        f"    bind *:4000\n"
+        "    bind *:4000\n"
         "    default_backend be_litellm\n"
         "\n"
     )
@@ -157,8 +161,9 @@ def main():
             new_services.update(expand_service(name, svc, backend_n))
         elif name == "litellm":
             new_services.update(expand_service(name, svc, litellm_n))
-        elif name in available_mcp_servers:
-            new_services.update(expand_service(name, svc, mcp_replica_n[name]))
+        elif name in MCP_SERVICES:
+            if name in available_mcp_servers:
+                new_services.update(expand_service(name, svc, mcp_replica_n[name]))
         else:
             new_services[name] = svc
 

@@ -88,7 +88,7 @@ async def get_mcp_manager(
     extra_headers = await get_mcp_headers(authenticator, cache, logger=logger)
 
     try:
-        mgr.initialize(extra_headers)
+        await mgr.initialize(extra_headers)
         logger.info("Successfully initialized the MCPManager!")
         return mgr
     except Exception as e:

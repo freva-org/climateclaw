@@ -1,15 +1,25 @@
 import os
+import asyncio
 
 from fastmcp import FastMCP
 
+from openai import AsyncOpenAI
+
+from src.tools.active_requests import (
+    current_ids,
+    tracked_request,
+    ACTIVE_REQUESTS,
+    RequestCancelled,
+)
 from src.tools.header_gate import make_header_gate
-
 from src.core.logging_setup import configure_logging
-from openai import OpenAI
 
-logger = configure_logging(__name__, named_log="web_search_server")
+SERVICE_NAME = os.getenv("HOSTNAME") or "web_search_server"
 
-OPENAI_API_KEY: str = os.getenv("FREVAGPT_OPENAI_API_KEY")
+logger = configure_logging(__name__, named_log=SERVICE_NAME)
+
+
+OPENAI_API_KEY = os.getenv("FREVAGPT_OPENAI_API_KEY")
 
 mcp = FastMCP("web-search-server")
 
@@ -39,12 +49,10 @@ app = make_header_gate(
     header_name_list=[],
     logger=logger,
     mcp_path=PATH,
+    on_cancel_request=ACTIVE_REQUESTS.cancel,
 )
 
-client = OpenAI(api_key=OPENAI_API_KEY)
-
-
-# ─── Tool ───────────────────────────────────────────────────────────────────
+client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 
 def should_attach_mkexp_pdf(query: str) -> bool:
@@ -70,9 +78,10 @@ def should_attach_mkexp_pdf(query: str) -> bool:
     ]
     return any(k in q for k in keywords)
 
+# ─── Tool ───────────────────────────────────────────────────────────────────
 
 @mcp.tool()
-def web_search(query: str) -> str:
+async def web_search(query: str) -> dict:
     """
     Calls a web-search agent to access DKRZ/HPC and ICON model documentation website.
     Args:
@@ -80,59 +89,80 @@ def web_search(query: str) -> str:
     Returns:
         str: Relevant context extracted from web-page.
     """
+    sid, rid = current_ids()
+
     logger.info(
         "Searching for DKRZ/HPC- or ICON-related context in documentation "
         f"for query: {query}"
     )
-
-    system_prompt = (
-        "You are a web-search agent that can search documentations for DKRZ/HPC, "
-        "ICON model and mkexp toolbox. Use the documentation websites for searching "
-        "and creating answers. Make sure the information provided is accurate and up-to-date. "
-        "DKRZ/HPC doc 'https://docs.dkrz.de/search.html?q=SEARCHTERM1+SEARCHTERM2'. "
-        "ICON doc 'https://docs.icon-model.org/search.html?q=SEARCHTERM1+SEARCHTERM2'. "
-        "For DKRZ/HPC and ICON doxs, use SEARCHTEAM 1 and 2 to find relevant information. "
-        "When asked about mkexp or seting up an experiment, consult BOTH ICON docs AND 'mkexp.pdf'."
-        "Cite the PDF using: 'https://gitlab.dkrz.de/esmenv/mkexp/-/raw/master/doc/mkexp.pdf'."
-        "Only answer questions if claims can be supported by web citations. Include inline citations for "
-        "URLs found in the web search results."
-    )
-
-    user_content = [{"type": "input_text", "text": query or ""}]
-
-    if should_attach_mkexp_pdf(query):
-        user_content.append(
-            {
-                "type": "input_file",
-                "file_url": MKEXP_PDF_URL,
-            }
-        )
-
-    kwargs = {
-        "model": WEB_SEARCH_MODEL,
-        "input": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ],
-        "stream": False,
-        "tool_choice": "auto",
-        "tools": [
-            {"type": "web_search", "filters": {"allowed_domains": ALLOWED_DOMAINS}}
-        ],
-        "include": ["web_search_call.action.sources"],
-    }
-    logger.info(kwargs)
+    
     try:
-        resp = client.responses.create(**kwargs)
+        async with tracked_request(sid, rid) as req:
+            req.raise_if_cancelled()
 
-        logger.info(f"Succesfully completed web search with query {query}.\n")
-        return resp.output_text
+            system_prompt = (
+                "You are a web-search agent that can search documentations for DKRZ/HPC, "
+                "ICON model and mkexp toolbox. Use the documentation websites for searching "
+                "and creating answers. Make sure the information provided is accurate and up-to-date. "
+                "DKRZ/HPC doc 'https://docs.dkrz.de/search.html?q=SEARCHTERM1+SEARCHTERM2'. "
+                "ICON doc 'https://docs.icon-model.org/search.html?q=SEARCHTERM1+SEARCHTERM2'. "
+                "For DKRZ/HPC and ICON doxs, use SEARCHTEAM 1 and 2 to find relevant information. "
+                "When asked about mkexp or seting up an experiment, consult BOTH ICON docs AND 'mkexp.pdf'."
+                "Cite the PDF using: 'https://gitlab.dkrz.de/esmenv/mkexp/-/raw/master/doc/mkexp.pdf'."
+                "Only answer questions if claims can be supported by web citations. Include inline citations for "
+                "URLs found in the web search results."
+            )
+
+            user_content = [{"type": "input_text", "text": query or ""}]
+
+            if should_attach_mkexp_pdf(query):
+                user_content.append(
+                    {
+                        "type": "input_file",
+                        "file_url": MKEXP_PDF_URL,
+                    }
+                )
+
+            kwargs = {
+                "model": WEB_SEARCH_MODEL, 
+                "input": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content},
+                ],
+                "stream": False,
+                "tool_choice": "auto",
+                "tools": [
+                    {
+                        "type": "web_search",
+                        "filters": {
+                            "allowed_domains": ALLOWED_DOMAINS
+                        }
+                    }
+                ],
+                "include": ["web_search_call.action.sources"],
+            }
+
+            resp = await client.responses.create(**kwargs)
+
+            req.raise_if_cancelled()
+
+            logger.info(f"Successfully completed web search with query {query}.\n")
+
+            return {
+                "result": resp.output_text,
+                "error": ""
+            }
+    
+    except asyncio.CancelledError:
+        raise
+
+    except RequestCancelled:
+        logger.info("Web-search cancelled by client. sid=%s rid=%s", sid, rid)
+        return {
+            "result": "",
+            "error": "Request cancelled by client."
+        }
+
     except Exception as e:
         logger.warning("Web-search failed due to error: %s", e)
-        return
-
-
-def debug():
-    question = "How do I submit a job to the DKRZ HPC?"
-    resp = web_search(question)
-    print(resp)
+        raise RuntimeError(f"Web-search failed: {e}") from e

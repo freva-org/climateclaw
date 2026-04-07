@@ -40,20 +40,14 @@ async def run_tool_via_mcp(
     except Exception:
         args = {"_raw": arguments_json}
 
-    server_name = mcp.get_server_from_tool(tool_name)
+    server_name = await mcp.get_server_from_tool(tool_name)
 
     log.info(f"Executing tool call:\nname : {tool_name}   arguments : {args}")
-    # Run the blocking MCP call in a thread so cancellation of the coroutine
-    # doesn’t block the event loop.
-    loop = asyncio.get_running_loop()
-    res = await loop.run_in_executor(
-        None,
-        lambda: mcp.call_tool(
+    res = await mcp.call_tool(
             server_name,
             name=tool_name,
             arguments=args,
-        ),
-    )
+        )
 
     return json.dumps(res)
 
@@ -205,6 +199,12 @@ def parse_code_interpreter_result(result: Dict, id: str, logger=None):
 
 
 def parse_generic_tool_result(result: Dict, tool_name: str, id: str, logger=None):
-    web_sv = SVToolOutput(output=result.get("result"), tool_name=tool_name, id=id)
+    if result.get("result"):
+        out = result.get("result")
+    elif result.get("error"):
+        out = result.get("error")
+    else:
+        out = "Unknown response."
+    web_sv = SVToolOutput(output=out, tool_name=tool_name, id=id)
     web_msg = help_convert_sv_ccrm([web_sv])
     yield FinalSummary(var_block=[web_sv], tool_messages=web_msg, is_error=False)

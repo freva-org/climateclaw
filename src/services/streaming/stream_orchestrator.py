@@ -81,7 +81,7 @@ async def stream_with_tools(
 
     # 1) First request
     tool_agg: Dict[str, Any] = {}
-    tools = mcp.openai_tools() if hasattr(mcp, "openai_tools") else []
+    tools = await mcp.openai_tools() if hasattr(mcp, "openai_tools") else []
 
     if tools:
         resp = await acomplete_func(
@@ -187,11 +187,21 @@ async def stream_with_tools(
 
             except asyncio.CancelledError:
                 # /stop or connection close has cancelled this task
+                log.warning("Tool task cancelled; interrupting MCP execution for thread=%s", thread_id)
+
+                try:
+                    await asyncio.shield(mcp.cancel_tool_call(tool_name=name,
+                                                              reason="User requested cancellation"))
+                except Exception:
+                    log.exception("Failed to interrupt MCP session during cancellation.")
+
                 tool_task.cancel()
+                await asyncio.gather(tool_task, return_exceptions=True)
                 raise
 
             except Exception:
                 tool_task.cancel()
+                await asyncio.gather(tool_task, return_exceptions=True)
                 raise
 
             finally:

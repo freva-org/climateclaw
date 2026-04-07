@@ -19,11 +19,16 @@ from src.tools.header_gate import make_header_gate
 
 from src.core.logging_setup import configure_logging
 
-logger = configure_logging(__name__, named_log="rag_server")
+SERVICE_NAME = os.getenv("HOSTNAME") or "rag_server"
+
+logger = configure_logging(__name__, named_log=SERVICE_NAME)
+
 
 LITE_LLM_ADDRESS: str = os.getenv("FREVAGPT_LITE_LLM_ADDRESS", "http://litellm:4000")
 
 mcp = FastMCP("rag_server")
+
+# TODO: implement cancel routine
 
 # ── Config ───────────────────────────────────────────────────────────────────
 EMBEDDING_MODEL = "ollama/mxbai-embed-large:latest"

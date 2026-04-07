@@ -119,9 +119,9 @@ async def streamresponse(
 
     if thread_id is None:
         raise HTTPException(
-            status_code=422,
-            detail="Thread-id not found. Please request a new thread-id and provide it in the query parameters, of type String.",
-        )
+            status_code=422, 
+            detail="Thread-id not found. Please request a new thread-id and provide it in the query parameters, of type String."
+            )
 
     if input is None:
         raise HTTPException(
