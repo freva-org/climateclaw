@@ -1,10 +1,14 @@
 import re
+import os
 from dataclasses import dataclass
 from typing import Optional
 
 from src.core.logging_setup import configure_logging
 
-logger = configure_logging(__name__, named_log="code_server")
+SERVICE_NAME = os.getenv("HOSTNAME") or "code_server"
+
+logger = configure_logging(__name__, named_log=SERVICE_NAME)
+
 
 # Code safety rules
 SAFETY_RULES = [

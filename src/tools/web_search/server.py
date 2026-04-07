@@ -1,5 +1,4 @@
 import os
-from contextvars import ContextVar
 import asyncio
 
 from fastmcp import FastMCP
@@ -15,10 +14,12 @@ from src.tools.active_requests import (
 from src.tools.header_gate import make_header_gate
 from src.core.logging_setup import configure_logging
 
-logger = configure_logging(__name__, named_log="web_search_server")
+SERVICE_NAME = os.getenv("HOSTNAME") or "web_search_server"
+
+logger = configure_logging(__name__, named_log=SERVICE_NAME)
 
 
-OPENAI_API_KEY: str = os.getenv("FREVAGPT_OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv("FREVAGPT_OPENAI_API_KEY")
 
 mcp = FastMCP("web-search-server")
 

@@ -16,7 +16,10 @@ from .kernels import (
 from src.tools.active_requests import ActiveRequest, ACTIVE_REQUESTS, RequestCancelled
 from src.core.logging_setup import configure_logging
 
-logger = configure_logging(__name__, named_log="code_server")
+SERVICE_NAME = os.getenv("HOSTNAME") or "code_server"
+
+logger = configure_logging(__name__, named_log=SERVICE_NAME)
+
 
 # ── Config ───────────────────────────────────────────────────────────────────
 REQUEST_TIMEOUT = int(os.getenv("FREVAGPT_MCP_REQUEST_TIMEOUT_SEC", "600"))

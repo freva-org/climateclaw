@@ -1,4 +1,5 @@
-import os, sys
+import os
+import sys
 import threading
 from queue import Empty
 
@@ -6,7 +7,9 @@ from jupyter_client import KernelManager
 
 from src.core.logging_setup import configure_logging
 
-logger = configure_logging(__name__, named_log="code_server")
+SERVICE_NAME = os.getenv("HOSTNAME") or "code_server"
+
+logger = configure_logging(__name__, named_log=SERVICE_NAME)
 
 
 # ── Kernel persistence ───────────────────────────────────────────────────────

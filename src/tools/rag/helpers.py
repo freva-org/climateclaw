@@ -7,7 +7,9 @@ from pymongo.operations import SearchIndexModel
 
 from src.core.logging_setup import configure_logging
 
-logger = configure_logging(__name__, named_log="rag_server")
+SERVICE_NAME = os.getenv("HOSTNAME") or "rag_server"
+
+logger = configure_logging(__name__, named_log=SERVICE_NAME)
 
 
 def json_to_str(data) -> str:
