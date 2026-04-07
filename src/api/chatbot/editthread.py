@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.services.service_factory import Authenticator, AuthRequired, auth_dependency, get_thread_storage
-from src.services.streaming.stream_variants import from_json_to_sv, from_sv_to_json, SVServerHint
+from src.services.streaming.stream_variants import from_json_to_sv, from_sv_to_json, SVServerHint, StreamVariant
 from src.services.streaming.active_conversations import new_thread_id, check_thread_exists, initialize_conversation
 from src.core.logging_setup import configure_logging
 
@@ -176,7 +176,7 @@ async def edit_thread(
     }
 
 
-def update_threadid_in_content(new_id: str, content: list, logger):
+def update_threadid_in_content(new_id: str, content: list[StreamVariant], logger):
     if isinstance(content[0], SVServerHint):
         content[0] = SVServerHint(data={"thread_id": new_id})
         logger.info("Updated ServerHint with new thread-id.")
