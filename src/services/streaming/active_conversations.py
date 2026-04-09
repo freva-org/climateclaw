@@ -328,6 +328,20 @@ async def cancel_tool_tasks(thread_id: str) -> None:
         t.cancel()
 
 
+async def save_feedback_to_registry(thread_id: str, f_ind: int, feedback: str) -> None:
+    async with RegistryLock:
+        conv = Registry.get(thread_id)
+        msg = conv.messages
+        conv.last_activity = datetime.now(timezone.utc)
+        msg_ind = from_sv_to_json(msg[f_ind])
+        if feedback != "remove":
+            msg_ind.update({"feedback": feedback})
+        else:
+            msg_ind.pop("feedback")
+        msg[f_ind] = from_json_to_sv(msg_ind)
+        conv.messages = msg
+
+
 async def cleanup_idle(
     max_idle: timedelta,
     Storage: ThreadStorage | None = None,

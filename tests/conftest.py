@@ -1,10 +1,16 @@
 # tests/conftest.py
+import pytest
+import httpx
+
 import sys
+import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-import httpx
-import pytest
+import src.services.streaming.active_conversations as act_conv
+from src.services.streaming.stream_variants import from_json_to_sv
+
 
 # Ensure project root on sys.path
 ROOT = Path(__file__).resolve().parents[1]
@@ -217,6 +223,8 @@ def patch_read_thread(monkeypatch):
 def patch_save_thread(monkeypatch):
     calls = []
 
+    calls = []
+
     async def _fake_append(
         self,
         thread_id: str,
@@ -286,6 +294,37 @@ def patch_user_threads(monkeypatch):
 
     return fake_get_user_threads
 
+# ──────────────────────────────────────────────────────────────────────────────
+# REGISTRY PATCH
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def patch_registry(monkeypatch):
+    monkeypatch.setattr(act_conv, "RegistryLock", asyncio.Lock())
+    act_conv.Registry.clear()
+
+    def _populate(entries: dict[str, list[dict]]):
+        """
+        entries = {
+            "t-2": [ {...}, {...}, {...} ],
+        }
+        """
+        act_conv.Registry.clear()
+
+        for thread_id, content in entries.items():
+            act_conv.Registry[thread_id] = act_conv.ActiveConversation(
+                thread_id=thread_id,
+                user_id="u-test",
+                state=act_conv.ConversationState.STREAMING,
+                mcp_manager=None,
+                messages=[from_json_to_sv(c) for c in content],
+                last_activity=datetime.now(timezone.utc),
+            )
+
+    yield _populate
+
+    act_conv.Registry.clear()
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # STREAM PATCH
@@ -330,11 +369,9 @@ def patch_mcp_manager(monkeypatch):
     Avoid hitting the real MCP manager / MCP Mongo from tests.
     initialize_conversation() will still run, but with a dummy manager.
     """
-    from src.services.streaming import active_conversations as ac
-
     async def fake_get_mcp_manager(authenticator, thread_id):
         # You can assert on authenticator if you want
         return DummyMcpManager()
 
-    monkeypatch.setattr(ac, "get_mcp_manager", fake_get_mcp_manager, raising=True)
+    monkeypatch.setattr(act_conv, "get_mcp_manager", fake_get_mcp_manager, raising=True)
     return fake_get_mcp_manager

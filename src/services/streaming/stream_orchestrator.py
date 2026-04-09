@@ -145,7 +145,6 @@ async def stream_with_tools(
         end_v = SVStreamEnd(message="Stream ended.")
         yield end_v
         stream_state.finished = True
-        # await add_to_conversation(thread_id, [end_v])
         return
 
     # 3) Run tools
