@@ -189,17 +189,11 @@ async def user_feedback(
 async def save_feedback(
     storage: ThreadStorage, thread_id, user_id, content, f_ind, feedback
 ):
-    try:
-        await storage.save_feedback(thread_id, user_id, content, f_ind, feedback)
-        if await check_thread_exists(thread_id):
-            await save_feedback_to_registry(thread_id, f_ind, feedback)
-    except:
-        raise
+    await storage.save_feedback(thread_id, user_id, content, f_ind, feedback)
+    if await check_thread_exists(thread_id):
+        await save_feedback_to_registry(thread_id, f_ind, feedback)
 
 
 async def delete_feedback(storage: ThreadStorage, thread_id, user_id, content, f_ind):
-    try:
-        await storage.delete_feedback(thread_id, user_id, content, f_ind)
-        await save_feedback_to_registry(thread_id, f_ind, "remove")
-    except:
-        raise
+    await storage.delete_feedback(thread_id, user_id, content, f_ind)
+    await save_feedback_to_registry(thread_id, f_ind, "remove")
