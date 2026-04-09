@@ -433,7 +433,9 @@ def from_json_to_sv(obj: dict) -> StreamVariant:
     f = obj.get("feedback")
 
     if v == ASSISTANT:
-        return SVAssistant(text="" if c is None else str(c), feedback="" if f is None else str(f))
+        return SVAssistant(
+            text="" if c is None else str(c), feedback="" if f is None else str(f)
+        )
     if v == USER:
         return SVUser(text="" if c is None else str(c))
     if v == PROMPT:
@@ -506,7 +508,11 @@ def from_sv_to_json(v: StreamVariant) -> SVDict:
         return {"variant": USER, "content": d["text"]}
     if kind == ASSISTANT:
         if d.get("feedback"):
-            return {"variant": ASSISTANT, "content": d["text"], "feedback": d.get("feedback")}
+            return {
+                "variant": ASSISTANT,
+                "content": d["text"],
+                "feedback": d.get("feedback"),
+            }
         else:
             return {"variant": ASSISTANT, "content": d["text"]}
     if kind == PROMPT:
@@ -525,7 +531,12 @@ def from_sv_to_json(v: StreamVariant) -> SVDict:
         return {"variant": IMAGE, "content": d["b64"], "id": d["id"]}
     if kind == CODE:
         if d.get("feedback"):
-            return {"variant": CODE, "content": d["code"], "id": d["id"], "feedback": d.get("feedback", "")}
+            return {
+                "variant": CODE,
+                "content": d["code"],
+                "id": d["id"],
+                "feedback": d.get("feedback", ""),
+            }
         else:
             return {"variant": CODE, "content": d["code"], "id": d["id"]}
     if kind == CODE_OUTPUT:

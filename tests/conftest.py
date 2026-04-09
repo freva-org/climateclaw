@@ -1,16 +1,14 @@
 # tests/conftest.py
-import pytest
-import httpx
-
-import sys
 import asyncio
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
+import pytest
 import src.services.streaming.active_conversations as act_conv
 from src.services.streaming.stream_variants import from_json_to_sv
-
 
 # Ensure project root on sys.path
 ROOT = Path(__file__).resolve().parents[1]
@@ -294,9 +292,11 @@ def patch_user_threads(monkeypatch):
 
     return fake_get_user_threads
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # REGISTRY PATCH
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def patch_registry(monkeypatch):
@@ -369,6 +369,7 @@ def patch_mcp_manager(monkeypatch):
     Avoid hitting the real MCP manager / MCP Mongo from tests.
     initialize_conversation() will still run, but with a dummy manager.
     """
+
     async def fake_get_mcp_manager(authenticator, thread_id):
         # You can assert on authenticator if you want
         return DummyMcpManager()

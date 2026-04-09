@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
+from src.core.logging_setup import configure_logging
 from src.services.service_factory import (
     Authenticator,
     AuthRequired,
+    ThreadStorage,
     auth_dependency,
     get_thread_storage,
-    ThreadStorage,
 )
 from src.services.streaming.active_conversations import (
-    save_feedback_to_registry,
     check_thread_exists,
+    save_feedback_to_registry,
 )
-from src.core.logging_setup import configure_logging
 
 router = APIRouter()
 
