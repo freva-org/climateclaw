@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
+import threading
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, List, Tuple
-import threading
+from typing import Any
 
 import httpx
-
 from src.core.logging_setup import configure_logging
 from src.core.settings import get_settings
 
@@ -23,9 +22,9 @@ DISCOVERY_SESSION_KEY = "__discovery__"
 class McpCallResult:
     ok: bool
     id: str
-    result: Optional[Dict[str, Any]] = None
-    error: Optional[Dict[str, Any]] = None
-    status_code: Optional[int] = None
+    result: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
+    status_code: int | None = None
 
 
 class McpError(Exception):
@@ -64,13 +63,13 @@ class McpClient:
         self,
         base_url: str,
         *,
-        default_headers: Optional[Dict[str, str]] = None,
+        default_headers: dict[str, str] | None = None,
         logger=None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.default_headers = default_headers or {}
         self._lock = threading.RLock()
-        self._session_ids: Dict[str, str] = {}
+        self._session_ids: dict[str, str] = {}
         self.log = logger or DEFAULT_LOGGER
 
         # simple shared client
@@ -132,9 +131,9 @@ class McpClient:
 
     def _extract_payload_and_session(
         self, response: httpx.Response
-    ) -> Tuple[Optional[Any], Optional[str]]:
+    ) -> tuple[Any | None, str | None]:
         session_id = response.headers.get("Mcp-Session-Id")
-        payload: Optional[Any] = None
+        payload: Any | None = None
         content_type = response.headers.get("content-type", "")
 
         try:
@@ -172,11 +171,11 @@ class McpClient:
 
     def _headers(
         self,
-        extra: Optional[Dict[str, str]] = None,
+        extra: dict[str, str] | None = None,
         *,
         include_session: bool = True,
         session_id: str | None = None,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         h = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
@@ -212,7 +211,7 @@ class McpClient:
         )
         return self._rpc_result(r, rpc_id)
 
-    def tools_list_http(self) -> List[Dict[str, Any]]:
+    def tools_list_http(self) -> list[dict[str, Any]]:
         """
         Try plain HTTP GET /tools (some implementations expose this).
         """
@@ -231,10 +230,10 @@ class McpClient:
         self,
         *,
         name: str,
-        args: Dict[str, Any],
-        extra_headers: Optional[Dict[str, str]] = None,
+        args: dict[str, Any],
+        extra_headers: dict[str, str] | None = None,
         logical_session_key: str = "__default__",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Call a tool via JSON-RPC method 'tools/call'.
         Sets session id based on session_key to keep continuity.

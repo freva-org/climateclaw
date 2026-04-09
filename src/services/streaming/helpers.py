@@ -1,6 +1,5 @@
 from ansi2html import Ansi2HTMLConverter
 
-
 # TODO: Frontend: sending html messages instead of stripping color codes
 # Jupyter sends the stdout or stderr as a string containing ANSI escape sequences
 # (color codes). We can send them as html messages.

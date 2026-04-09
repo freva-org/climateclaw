@@ -2,39 +2,37 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Optional, Generator
+from collections.abc import Generator
 
-from fastapi import APIRouter, Query, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.responses import StreamingResponse
 
+from src.core.available_chatbots import available_chatbots, default_chatbot
 from src.core.logging_setup import configure_logging
-from src.core.available_chatbots import default_chatbot, available_chatbots
 from src.core.prompting import get_entire_prompt
-
 from src.services.service_factory import (
     Authenticator,
     AuthRequired,
     auth_dependency,
     get_thread_storage,
 )
-
+from src.services.streaming.active_conversations import (
+    ConversationState,
+    add_to_conversation,
+    cancel_tool_tasks,
+    check_thread_exists,
+    end_and_save_conversation,
+    get_conversation_state,
+    new_thread_id,
+)
+from src.services.streaming.helpers import chunks
+from src.services.streaming.stream_orchestrator import prepare_for_stream, run_stream
 from src.services.streaming.stream_variants import (
-    SVStreamEnd,
-    from_sv_to_json,
     IMAGE,
     SVDict,
     SVServerHint,
-)
-from src.services.streaming.stream_orchestrator import run_stream, prepare_for_stream
-from src.services.streaming.helpers import chunks
-from src.services.streaming.active_conversations import (
-    ConversationState,
-    get_conversation_state,
-    end_and_save_conversation,
-    add_to_conversation,
-    new_thread_id,
-    check_thread_exists,
-    cancel_tool_tasks,
+    SVStreamEnd,
+    from_sv_to_json,
 )
 
 router = APIRouter()
@@ -49,19 +47,19 @@ def _sse_data(obj: SVDict) -> Generator[bytes]:
         CHUNK_SIZE = 16_384  # 16 KiB per JSON line
 
         # The fact that image_b64 will always be a string is implied by requiring the input to be a SVDict, which is only constructed from StreamVariants, which have strict types.
-        for frag in chunks(image_b64, CHUNK_SIZE):
+        for frag in chunks(image_b64, CHUNK_SIZE):  # type: ignore[arg-type]
             payload = json.dumps({"variant": "Image", "content": frag, "id": id})
-            yield f"{payload}\n".encode("utf-8")
+            yield f"{payload}\n".encode()
     else:
         payload = json.dumps(obj)
-        yield f"{payload}\n".encode("utf-8")
+        yield f"{payload}\n".encode()
 
 
 @router.get("/streamresponse", dependencies=[AuthRequired])
 async def streamresponse(
-    thread_id: Optional[str] = Query(None),
-    input: Optional[str] = Query(None),
-    chatbot: Optional[str] = Query(None),
+    thread_id: str | None = Query(None),
+    input: str | None = Query(None),
+    chatbot: str | None = Query(None),
     Auth: Authenticator = Depends(auth_dependency),
 ):
     """

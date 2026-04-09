@@ -1,6 +1,8 @@
-from typing import Callable, Awaitable, Dict, Any, List, Optional
-from contextvars import ContextVar
 import logging
+from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
+from typing import Any
+
 from src.core.logging_setup import configure_logging
 
 log = logging.getLogger(__name__)
@@ -10,11 +12,11 @@ configure_logging()
 def make_header_gate(
     inner_app,
     *,
-    ctx_list: List[ContextVar[str | None]],
-    header_name_list: List[str],
+    ctx_list: list[ContextVar[str | None]],
+    header_name_list: list[str],
     logger: logging.Logger | logging.LoggerAdapter | None = None,
     mcp_path: str = "/mcp",
-    on_session_close: Optional[Callable[[str], None]] = None,
+    on_session_close: Callable[[str], None] | None = None,
 ):
     """
     Wrap the FastMCP ASGI app so every request to `mcp_path`:
@@ -30,7 +32,7 @@ def make_header_gate(
 
         async def __call__(
             self,
-            scope: Dict[str, Any],
+            scope: dict[str, Any],
             receive: Callable[..., Awaitable],
             send: Callable[..., Awaitable],
         ):

@@ -1,6 +1,5 @@
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 from src.core.logging_setup import configure_logging
 
@@ -99,7 +98,7 @@ class SafetyViolation:
     match: str
 
 
-def check_code_safety(code: str) -> Optional[SafetyViolation]:
+def check_code_safety(code: str) -> SafetyViolation | None:
     """
     Returns None or a violation. If not safe, violation explains why.
     """

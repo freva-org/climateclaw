@@ -1,32 +1,30 @@
 from __future__ import annotations
-from typing import List
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from src.core.logging_setup import configure_logging
 from src.services.service_factory import (
     Authenticator,
     AuthRequired,
     auth_dependency,
     get_thread_storage,
 )
+from src.services.streaming.stream_orchestrator import get_conversation_history
 from src.services.streaming.stream_variants import (
     StreamVariant,
-    is_prompt,
+    SVDict,
     SVStreamEnd,
     from_sv_to_json,
-    SVDict,
+    is_prompt,
 )
-from src.services.streaming.stream_orchestrator import get_conversation_history
-from src.core.logging_setup import configure_logging
-
 
 router = APIRouter()
 
 
-def _post_process(variants: List[StreamVariant]) -> List[SVDict]:
+def _post_process(variants: list[StreamVariant]) -> list[SVDict]:
     """Remove Prompt variants before returning, drop any StreamEnd except the final one, and drop 'unexpected manner' ones anywhere."""
     items = [item for item in variants if not is_prompt(item)]
-    cleaned: List[SVDict] = []
+    cleaned: list[SVDict] = []
     for i, v in enumerate(items):
         if isinstance(v, SVStreamEnd):
             is_last = i == len(items) - 1

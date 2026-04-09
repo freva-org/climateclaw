@@ -1,6 +1,8 @@
 # Python-generated files
 __pycache__/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .vscode/
 *.py[oc]
 build/
@@ -8,7 +10,10 @@ dist/
 wheels/
 *.egg-info
 .DS_Store
+
 .coverage
+coverage.xml
+htmlcov/
 
 .env
 

@@ -5,7 +5,7 @@ import logging
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 import yaml
 
@@ -31,7 +31,7 @@ FREVAGPT_LITELLM_CONFIG_PATH = "LITELLM_CONFIG"
 DEFAULT_CONFIG_BASENAME = "litellm_config.yaml"
 
 
-def _as_str_or_none(value: Any) -> Optional[str]:
+def _as_str_or_none(value: Any) -> str | None:
     """Coerce simple scalars to string; ignore complex types."""
     if isinstance(value, str):
         return value.strip()
@@ -124,7 +124,7 @@ def _load_yaml(path: Path) -> Any:
 
 
 @lru_cache(maxsize=1)
-def available_chatbots() -> List[str]:
+def available_chatbots() -> list[str]:
     """
     Returns an ordered list of model names discovered under 'model_name' keys
     in litellm_config.yaml. Fatal if empty.
@@ -209,10 +209,10 @@ def refresh_cache() -> None:
 __all__ = [
     "available_chatbots",
     "default_chatbot",
-    "model_is_reasoning",
+    "model_ends_on_no_choice",
     "model_is_gpt_5",
     "model_is_ollama",
+    "model_is_reasoning",
     "model_supports_images",
-    "model_ends_on_no_choice",
     "refresh_cache",
 ]

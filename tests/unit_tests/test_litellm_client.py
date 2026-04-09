@@ -2,7 +2,6 @@ from unittest.mock import patch
 
 import pytest
 import requests
-
 from src.services.streaming.litellm_client import acomplete, first_text
 
 
@@ -62,12 +61,14 @@ async def test_acomplete_includes_error_body(monkeypatch):
     async def fake_post(self, *args, **kwargs):
         return fake
 
-    with patch(
-        "src.services.streaming.litellm_client.httpx.AsyncClient.post",
-        new=fake_post,
+    with (
+        patch(
+            "src.services.streaming.litellm_client.httpx.AsyncClient.post",
+            new=fake_post,
+        ),
+        pytest.raises(requests.HTTPError) as ei,
     ):
-        with pytest.raises(requests.HTTPError) as ei:
-            await acomplete(model="x", messages=[])
+        await acomplete(model="x", messages=[])
 
     assert "500 Server Error" in str(ei.value)
     assert ei.value.response is not None

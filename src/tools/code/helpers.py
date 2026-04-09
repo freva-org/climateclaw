@@ -1,9 +1,8 @@
-import re
 import os
+import re
 import sys
 
 from jupyter_client import KernelManager
-
 from src.core.logging_setup import configure_logging
 
 logger = configure_logging(__name__, named_log="code_server")
@@ -60,7 +59,7 @@ def _kernel_ready_handshake(km: KernelManager, timeout: int = 10) -> None:
 def start_kernel(cwd_str: str) -> KernelManager:
     env = os.environ.copy()
     km = KernelManager()
-    km.kernel_cmd = [sys.executable, "-m", "ipykernel", "-f", "{connection_file}"]
+    km.kernel_cmd = [sys.executable, "-m", "ipykernel", "-f", "{connection_file}"]  # type: ignore[attr-defined]
     km.start_kernel(env=env, cwd=cwd_str)
     _kernel_ready_handshake(km, timeout=10)
     return km

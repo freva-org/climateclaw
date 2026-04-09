@@ -1,11 +1,12 @@
 from __future__ import annotations
-from typing import Annotated, Literal, Optional, Union, List, Dict, Any
-from typing_extensions import TypedDict
+
 import json
 import logging
 from pathlib import Path
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+from typing_extensions import TypedDict
 
 """
 Mirror of Rust enum `StreamVariant` and alias `Conversation = Vec<StreamVariant>`,
@@ -69,101 +70,99 @@ class _SVBase(BaseModel):
 
 class SVPrompt(_SVBase):
     # IMPORTANT: use string literals inside Literal[...] to satisfy type-checkers
-    variant: Literal["Prompt"] = Field(default=PROMPT)
+    variant: Literal["Prompt"] = Field(default="Prompt")
     # JSON string representing a list of chat messages (OpenAI format).
     payload: str = Field(..., description="JSON string of ChatCompletion messages")
 
 
 class SVUser(_SVBase):
-    variant: Literal["User"] = Field(default=USER)
+    variant: Literal["User"] = Field(default="User")
     text: str
 
 
 class SVAssistant(_SVBase):
-    variant: Literal["Assistant"] = Field(default=ASSISTANT)
+    variant: Literal["Assistant"] = Field(default="Assistant")
     text: str
     name: str = Field(default=ASSISTANT_NAME, description="Assistant display name")
 
 
 class SVCode(_SVBase):
-    variant: Literal["Code"] = Field(default=CODE)
+    variant: Literal["Code"] = Field(default="Code")
     code: str
     id: str
 
 
 class SVCodeOutput(_SVBase):
-    variant: Literal["CodeOutput"] = Field(default=CODE_OUTPUT)
+    variant: Literal["CodeOutput"] = Field(default="CodeOutput")
     output: str
     id: str
 
 
 class SVImage(_SVBase):
-    variant: Literal["Image"] = Field(default=IMAGE)
+    variant: Literal["Image"] = Field(default="Image")
     b64: str
     id: str
     mime: str = Field(default="image/png")
 
 
 class SVToolCall(_SVBase):
-    variant: Literal["ToolCall"] = Field(default=TOOL_CALL)
+    variant: Literal["ToolCall"] = Field(default="ToolCall")
     arg: str
     tool_name: str
     id: str
 
 
 class SVToolOutput(_SVBase):
-    variant: Literal["ToolOutput"] = Field(default=TOOL_OUTPUT)
+    variant: Literal["ToolOutput"] = Field(default="ToolOutput")
     output: str
     tool_name: str
     id: str
 
 
 class SVServerHint(_SVBase):
-    variant: Literal["ServerHint"] = Field(default=SERVER_HINT)
-    data: Union[dict, str]
+    variant: Literal["ServerHint"] = Field(default="ServerHint")
+    data: dict | str
 
 
 class SVServerError(_SVBase):
-    variant: Literal["ServerError"] = Field(default=SERVER_ERROR)
+    variant: Literal["ServerError"] = Field(default="ServerError")
     message: str
 
 
 class SVOpenAIError(_SVBase):
-    variant: Literal["OpenAIError"] = Field(default=OPENAI_ERROR)
+    variant: Literal["OpenAIError"] = Field(default="OpenAIError")
     message: str
 
 
 class SVCodeError(_SVBase):
-    variant: Literal["CodeError"] = Field(default=CODE_ERROR)
+    variant: Literal["CodeError"] = Field(default="CodeError")
     message: str
 
 
 class SVStreamEnd(_SVBase):
-    variant: Literal["StreamEnd"] = Field(default=STREAM_END)
+    variant: Literal["StreamEnd"] = Field(default="StreamEnd")
     message: str
 
 
 # Discriminated union type for parsing
 StreamVariant = Annotated[
-    Union[
-        SVPrompt,
-        SVUser,
-        SVAssistant,
-        SVCode,
-        SVCodeOutput,
-        SVToolCall,
-        SVToolOutput,
-        SVImage,
-        SVServerHint,
-        SVServerError,
-        SVOpenAIError,
-        SVCodeError,
-        SVStreamEnd,
-    ],
+    SVPrompt
+    | SVUser
+    | SVAssistant
+    | SVCode
+    | SVCodeOutput
+    | SVToolCall
+    | SVToolOutput
+    | SVImage
+    | SVServerHint
+    | SVServerError
+    | SVOpenAIError
+    | SVCodeError
+    | SVStreamEnd,
     Field(discriminator="variant"),
 ]
 
-Conversation = List[StreamVariant]
+Conversation = list[StreamVariant]
 
 SVDict = dict[
     str, str | list[str]
@@ -182,7 +181,7 @@ def cleanup_conversation(
     Mirrors the spirit of Rust's cleanup_conversation with class-based variants.
     """
     out: Conversation = []
-    pending_code_id: Optional[str] = None
+    pending_code_id: str | None = None
 
     for v in conv:
         # If there is a pending Code (no output yet) and the next item is not CodeOutput,
@@ -252,7 +251,7 @@ class OpenAIMessage(TypedDict, total=False):
     tool_call_id: str  # for tool role
 
 
-def _as_system(name: str, content: Union[str, dict, list]) -> OpenAIMessage:
+def _as_system(name: str, content: str | dict | list) -> OpenAIMessage:
     if not isinstance(content, str):
         try:
             content = json.dumps(content, ensure_ascii=False)
@@ -298,7 +297,7 @@ def _image_user_message(b64: str, mime: str) -> OpenAIMessage:
     }
 
 
-def mcp_tool_to_openai_function(tool: Dict[str, Any]) -> Dict[str, Any]:
+def mcp_tool_to_openai_function(tool: dict[str, Any]) -> dict[str, Any]:
     """
     Convert an MCP tool descriptor to OpenAI-style tool schema:
     MCP (typical):
@@ -320,7 +319,7 @@ def mcp_tool_to_openai_function(tool: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _extend_with_prompt_json(out: List[OpenAIMessage], json_str: str) -> None:
+def _extend_with_prompt_json(out: list[OpenAIMessage], json_str: str) -> None:
     try:
         data = json.loads(json_str)
     except Exception as e:
@@ -341,21 +340,21 @@ def _extend_with_prompt_json(out: List[OpenAIMessage], json_str: str) -> None:
         if role not in (ROLE_SYSTEM, ROLE_USER, ROLE_ASSISTANT, ROLE_TOOL):
             logger.warning("Prompt message[%d] has invalid role=%r; skipping.", i, role)
             continue
-        out.append(msg)  # trust caller for deeper schema (tool_calls etc.)
+        out.append(msg)  # type: ignore[arg-type] # trust caller for deeper schema (tool_calls etc.)
 
 
 def help_convert_sv_ccrm(
     conversation: Conversation,
     include_images: bool = False,
     include_meta: bool = False,
-) -> List[OpenAIMessage]:
+) -> list[OpenAIMessage]:
     """
     Convert a StreamVariant conversation to OpenAI ChatCompletion messages.
     • include_images: whether to include Image variants (Rust passes false for prompting)
     • include_meta: whether to include ServerHint/Errors/StreamEnd as system/tool messages
     """
     conv = normalize_conv_for_prompt(conversation, include_meta=include_meta)
-    out: List[OpenAIMessage] = []
+    out: list[OpenAIMessage] = []
 
     for v in conv:
         if isinstance(v, SVPrompt):
@@ -428,7 +427,7 @@ def from_json_to_sv(obj: dict) -> StreamVariant:
       {"variant":"Image","content":"..."}
     """
     v = obj.get("variant")
-    c = obj.get("content")
+    c = obj.get("content", "")
 
     if v == ASSISTANT:
         return SVAssistant(text="" if c is None else str(c))
@@ -447,7 +446,7 @@ def from_json_to_sv(obj: dict) -> StreamVariant:
     if v == STREAM_END:
         return SVStreamEnd(message="" if c is None else str(c))
     if v == IMAGE:
-        return SVImage(b64="" if c is None else str(c), id=obj.get("id"))
+        return SVImage(b64="" if c is None else str(c), id=obj.get("id", ""))
 
     if v == CODE:
         code_text, id = "", ""
@@ -466,7 +465,7 @@ def from_json_to_sv(obj: dict) -> StreamVariant:
                 code_text = str(payload)
         else:
             code_text = str(c)
-            id = obj.get("id")
+            id = obj.get("id", "")
         return SVCode(code=code_text, id=str(id))
 
     if v == CODE_OUTPUT:
@@ -476,19 +475,19 @@ def from_json_to_sv(obj: dict) -> StreamVariant:
             output, id = c[0], c[1]
         else:
             output = c
-            id = obj.get("id")
+            id = obj.get("id", "")
         return SVCodeOutput(output=str(output), id=str(id))
 
     if v == TOOL_CALL:
         arg = c
-        id = obj.get("id")
-        tool_name = obj.get("tool_name")
+        id = obj.get("id", "")
+        tool_name = obj.get("tool_name", "")
         return SVToolCall(arg=str(arg), id=str(id), tool_name=tool_name)
 
     if v == TOOL_OUTPUT or v == TOOL_CALL:
         output = c
-        id = obj.get("id")
-        tool_name = obj.get("tool_name")
+        id = obj.get("id", "")
+        tool_name = obj.get("tool_name", "")
         return SVToolOutput(output=str(output), id=str(id), tool_name=tool_name)
 
     raise ValueError(f"unsupported variant: {obj!r}")

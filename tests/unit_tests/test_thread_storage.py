@@ -1,12 +1,11 @@
 import pytest
-
 import src.services.storage.mongodb_storage as mongo_storage
-from src.services.storage.mongodb_storage import ThreadStorage, MONGODB_COLLECTION_NAME
+from src.services.storage.mongodb_storage import MONGODB_COLLECTION_NAME, ThreadStorage
 from src.services.streaming.stream_variants import (
-    SVPrompt,
-    SVUser,
     SVAssistant,
+    SVPrompt,
     SVStreamEnd,
+    SVUser,
 )
 
 

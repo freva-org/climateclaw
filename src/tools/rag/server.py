@@ -1,23 +1,20 @@
 import os
-import requests
-from functools import lru_cache
 from contextvars import ContextVar
+from functools import lru_cache
 
-from pymongo import MongoClient
-
+import requests
 from fastmcp import FastMCP
-
+from pymongo import MongoClient
+from src.core.logging_setup import configure_logging
+from src.tools.header_gate import make_header_gate
+from src.tools.rag.document_loaders import CustomDirectoryLoader
 from src.tools.rag.helpers import (
-    get_new_or_changes_documents,
-    postprocessing_query_result,
     add_vector_search_index_to_db,
     clear_embeddings_collection,
+    get_new_or_changes_documents,
+    postprocessing_query_result,
 )
-from src.tools.rag.document_loaders import CustomDirectoryLoader
 from src.tools.rag.text_splitters import CustomDocumentSplitter
-from src.tools.header_gate import make_header_gate
-
-from src.core.logging_setup import configure_logging
 
 logger = configure_logging(__name__, named_log="rag_server")
 

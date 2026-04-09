@@ -1,14 +1,13 @@
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Dict, Optional
 
 from src.core.settings import get_settings
 
 _SILENCED = False
 _CONFIGURED = False
-_THREAD_HANDLERS: Dict[str, RotatingFileHandler] = {}
-_NAMED_HANDLERS: Dict[str, RotatingFileHandler] = {}
+_THREAD_HANDLERS: dict[str, RotatingFileHandler] = {}
+_NAMED_HANDLERS: dict[str, RotatingFileHandler] = {}
 
 settings = get_settings()
 
@@ -27,7 +26,7 @@ class ContextFilter(logging.Filter):
     """Ensures thread_id/user_id keys exist on log records."""
 
     def __init__(
-        self, thread_id: Optional[str] = None, user_id: Optional[str] = None
+        self, thread_id: str | None = None, user_id: str | None = None
     ) -> None:
         super().__init__()
         self.thread_id = thread_id or "-"
@@ -123,10 +122,10 @@ def _get_named_handler(log_name: str) -> RotatingFileHandler:
 
 
 def configure_logging(
-    logger_name: Optional[str] = None,
-    thread_id: Optional[str] = None,
-    user_id: Optional[str] = None,
-    named_log: Optional[str] = None,
+    logger_name: str | None = None,
+    thread_id: str | None = None,
+    user_id: str | None = None,
+    named_log: str | None = None,
 ) -> logging.LoggerAdapter:
     """
     Configure root logging once and return a logger adapter with optional context.

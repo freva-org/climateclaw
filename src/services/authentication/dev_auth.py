@@ -1,13 +1,14 @@
 from fastapi import Request
 from src.core.logging_setup import configure_logging
-from .authenticator import Authenticator
-
 from src.core.settings import get_settings
+
+from .authenticator import Authenticator
 
 log = configure_logging(__name__)
 
 
 class DevAuthenticator(Authenticator):
+    @staticmethod
     async def build(request: Request) -> Authenticator:
         """
         DEV mode:

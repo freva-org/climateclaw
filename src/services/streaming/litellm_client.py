@@ -1,11 +1,13 @@
 from __future__ import annotations
-import os
+
 import json
-from typing import Any, Dict, List, Optional, Iterable, AsyncIterator
+import os
+from collections.abc import AsyncIterator, Iterable
+from typing import Any
 
 import httpx
-
 from src.core.settings import get_settings
+
 # ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
@@ -23,12 +25,12 @@ def _completions_url() -> str:
 AUTH_TOKEN = os.getenv("FREVAGPT_OPENAI_API_KEY", "")
 
 
-def _passthrough_params(params: Dict[str, Any] | None) -> Dict[str, Any]:
+def _passthrough_params(params: dict[str, Any] | None) -> dict[str, Any]:
     # Tiny wrapper to allow future param sanitization
     return dict(params or {})
 
 
-def _headers() -> Dict[str, str]:
+def _headers() -> dict[str, str]:
     h = {"Content-Type": "application/json"}
     # Authorization header is not required for Ollama models,
     # but sending it (when available) doesn’t hurt and satisfies OpenAI-routed calls.
@@ -37,7 +39,7 @@ def _headers() -> Dict[str, str]:
     return h
 
 
-async def _post_json(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+async def _post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
     timeout = httpx.Timeout(60.0, read=300.0, write=30.0, connect=30.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         r = await client.post(url, json=payload, headers=_headers())
@@ -58,20 +60,20 @@ def _extract_text(resp: Any) -> str:
 async def acomplete(
     *,
     model: str,
-    messages: Iterable[Dict[str, Any]],
+    messages: Iterable[dict[str, Any]],
     stream: bool = False,
-    temperature: Optional[float] = None,
-    max_tokens: Optional[int] = None,
-    extra: Optional[Dict[str, Any]] = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    extra: dict[str, Any] | None = None,
     **request_params: Any,
-) -> Dict[str, Any] | AsyncIterator[Dict[str, Any]]:
+) -> dict[str, Any] | AsyncIterator[dict[str, Any]]:
     """
     Call LiteLLM /v1/chat/completions.
     - stream=False: return JSON dict
     - stream=True: return **async iterator** yielding OpenAI-style stream chunks (dicts)
     """
     url = _completions_url()
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "model": model,
         "messages": list(messages),
         "stream": stream,
@@ -92,7 +94,7 @@ async def acomplete(
     timeout = httpx.Timeout(60.0, read=300.0, write=30.0, connect=30.0)
     client = httpx.AsyncClient(timeout=timeout)
 
-    async def _aiter() -> AsyncIterator[Dict[str, Any]]:
+    async def _aiter() -> AsyncIterator[dict[str, Any]]:
         try:
             async with client.stream(
                 "POST", url, json=payload, headers=_headers()
@@ -118,7 +120,7 @@ def first_text(resp: Any) -> str:
     return _extract_text(resp)
 
 
-def tool_calls(resp: Dict[str, Any]) -> List[Dict[str, Any]]:
+def tool_calls(resp: dict[str, Any]) -> list[dict[str, Any]]:
     """
     Normalize tool/function-calls from a chat completion response.
     Works for OpenAI-style responses and returns [] if absent.
@@ -137,7 +139,7 @@ def tool_calls(resp: Dict[str, Any]) -> List[Dict[str, Any]]:
         return []
 
 
-def first_message(resp: Dict[str, Any]) -> Dict[str, Any] | None:
+def first_message(resp: dict[str, Any]) -> dict[str, Any] | None:
     """
     Convenience: return the first assistant message dict or None.
     """
@@ -152,7 +154,7 @@ def first_message(resp: Dict[str, Any]) -> Dict[str, Any] | None:
 
 __all__ = [
     "acomplete",
+    "first_message",
     "first_text",
     "tool_calls",
-    "first_message",
 ]

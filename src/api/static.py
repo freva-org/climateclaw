@@ -1,6 +1,4 @@
 from fastapi import APIRouter, HTTPException
-from typing import Dict, Optional
-
 
 router = APIRouter()
 
@@ -12,7 +10,7 @@ def ping():
 
 
 @router.get("/help")
-def help(endpoint: Optional[str | None] = None):
+def help(endpoint: str | None = None):
     """
     Retrieve help information for available API endpoints.
     It targets users, providing help on how to use features.
@@ -39,7 +37,7 @@ def help(endpoint: Optional[str | None] = None):
             422 error if the requested endpoint is not found.
     """
 
-    help_dict: Dict[str, str] = {
+    help_dict: dict[str, str] = {
         "deletethread": "Delete a conversation permanently. "
         "Once deleted, the thread and its messages cannot be recovered.",
         "editthread": "Create a new conversation by branching off from a "
@@ -57,7 +55,7 @@ def help(endpoint: Optional[str | None] = None):
     if not endpoint:
         return help_dict
     else:
-        if endpoint in help_dict.keys():
+        if endpoint in help_dict:
             return help_dict.get(endpoint)
         else:
             raise HTTPException(

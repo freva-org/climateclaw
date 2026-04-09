@@ -13,10 +13,10 @@ services:
       - "${FREVAGPT_TARGET_PORT:-8502}:${FREVAGPT_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
       - "8600:${FREVAGPT_BACKEND_PORT:-8502}" # This is to listen to the backend port without and frontend. localhost:8600/docs give FastAPI docs
       - "${FREVAGPT_DEBUG_PORT:-5678}:${FREVAGPT_DEBUG_PORT:-5678}" # Port for debugpy
-    volumes: 
+    volumes:
       - ./cache/:/app/cache
       - ./logs/:/app/logs
-    networks: 
+    networks:
       - freva-gpt
   rag:
     image: rag-server-${FREVAGPT_INSTANCE_NAME}
@@ -29,10 +29,10 @@ services:
       FREVAGPT_DEBUG: ${FREVAGPT_DEBUG:-0}
       FREVAGPT_MCP_HOST: 0.0.0.0
       FREVAGPT_MCP_PORT: 8050
-    volumes: 
+    volumes:
       - ./resources:/app/resources:ro
       - ./logs/:/app/logs
-    networks: 
+    networks:
       - freva-gpt
   code:
     image: code-server-${FREVAGPT_INSTANCE_NAME}
@@ -45,13 +45,19 @@ services:
       FREVAGPT_DEBUG: ${FREVAGPT_DEBUG:-0}
       FREVAGPT_MCP_HOST: 0.0.0.0
       FREVAGPT_MCP_PORT: 8051
-    ports: 
+    ports:
       - 8051:8051
     volumes:
       - ./cache/:/app/cache
       - ./logs/:/app/logs
-    networks: 
+    networks:
       - freva-gpt
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 8051)); s.close()\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
   web-search:
     image: web-search-server-${FREVAGPT_INSTANCE_NAME}
     build:
@@ -63,20 +69,28 @@ services:
       FREVAGPT_DEBUG: ${FREVAGPT_DEBUG:-0}
       FREVAGPT_MCP_HOST: 0.0.0.0
       FREVAGPT_MCP_PORT: 8052
-    networks: 
+    networks:
       - freva-gpt
+    ports:
+      - 8052:8052
     volumes:
       - ./logs/:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 8052)); s.close()\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     hostname: litellm-instance-${FREVAGPT_INSTANCE_NAME}
-    volumes: 
+    volumes:
       - ./litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
     command: "--config=/app/config.yaml"
-    env_file: .env 
-    ports: 
+    env_file: .env
+    ports:
       - "4000:4000" # Expose LiteLLM port to the host machine for direct access if needed, e.g. local dev
-    networks: 
+    networks:
       - freva-gpt
   ollama: # Ollama is only for the backend and not accessible from the outside. Port 11434 is not exposed.
     image: ollama
@@ -84,7 +98,7 @@ services:
       context: .
       dockerfile: docker/ollama/Dockerfile.dev
     hostname: ollama-instance-${FREVAGPT_INSTANCE_NAME}
-    networks: 
+    networks:
       - freva-gpt
   mongodb:
     networks:
@@ -96,7 +110,7 @@ services:
     hostname: mongodb
     ports:
       - "27017:27017"
-    command: --quiet --logpath /dev/null 
+    command: --quiet --logpath /dev/null
 
   freva-db:
     networks:
@@ -138,7 +152,7 @@ services:
   freva-web:
     networks:
       - freva-gpt
-    image: ghcr.io/freva-org/freva-web:2604.0.0
+    image: ghcr.io/freva-org/freva-web:2604.1.1
     ports:
       - "8000:8000"
     container_name: freva-web

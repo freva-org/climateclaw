@@ -1,12 +1,13 @@
-from pathlib import Path
-from typing import List
 import ast
+from pathlib import Path
 
+from langchain_community.document_loaders import (
+    DirectoryLoader,
+    JSONLoader,
+    PyPDFLoader,
+    TextLoader,
+)
 from langchain_core.documents import Document
-
-from langchain_community.document_loaders import DirectoryLoader
-from langchain_community.document_loaders import TextLoader, JSONLoader, PyPDFLoader
-
 from src.core.logging_setup import configure_logging
 
 logger = configure_logging(__name__, named_log="rag_server")
@@ -32,7 +33,7 @@ class CustomDirectoryLoader(DirectoryLoader):
         self.dir_name = path.split("/")[-1]
         self.extensions = self.list_extensions()
 
-    def list_extensions(self) -> List[str]:
+    def list_extensions(self) -> list[str]:
         """Get a list of file extensions in directory"""
         directory = Path(self.path)
         if not directory.exists():
@@ -45,14 +46,14 @@ class CustomDirectoryLoader(DirectoryLoader):
         )
         return extensions
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         """Load documents."""
         all_documents = []
         if self.extensions:
             for doc_type in self.extensions:
-                if doc_type in loader_cls_dict.keys():
+                if doc_type in loader_cls_dict:
                     self.glob = "*" + doc_type
-                    self.loader_cls = loader_cls_dict[doc_type]
+                    self.loader_cls = loader_cls_dict[doc_type]  # type: ignore[assignment]
                     self.loader_kwargs = loader_kwargs_dict[doc_type]
                     docs = list(self.lazy_load())
                     if doc_type == ".jsonl":
@@ -69,7 +70,7 @@ class CustomDirectoryLoader(DirectoryLoader):
 
         return all_documents
 
-    def parse_examples(self, json_lines: List[Document]) -> List[Document]:
+    def parse_examples(self, json_lines: list[Document]) -> list[Document]:
         """
         Parse examples from a JSONL file, grouping a user query and returned answers so that each example is one document.
         Also adds the user query to metadata as "embedded_text".
@@ -100,7 +101,7 @@ class CustomDirectoryLoader(DirectoryLoader):
 
         return examples
 
-    def standardize_metadata(self, docs: List[Document]) -> List[Document]:
+    def standardize_metadata(self, docs: list[Document]) -> list[Document]:
         """
         Add missing fields ("embedded_content") to metadata for Document object for uniform data fields.
         """

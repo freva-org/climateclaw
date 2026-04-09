@@ -1,15 +1,13 @@
 import os
 
 from fastmcp import FastMCP
-
-from src.tools.header_gate import make_header_gate
-
-from src.core.logging_setup import configure_logging
 from openai import OpenAI
+from src.core.logging_setup import configure_logging
+from src.tools.header_gate import make_header_gate
 
 logger = configure_logging(__name__, named_log="web_search_server")
 
-OPENAI_API_KEY: str = os.getenv("FREVAGPT_OPENAI_API_KEY")
+OPENAI_API_KEY: str | None = os.getenv("FREVAGPT_OPENAI_API_KEY")
 
 mcp = FastMCP("web-search-server")
 
@@ -76,16 +74,10 @@ def web_search(query: str) -> str:
     }
 
     try:
-        resp = client.responses.create(**kwargs)
+        resp = client.responses.create(**kwargs)  # type: ignore[call-overload]
 
         logger.info(f"Succesfully completed web search with query {query}.\n")
         return resp.output_text
     except Exception as e:
         logger.warning("Web-search failed due to error: %s", e)
-        return
-
-
-def debug():
-    question = "How do I submit a job to the DKRZ HPC?"
-    resp = web_search(question)
-    print(resp)
+        raise

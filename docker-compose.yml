@@ -53,7 +53,7 @@ services:
     environment:
       FREVAGPT_MCP_HOST: 0.0.0.0
       FREVAGPT_MCP_PORT: 8052
-    networks: 
+    networks:
       - freva-gpt
     volumes:
       - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs

@@ -1,20 +1,21 @@
 from __future__ import annotations
 
+import os
 import threading
-from typing import Optional, Dict, Any, List, Literal
+from typing import Any, Literal
 
 from src.core.logging_setup import configure_logging
 from src.core.settings import get_settings
+from src.services.authentication.authenticator import Authenticator
 from src.services.mcp.client import McpClient
 from src.services.storage.helpers import get_mongodb_uri
-from src.services.authentication.authenticator import Authenticator
 from src.services.streaming.stream_variants import mcp_tool_to_openai_function
 
 settings = get_settings()
 DEFAULT_LOGGER = configure_logging(__name__)
 
 
-Target = Literal[*settings.AVAILABLE_MCP_SERVERS]  # ty:ignore[invalid-type-form]
+Target = Literal[*settings.AVAILABLE_MCP_SERVERS]  # type: ignore[valid-type]
 # Despite the specification of `Literal` forbidding this, this shows the valid values when debugging, so we keep it as is.
 
 
@@ -30,9 +31,9 @@ class McpManager:
     def __init__(
         self,
         *,
-        servers: List,
-        server_urls: Dict[Target, str],
-        default_headers: Optional[Dict[str, str]] = None,
+        servers: list,
+        server_urls: dict[Target, str],
+        default_headers: dict[str, str] | None = None,
         logger=None,
     ) -> None:
         self._lock = threading.RLock()
@@ -42,13 +43,13 @@ class McpManager:
         self._server_urls = server_urls
         self._default_headers = {t: default_headers or {} for t in self._servers}
 
-        self._clients: dict[Target, McpClient | None] = {t: None for t in self._servers}
+        self._clients: dict[Target, McpClient | None] = dict.fromkeys(self._servers)
 
         # Cache of MCP tool descriptors and OpenAI tool schemas
-        self._tools_by_target: Dict[Target, List[Dict[str, Any]]] = {
+        self._tools_by_target: dict[Target, list[dict[str, Any]]] = {
             t: [] for t in self._servers
         }
-        self._openai_tools_cache: Optional[List[Dict[str, Any]]] = None
+        self._openai_tools_cache: list[dict[str, Any]] | None = None
 
     # ────────── lifecycle ──────────
 
@@ -68,7 +69,7 @@ class McpManager:
                 self._clients.update(
                     {
                         target: McpClient(
-                            self._server_urls.get(target),
+                            self._server_urls.get(target, ""),
                             default_headers=self._default_headers.get(target),
                             logger=self.log,
                         )
@@ -77,7 +78,7 @@ class McpManager:
 
     # ────────── initialization / discovery ──────────
 
-    def initialize(self, headers: Optional[dict] = None) -> None:
+    def initialize(self, headers: dict | None = None) -> None:
         """
         Eagerly connect to MCP servers and discover tools so the LLM can be given
         the function schemas before first token is generated.
@@ -129,9 +130,9 @@ class McpManager:
         Result shape is normalized to: [{"name":..., "description":..., "input_schema":{...}}, ...]
         """
         cli = self._clients.get(target)
-        tools: List[Dict[str, Any]] = []
+        tools: list[dict[str, Any]] = []
 
-        res = cli.tools_list_rpc()
+        res = cli.tools_list_rpc()  # type: ignore[union-attr]
         if res.ok and isinstance(res.result, dict):
             items = res.result.get("tools") or res.result.get("items") or res.result
             if isinstance(items, list):
@@ -141,7 +142,7 @@ class McpManager:
             raise RuntimeError(f"No tools discovered from MCP target={target}")
 
         # Normalize & cache
-        normalized: List[Dict[str, Any]] = []
+        normalized: list[dict[str, Any]] = []
         for tool in tools:
             name = tool.get("name") or tool.get("tool_name") or ""
             desc = tool.get("description") or ""
@@ -155,7 +156,7 @@ class McpManager:
             # invalidate merged cache
             self._openai_tools_cache = None
 
-    def get_server_from_tool(self, tool_name: str) -> Optional[Target]:
+    def get_server_from_tool(self, tool_name: str) -> Target | None:
         """
         Given a tool name, return which server it belongs to,
         or None if not found.
@@ -169,14 +170,14 @@ class McpManager:
 
     # ────────── tool export to LLM ──────────
 
-    def openai_tools(self) -> List[Dict[str, Any]]:
+    def openai_tools(self) -> list[dict[str, Any]]:
         """
         Return cached OpenAI-style tool schemas. Empty list if discovery failed.
         """
         with self._lock:
             if self._openai_tools_cache is None:
                 # rebuild merged cache on-demand
-                merged: List[Dict[str, Any]] = []
+                merged: list[dict[str, Any]] = []
                 for tgt in self._servers:
                     for t in self._tools_by_target[tgt]:
                         merged.append(mcp_tool_to_openai_function(t))
@@ -190,22 +191,22 @@ class McpManager:
         target: Target | str,
         *,
         name: str,
-        arguments: Dict[str, Any],
-        extra_headers: Optional[Dict] = None,
-    ) -> Dict[str, Any]:
+        arguments: dict[str, Any],
+        extra_headers: dict | None = None,
+    ) -> dict[str, Any]:
         """
         Call a tool on the chosen target. If 'target' isn't in AVAILABLE_MCP_SERVERS,
         all the available servers are called as best-effort.
         """
         if target in self._servers:
-            return self._clients.get(target).call_tool(
+            return self._clients.get(target).call_tool(  # type: ignore[union-attr]
                 name=name, args=arguments, extra_headers=extra_headers
             )
 
         # fallback routing: best-effort
         for tgt in self._servers:
             try:
-                return self._clients.get(tgt).call_tool(
+                return self._clients.get(tgt).call_tool(  # type: ignore[union-attr]
                     name=name, args=arguments, extra_headers=extra_headers
                 )
             except Exception as e:
@@ -217,9 +218,8 @@ class McpManager:
 
 
 async def get_mcp_headers(
-    auth: Authenticator, cache: str, logger=None
-) -> Dict[str, str]:
-    log = logger or DEFAULT_LOGGER
+    auth: Authenticator, cache: os.PathLike, logger=None
+) -> dict[str, dict[str, str | None]]:
     mongodb_uri = (
         await get_mongodb_uri(auth.vault_url)
         if not settings.DEV

@@ -1,11 +1,10 @@
-from starlette.datastructures import QueryParams, Headers
-from fastapi import HTTPException, status, Request
 import httpx
-
+from fastapi import HTTPException, Request, status
 from src.core.logging_setup import configure_logging
-from .authenticator import Authenticator
-
 from src.core.settings import get_settings
+from starlette.datastructures import Headers
+
+from .authenticator import Authenticator
 
 log = configure_logging(__name__)
 
@@ -21,10 +20,10 @@ class FullAuthenticator(Authenticator):
       - 422/400/401/502/503
     """
 
+    @staticmethod
     async def build(request: Request) -> Authenticator:
         settings = get_settings()
 
-        q: QueryParams = request.query_params
         headers: Headers = request.headers
 
         # Checking Authorization header OR x-freva-user-token
@@ -33,7 +32,7 @@ class FullAuthenticator(Authenticator):
         )
 
         # Checking vault_url. If it is not found, the exception is raised in the endpoints, where this is a must-have
-        vault_url: str | None = headers.get("x-freva-vault-url")
+        vault_url: str = headers.get("x-freva-vault-url", "")
 
         if header_val:
             # -> Bearer flow

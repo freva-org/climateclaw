@@ -1,16 +1,13 @@
 from pathlib import Path
-from typing import Optional, Dict
-from fastapi import Depends, Request
 
+from fastapi import Depends, Request
 from src.core.logging_setup import configure_logging
-from src.core.settings import get_settings, get_server_url_dict
+from src.core.settings import get_server_url_dict, get_settings
 
 from .authentication.authenticator import Authenticator
 from .authentication.dev_auth import DevAuthenticator
 from .authentication.full_auth import FullAuthenticator
-
 from .mcp.mcp_manager import McpManager, get_mcp_headers
-
 from .storage.helpers import create_dir_at_cache
 from .storage.mongodb_storage import ThreadStorage
 
@@ -46,9 +43,9 @@ AuthRequired = Depends(auth_dependency)
 
 
 async def get_thread_storage(
-    vault_url: Optional[str] = None,
-    user_name: Optional[str] = None,
-    thread_id: Optional[str] = None,
+    vault_url: str,
+    user_name: str | None = None,
+    thread_id: str | None = None,
 ) -> ThreadStorage:
     if user_name and thread_id:
         create_dir_at_cache(user_name, thread_id)
@@ -64,7 +61,7 @@ async def get_mcp_manager(
     MCP_SERVER_URLs = get_server_url_dict(settings.AVAILABLE_MCP_SERVERS)
 
     # Defaults to send; per-call headers (vault/rest) are added at call time.
-    default_headers: Dict[str, str] = {}
+    default_headers: dict[str, str] = {}
 
     logger = configure_logging(
         __name__, thread_id=thread_id, user_id=authenticator.username

@@ -4,12 +4,12 @@ import json
 import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Literal
+from typing import Any, Literal
 
 from src.core.available_chatbots import model_is_gpt_5, model_is_ollama
 from src.services.streaming.stream_variants import (
-    parse_examples_jsonl,
     help_convert_sv_ccrm,
+    parse_examples_jsonl,
 )
 
 """
@@ -105,7 +105,7 @@ def _read_text(path: Path) -> str:
 @lru_cache(maxsize=256)
 def _load_prompts(
     model: str,
-) -> Dict[Literal["starting", "summary", "examples_path"], str]:
+) -> dict[Literal["starting", "summary", "examples_path"], str]:
     """
     Load raw prompt assets for the given model (with GPT-5 placeholder fallback).
 
@@ -124,7 +124,7 @@ def _load_prompts(
     return {"starting": starting, "summary": summary, "examples_path": examples_path}
 
 
-def _as_system_message(text: str) -> Dict[str, Any]:
+def _as_system_message(text: str) -> dict[str, Any]:
     return {"role": "system", "content": text}
 
 
@@ -139,18 +139,18 @@ def _load_examples_as_messages(examples_path: str | Path) -> list[dict]:
         svs,
         include_images=False,
         include_meta=True,  # parity note: Rust typically drops meta; we keep for now
-    )  # ty:ignore[invalid-return-type]
+    )  # type: ignore[return-value]
     # Note: OpenAIMessage is a class that inherits from TypedDict, so it can be used as a dict by json.dumps.
     # This means that the above error message can be ignored.
 
 
-def get_entire_prompt(user_id: str, thread_id: str, model: str) -> List[Dict[str, Any]]:
+def get_entire_prompt(user_id: str, thread_id: str, model: str) -> list[dict[str, Any]]:
     """
     Build the full, ordered message list for a completion request (non-streaming).
     Order: [ System(starting), *examples, System(summary) ]
     """
     assets = _load_prompts(model)
-    messages: List[Dict[str, Any]] = []
+    messages: list[dict[str, Any]] = []
     messages.append(_as_system_message(assets["starting"]))
     messages.extend(_load_examples_as_messages(assets["examples_path"]))
     messages.append(_as_system_message(assets["summary"]))

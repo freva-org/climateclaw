@@ -33,7 +33,7 @@ RUN set -eux; \
 ENV PATH="/opt/conda/bin:$PATH"
 
 # Create environment
-RUN conda create --name env "python>=3.11.10,<3.12"
+RUN conda create --name env "python>=3.13"
 RUN conda init bash
 RUN echo "conda activate env" >> ~/.bashrc
 
@@ -41,7 +41,7 @@ RUN echo "conda activate env" >> ~/.bashrc
 # uv and deps
 # -----------------
 
-# Install uv into the env 
+# Install uv into the env
 RUN conda run -n env python -m pip install --no-cache-dir uv
 
 COPY docker/code-server/pyproject.toml /app/pyproject.toml

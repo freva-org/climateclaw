@@ -1,25 +1,23 @@
 import os
+import threading
 import time
 from contextvars import ContextVar
-import threading
 from queue import Empty
-from typing import Dict, Any, Optional
+from typing import Any
 
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_context
-
 from jupyter_client import KernelManager
-
 from src.core.logging_setup import configure_logging
-from src.tools.header_gate import make_header_gate
 from src.tools.code.helpers import (
-    strip_ansi,
     sanitize_code,
-    start_kernel,
-    shutdown_kernel,
     should_restart_after,
+    shutdown_kernel,
+    start_kernel,
+    strip_ansi,
 )
 from src.tools.code.safety_check import check_code_safety
+from src.tools.header_gate import make_header_gate
 
 logger = configure_logging(__name__, named_log="code_server")
 
@@ -184,9 +182,9 @@ def _run_shell(kc, code: str) -> dict:
     deadline = start + EXEC_TIMEOUT
 
     got_shell_reply = False  # authoritative “execution finished” signal
-    shell_status: Optional[str] = None  # "ok" or "error"
+    shell_status: str | None = None  # "ok" or "error"
 
-    def handle_iopub(msg: Dict[str, Any]) -> None:
+    def handle_iopub(msg: dict[str, Any]) -> None:
         nonlocal error, result_repr
         msg_type = (msg.get("header") or {}).get("msg_type")
         content = msg.get("content") or {}
@@ -289,7 +287,7 @@ def _execute_code(sid: str, code: str) -> dict:
     working_dir = _get_cwd() or os.getcwd()
     km = _get_or_start_kernel(sid, cwd_str=working_dir)
 
-    def _attempt_once() -> Dict[str, Any]:
+    def _attempt_once() -> dict[str, Any]:
         """
         Single execution attempt against the current kernel,
         with clean channel lifecycle

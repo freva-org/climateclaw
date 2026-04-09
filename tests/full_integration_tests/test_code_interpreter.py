@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+import importlib
 import logging
 import os
-import importlib
-from typing import Dict, Any
-
-from src.services.mcp.client import McpClient
+from typing import Any
 
 import pytest
+from src.services.mcp.client import McpClient
 
 pytestmark = pytest.mark.integration
 # Run these tests using `pytest -m integration`
@@ -36,7 +35,7 @@ def mcp_client_CI():
     return client
 
 
-def _execute_code_via_mcp(mcp_c, code) -> Dict[str, Any]:
+def _execute_code_via_mcp(mcp_c, code) -> dict[str, Any]:
     """
     Adapter layer to  MCP server.
     The function must return a dict.
@@ -50,7 +49,7 @@ def _execute_code_via_mcp(mcp_c, code) -> Dict[str, Any]:
         args=code,
     )
     # Ensure type and shape of result
-    if not isinstance(results, Dict) and "structuredContent" not in results.keys():
+    if not isinstance(results, dict) and "structuredContent" not in results:
         raise RuntimeError("MCP client returned unknown result from code-interpreter.")
     return results.get("structuredContent", {})
 
@@ -208,14 +207,14 @@ def test_plot_extraction(mcp_client_CI):
         "code": "import matplotlib.pyplot as plt\nplt.plot([1, 2, 3], [4, 5, 6])\nplt.show()"
     }
     rich_data = _exec_and_get_richoutput_value(mcp_client_CI, code)
-    assert "image/png" in rich_data[0].keys()
+    assert "image/png" in rich_data[0]
     assert isinstance(rich_data[0].get("image/png"), str)
 
 
 def test_plot_extraction_no_import(mcp_client_CI):
     code = {"code": "plt.plot([1, 2, 3], [4, 5, 6])"}
     rich_data = _exec_and_get_richoutput_value(mcp_client_CI, code)
-    assert "image/png" in rich_data[0].keys()
+    assert "image/png" in rich_data[0]
     assert isinstance(rich_data[0].get("image/png"), str)
 
 
@@ -224,7 +223,7 @@ def test_plot_extraction_second_to_last_line(mcp_client_CI):
         "code": "import matplotlib.pyplot as plt\nplt.plot([1, 2, 3], [4, 5, 6])\nplt.show()\nprint('Done!')"
     }
     rich_data = _exec_and_get_richoutput_value(mcp_client_CI, code)
-    assert "image/png" in rich_data[0].keys()
+    assert "image/png" in rich_data[0]
     assert isinstance(rich_data[0].get("image/png"), str)
 
 
@@ -233,7 +232,7 @@ def test_plot_extraction_without_pltshow(mcp_client_CI):
         "code": "import matplotlib.pyplot as plt\nax = plt.plot([1, 2, 3], [4, 5, 6])\nprint('Done!')"
     }
     rich_data = _exec_and_get_richoutput_value(mcp_client_CI, code)
-    assert "image/png" in rich_data[0].keys()
+    assert "image/png" in rich_data[0]
     assert isinstance(rich_data[0].get("image/png"), str)
 
 
@@ -256,7 +255,7 @@ def test_plot_extraction_close(mcp_client_CI):
         "code": "import matplotlib.pyplot as plt\nplt.plot([1, 2, 3], [4, 5, 6])\nplt.close()"
     }
     rich_data = _exec_and_get_richoutput_value(mcp_client_CI, code)
-    assert "image/png" in rich_data[0].keys()
+    assert "image/png" in rich_data[0]
     assert isinstance(rich_data[0].get("image/png"), str)
 
 

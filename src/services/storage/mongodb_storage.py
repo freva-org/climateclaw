@@ -1,20 +1,19 @@
-from typing import Dict, List, Tuple, Optional
-from datetime import datetime, timezone
 import re
+from datetime import UTC, datetime
 
 import pymongo
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
-
-from .helpers import Thread, get_database, summarize_topic
+from src.core.logging_setup import configure_logging
 from src.core.settings import get_settings
 from src.services.streaming.stream_variants import (
     StreamVariant,
     cleanup_conversation,
-    from_sv_to_json,
     from_json_to_sv,
+    from_sv_to_json,
 )
-from src.core.logging_setup import configure_logging
+
+from .helpers import Thread, get_database, summarize_topic
 
 DEFAULT_LOGGER = configure_logging(__name__)
 
@@ -35,7 +34,9 @@ class ThreadStorage:
     @classmethod
     async def create(cls, vault_url: str):
         if settings.DEV:
-            db = AsyncMongoClient(settings.MONGODB_URI_DEV)[MONGODB_DATABASE_NAME]
+            db: AsyncDatabase = AsyncMongoClient(settings.MONGODB_URI_DEV)[
+                MONGODB_DATABASE_NAME
+            ]
         else:
             db = await get_database(vault_url)
         s = cls(vault_url=vault_url, db=db)
@@ -52,21 +53,21 @@ class ThreadStorage:
         self,
         thread_id: str,
         user_id: str,
-        content: List[StreamVariant],
-        root_thread_id: Optional[str] = None,
-        parent_thread_id: Optional[str] = None,
-        fork_from_index: Optional[int] = None,
-        append_to_existing: Optional[bool] = False,
+        content: list[StreamVariant],
+        root_thread_id: str | None = None,
+        parent_thread_id: str | None = None,
+        fork_from_index: int | None = None,
+        append_to_existing: bool | None = False,
     ) -> None:
         logger = configure_logging(__name__, thread_id=thread_id, user_id=user_id)
-        content: list[StreamVariant] = cleanup_conversation(content)
-        if not content:
+        content_cleaned: list[StreamVariant] = cleanup_conversation(content)
+        if not content_cleaned:
             return
 
         coll = self.db[MONGODB_COLLECTION_NAME]
 
         existing = await coll.find_one({"thread_id": thread_id})
-        merged_sv: List[StreamVariant] = content
+        merged_sv: list[StreamVariant] = content_cleaned
         topic = None
         if existing:
             if append_to_existing:
@@ -74,19 +75,19 @@ class ThreadStorage:
                 existing_sv: list[StreamVariant] = [
                     from_json_to_sv(v) for v in existing_stream
                 ]
-                merged_sv: List[StreamVariant] = existing_sv + content
+                merged_sv: list[StreamVariant] = existing_sv + content_cleaned  # type: ignore[no-redef]
             # topic: keep existing if present
             topic = existing.get("topic", "") or None
 
         # compute topic if missing
         if not topic:
-            topic = await summarize_topic(content)
+            topic = await summarize_topic(content_cleaned)
 
         all_stream = [from_sv_to_json(v) for v in merged_sv] if merged_sv else []
         doc = {
             "user_id": user_id,
             "thread_id": thread_id,
-            "date": datetime.now(timezone.utc),
+            "date": datetime.now(UTC),
             "topic": topic,
             "content": all_stream,
             "root_thread_id": thread_id or root_thread_id,
@@ -112,7 +113,7 @@ class ThreadStorage:
         user_id: str,
         limit: int = 20,
         page: int = 0,
-    ) -> Tuple[List[Thread], int]:
+    ) -> tuple[list[Thread], int]:
         logger = configure_logging(__name__, user_id=user_id)
         coll = self.db[MONGODB_COLLECTION_NAME]
         n_threads = await coll.count_documents({"user_id": user_id})
@@ -142,7 +143,7 @@ class ThreadStorage:
     async def read_thread(
         self,
         thread_id: str,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         # TODO check the return
         logger = configure_logging(__name__, thread_id=thread_id)
         coll = self.db[MONGODB_COLLECTION_NAME]
@@ -174,7 +175,7 @@ class ThreadStorage:
         topic: str,
         num_threads: int,
         page: int,
-    ) -> tuple[int, List[Thread]]:
+    ) -> tuple[int, list[Thread]]:
         """
         Search in the topic field.
         """

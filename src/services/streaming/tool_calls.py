@@ -2,23 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import json
-
-from typing import Any, Dict, List
 from dataclasses import dataclass
+from typing import Any
 
-from src.services.service_factory import McpManager
 from src.core.logging_setup import configure_logging
-
+from src.services.service_factory import McpManager
 from src.services.streaming.stream_variants import (
-    SVUser,
+    OpenAIMessage,
+    StreamVariant,
     SVCodeOutput,
     SVImage,
     SVToolOutput,
-    StreamVariant,
+    SVUser,
     help_convert_sv_ccrm,
-    OpenAIMessage,
 )
-
 
 DEFAULT_LOGGER = configure_logging(__name__)
 
@@ -63,7 +60,7 @@ async def run_tool_via_mcp(
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def accumulate_tool_calls(delta: Dict[str, Any], agg: Dict[str, Any]) -> None:
+def accumulate_tool_calls(delta: dict[str, Any], agg: dict[str, Any]) -> None:
     choices = delta.get("choices") or []
     if not choices:
         return
@@ -72,7 +69,7 @@ def accumulate_tool_calls(delta: Dict[str, Any], agg: Dict[str, Any]) -> None:
     if not tc_list:
         return
 
-    store: Dict[int, Dict[str, Any]] = agg.setdefault("by_index", {})  # type: ignore
+    store: dict[int, dict[str, Any]] = agg.setdefault("by_index", {})
     for item in tc_list:
         idx = item.get("index")
         if idx is None:
@@ -91,9 +88,9 @@ def accumulate_tool_calls(delta: Dict[str, Any], agg: Dict[str, Any]) -> None:
             )
 
 
-def finalize_tool_calls(agg: Dict[str, Any]) -> List[Dict[str, Any]]:
+def finalize_tool_calls(agg: dict[str, Any]) -> list[dict[str, Any]]:
     store = agg.get("by_index") or {}
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for idx in sorted(store.keys()):
         tc = store[idx]
         fn = tc.get("function") or {}
@@ -116,24 +113,19 @@ class FinalSummary:
     is_error: bool
 
 
-def parse_tool_result(resp_txt: str, tool_name: str, call_id: str, logger=None):
-    log = logger or DEFAULT_LOGGER
+def parse_tool_result(resp_txt: str, tool_name: str, call_id: str):
     result_json = json.loads(resp_txt)
 
     structured_content = result_json.get("structuredContent")
     if structured_content is not None:
         if tool_name == "code_interpreter":
-            yield from parse_code_interpreter_result(
-                structured_content, call_id, logger=log
-            )
+            yield from parse_code_interpreter_result(structured_content, call_id)
         else:
-            yield from parse_generic_tool_result(
-                structured_content, tool_name, call_id, logger=log
-            )
+            yield from parse_generic_tool_result(structured_content, tool_name, call_id)
     else:
         if result_json.get("error"):
             out = result_json.get("error")
-        elif isinstance(result_json.get("content", {}), Dict):
+        elif isinstance(result_json.get("content", {}), dict):
             out = result_json.get("content", {}).get("text", "Unknown response.")
         else:
             out = result_json.get("content", {})
@@ -142,7 +134,7 @@ def parse_tool_result(resp_txt: str, tool_name: str, call_id: str, logger=None):
         if tool_name == "code_interpreter":
             toolout_v = SVCodeOutput(output=out_msg, id=call_id)
         else:
-            toolout_v = SVToolOutput(output=out_msg, tool_name=tool_name, id=call_id)
+            toolout_v = SVToolOutput(output=out_msg, tool_name=tool_name, id=call_id)  # type: ignore[assignment]
         yield toolout_v
         tool_msg = help_convert_sv_ccrm([toolout_v])
         isError = True
@@ -151,9 +143,9 @@ def parse_tool_result(resp_txt: str, tool_name: str, call_id: str, logger=None):
         )
 
 
-def parse_code_interpreter_result(result: Dict, id: str, logger=None):
-    code_block: List[StreamVariant] = []
-    code_msgs: List[OpenAIMessage] = []
+def parse_code_interpreter_result(result: dict, id: str):
+    code_block: list[StreamVariant] = []
+    code_msgs: list[OpenAIMessage] = []
 
     # Code output: structured dict of displayed data, image or error
 
@@ -204,7 +196,7 @@ def parse_code_interpreter_result(result: Dict, id: str, logger=None):
     yield FinalSummary(var_block=code_block, tool_messages=code_msgs, is_error=isError)
 
 
-def parse_generic_tool_result(result: Dict, tool_name: str, id: str, logger=None):
-    web_sv = SVToolOutput(output=result.get("result"), tool_name=tool_name, id=id)
+def parse_generic_tool_result(result: dict, tool_name: str, id: str):
+    web_sv = SVToolOutput(output=result.get("result", ""), tool_name=tool_name, id=id)
     web_msg = help_convert_sv_ccrm([web_sv])
     yield FinalSummary(var_block=[web_sv], tool_messages=web_msg, is_error=False)

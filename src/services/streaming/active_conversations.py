@@ -1,20 +1,18 @@
-import string
-import random
-import json
-from enum import Enum
-from dataclasses import dataclass, field
-from typing import List, Optional, Dict
-from datetime import datetime, timezone, timedelta
 import asyncio
+import random
+import string
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from enum import Enum
 
 from src.core.logging_setup import configure_logging
-from src.services.streaming.stream_variants import StreamVariant, SVCode
 from src.services.service_factory import (
     Authenticator,
-    ThreadStorage,
     McpManager,
+    ThreadStorage,
     get_mcp_manager,
 )
+from src.services.streaming.stream_variants import StreamVariant, SVCode
 from src.services.streaming.tool_calls import run_tool_via_mcp
 
 DEFAULT_LOGGER = configure_logging(__name__)
@@ -31,13 +29,13 @@ class ActiveConversation:
     thread_id: str
     user_id: str
     state: ConversationState
-    mcp_manager: Optional[McpManager]
+    mcp_manager: McpManager | None
     tool_tasks: set[asyncio.Task] = field(default_factory=set)
-    messages: List[StreamVariant] = field(default_factory=list)
-    last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    messages: list[StreamVariant] = field(default_factory=list)
+    last_activity: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
-Registry: Dict[str, ActiveConversation] = {}
+Registry: dict[str, ActiveConversation] = {}
 RegistryLock = asyncio.Lock()
 
 
@@ -63,13 +61,13 @@ async def check_thread_exists(thread_id: str) -> bool:
     Check if a thread_id exists in the registry.
     """
     async with RegistryLock:
-        return thread_id in Registry.keys()
+        return thread_id in Registry
 
 
 async def initialize_conversation(
     thread_id: str,
     user_id: str,
-    messages: List[StreamVariant],
+    messages: list[StreamVariant],
     auth: Authenticator,
     logger=None,
 ):
@@ -79,7 +77,7 @@ async def initialize_conversation(
     and the last_activity timestamp will be refreshed, but the existing conversation will stay unchanged.
     """
     log = logger or configure_logging(__name__, thread_id=thread_id, user_id=user_id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # if auth:
     mcp_mgr = await get_mcp_manager(authenticator=auth, thread_id=thread_id)
     # else:
@@ -112,7 +110,7 @@ async def initialize_conversation(
             log.debug("Conversation was found in the Registry. Starting streaming...")
 
             conv.state = ConversationState.STREAMING
-            conv.last_activity = datetime.now(timezone.utc)
+            conv.last_activity = datetime.now(UTC)
             return  # Don't continue with initialization if conversation already exists; we just update the state and timestamp.
 
         # In order to not have any race conditions, we keep the lock until we've written to the registry
@@ -135,7 +133,7 @@ async def initialize_conversation(
 
 async def add_to_conversation(
     thread_id: str,
-    messages: List[StreamVariant],
+    messages: list[StreamVariant],
 ) -> ActiveConversation:
     """
     Check if an ActiveConversation exists for thread_id and append new variants.
@@ -146,11 +144,11 @@ async def add_to_conversation(
         if conv is None:
             raise ValueError("Conversation does not exist. Please initialize first!")
         conv.messages.extend(messages)
-        conv.last_activity = datetime.now(timezone.utc)
+        conv.last_activity = datetime.now(UTC)
         return conv
 
 
-async def get_conversation_state(thread_id: str) -> Optional[ConversationState]:
+async def get_conversation_state(thread_id: str) -> ConversationState | None:
     """
     Return the state of the conversation, or None if it is unknown.
     Does NOT create a conversation if missing.
@@ -160,7 +158,7 @@ async def get_conversation_state(thread_id: str) -> Optional[ConversationState]:
         return conv.state if conv is not None else None
 
 
-async def get_conv_mcpmanager(thread_id: str) -> Optional[McpManager]:
+async def get_conv_mcpmanager(thread_id: str) -> McpManager | None:
     """
     Return the MCPManager of the conversation, or None if it does not exist
     Does NOT create a conversation if missing.
@@ -170,7 +168,7 @@ async def get_conv_mcpmanager(thread_id: str) -> Optional[McpManager]:
         return conv.mcp_manager if conv is not None else None
 
 
-async def get_conv_messages(thread_id: str) -> Optional[List[StreamVariant]]:
+async def get_conv_messages(thread_id: str) -> list[StreamVariant] | None:
     """
     Return the messages of the conversation, or None if it does not exist
     Does NOT create a conversation if missing.
@@ -191,7 +189,7 @@ async def request_stop(thread_id: str) -> bool:
         if conv is None:
             return False
         conv.state = ConversationState.STOPPING
-        conv.last_activity = datetime.now(timezone.utc)
+        conv.last_activity = datetime.now(UTC)
         return True
 
 
@@ -210,7 +208,7 @@ async def end_and_save_conversation(
             return False
         # End conversation
         conv.state = ConversationState.ENDED
-        conv.last_activity = datetime.now(timezone.utc)
+        conv.last_activity = datetime.now(UTC)
         # Save conversation
         await Storage.save_thread(
             conv.thread_id, conv.user_id, conv.messages, append_to_existing=False
@@ -263,6 +261,12 @@ async def _replay_code_history(thread_id: str) -> None:
         )
         return
 
+    if not mcp:
+        log.debug(
+            f"No MCPManager found in the registry for thread {thread_id}; cannot replay."
+        )
+        return
+
     log.info(
         f"Replaying {len(code_blocks)} code blocks to code_interpreter for thread {thread_id}"
     )
@@ -270,6 +274,7 @@ async def _replay_code_history(thread_id: str) -> None:
     for code in code_blocks:
         try:
             # Run the blocking MCP call in a thread, reusing helper from stream_orchestrator
+
             await run_tool_via_mcp(
                 mcp=mcp,
                 tool_name="code_interpreter",
@@ -293,7 +298,9 @@ async def register_tool_task(thread_id: str, task: asyncio.Task) -> None:
     via /stop.
     """
     async with RegistryLock:
-        Registry.get(thread_id).tool_tasks.add(task)
+        conv = Registry.get(thread_id)
+        if conv:
+            conv.tool_tasks.add(task)
 
 
 async def unregister_tool_task(thread_id: str, task: asyncio.Task) -> None:
@@ -301,7 +308,9 @@ async def unregister_tool_task(thread_id: str, task: asyncio.Task) -> None:
     Remove a task from the registry once it finishes.
     """
     async with RegistryLock:
-        tasks = Registry.get(thread_id).tool_tasks or ()
+        conv = Registry.get(thread_id)
+        if conv:
+            tasks = conv.tool_tasks or ()
         if not tasks:
             return
         tasks.discard(task)
@@ -312,30 +321,33 @@ async def cancel_tool_tasks(thread_id: str) -> None:
     Cancel all known tool tasks for this conversation.
     """
     async with RegistryLock:
-        tasks = Registry.get(thread_id).tool_tasks or ()
+        conv = Registry.get(thread_id)
+        if conv:
+            tasks = conv.tool_tasks or ()
     for t in tasks:
         t.cancel()
 
 
 async def cleanup_idle(
     max_idle: timedelta,
-    Storage: Optional[ThreadStorage] = None,
+    Storage: ThreadStorage | None = None,
 ) -> list[str]:  # thread_ids evicted
     """
     Remove conversations that have been idle longer than MAX_IDLE.
     Each removed conversation is persisted via `end_and_save_conversation`.
     Returns a list of evicted thread_ids.
     """
-    now = datetime.now(timezone.utc)
-    to_evict: List[ActiveConversation] = []
-    evicted_ids: List[str] = []
+    now = datetime.now(UTC)
+    to_evict: list[ActiveConversation] = []
+    evicted_ids: list[str] = []
 
     # Decide which ones to evict under lock and remove them.
     async with RegistryLock:
         for thread_id, conv in list(Registry.items()):
             if now - conv.last_activity > max_idle:
                 evicted_ids.append(thread_id)
-                conv.mcp_manager.close()
+                if conv.mcp_manager:
+                    conv.mcp_manager.close()
                 to_evict.append(Registry.pop(thread_id))
 
     # Persist outside the lock to avoid blocking other requests.

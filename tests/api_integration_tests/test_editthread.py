@@ -1,5 +1,4 @@
 import pytest
-
 from src.api.chatbot import editthread
 from src.services.streaming.stream_variants import SVPrompt, SVServerHint
 

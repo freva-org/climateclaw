@@ -1,15 +1,15 @@
 from __future__ import annotations
-from src.services.storage.mongodb_storage import ThreadStorage
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
+from src.core.logging_setup import configure_logging
 from src.services.service_factory import (
     Authenticator,
     AuthRequired,
     auth_dependency,
     get_thread_storage,
 )
-from src.core.logging_setup import configure_logging
+from src.services.storage.mongodb_storage import ThreadStorage
 
 router = APIRouter()
 

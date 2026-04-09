@@ -1,8 +1,7 @@
 import os
+
 import requests
-
 from fastmcp.server.auth.providers.jwt import JWTVerifier
-
 
 # ── Auth (JWT via JWKS discovery) ─────────────────────────────────────────────
 REDIRECT_URL = os.getenv("OIDC_ISSUER", "https://www.freva.dkrz.de/api/freva-nextgen/")

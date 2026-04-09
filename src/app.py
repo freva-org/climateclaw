@@ -1,15 +1,16 @@
 from __future__ import annotations
-from contextlib import asynccontextmanager
 
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import timedelta
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api import static, chatbot
-from src.core.settings import get_settings
+from src.api import chatbot, static
 from src.core.logging_setup import configure_logging
 from src.core.runtime_checks import run_startup_checks
+from src.core.settings import get_settings
 from src.services.streaming.active_conversations import cleanup_idle
 
 settings = get_settings()

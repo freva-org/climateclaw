@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import os
 from dataclasses import dataclass
+from typing import ClassVar
+
 from dotenv import load_dotenv
-from typing import Dict, ClassVar
 
 load_dotenv()  # take environment variables from .env file
 
@@ -49,7 +51,7 @@ def get_settings() -> Settings:
 
 
 def get_server_url_dict(server_list):
-    url_dict: Dict[str, str] = {}
+    url_dict: dict[str, str] = {}
     for s in server_list:
         s_url = os.getenv(f"FREVAGPT_{s.upper()}_SERVER_URL", "")
         if s_url:

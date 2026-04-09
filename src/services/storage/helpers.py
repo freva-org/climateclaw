@@ -1,16 +1,14 @@
-from typing import Dict, List, Literal
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 
 import httpx
 from fastapi import HTTPException
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
-
-from src.core.settings import get_settings, Settings
 from src.core.logging_setup import configure_logging
-from src.services.streaming.stream_variants import StreamVariant, SVUser
+from src.core.settings import Settings, get_settings
 from src.services.streaming.litellm_client import acomplete, first_text
+from src.services.streaming.stream_variants import StreamVariant, SVUser
 
 DEFAULT_LOGGER = configure_logging(__name__)
 
@@ -33,7 +31,7 @@ class Thread:
     thread_id: str
     date: str  # ISO 8601
     topic: str
-    content: List[StreamVariant]
+    content: list[StreamVariant]
 
 
 # ──────────────────── Helper Functions ──────────────────────────────
@@ -68,7 +66,7 @@ def _fallback_topic(raw: str | None) -> str:
     return (s[:80] + "…") if len(s) > 80 else s
 
 
-async def summarize_topic(content: List[StreamVariant]) -> str:
+async def summarize_topic(content: list[StreamVariant]) -> str:
     """
     Try LiteLLM; on any failure, return a safe fallback so requests don't crash.
     Only the first user text is taken into account.
@@ -134,5 +132,5 @@ async def get_database(vault_url: str) -> AsyncDatabase:
     """
     mongodb_uri = await get_mongodb_uri(vault_url)
 
-    client = AsyncMongoClient(mongodb_uri, connectTimeoutMS=30000)
+    client: AsyncMongoClient = AsyncMongoClient(mongodb_uri, connectTimeoutMS=30000)
     return client[MONGODB_DATABASE_NAME]

@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException
-from typing import List
 from yaml.error import YAMLError
 
 from src.core.available_chatbots import available_chatbots
@@ -8,8 +7,8 @@ from src.services.service_factory import AuthRequired
 router = APIRouter()
 
 
-@router.get("/availablechatbots", response_model=List[str], dependencies=[AuthRequired])
-async def available_chatbots_endpoint() -> List[str]:
+@router.get("/availablechatbots", response_model=list[str], dependencies=[AuthRequired])
+async def available_chatbots_endpoint() -> list[str]:
     """
     Retrieve Available Chatbots.
 

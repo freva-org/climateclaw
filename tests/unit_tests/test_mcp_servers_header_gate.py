@@ -1,5 +1,6 @@
-import pytest
 from contextvars import ContextVar
+
+import pytest
 
 
 @pytest.mark.asyncio

@@ -1,12 +1,13 @@
 from __future__ import annotations
-import sys
+
 import pathlib
+import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
+import json
 import os
 import sys
-import json
 
 from jupyter_client import KernelManager
 from jupyter_client.blocking import BlockingKernelClient
@@ -52,7 +53,7 @@ def show_kernel_env(km: KernelManager, keys: list[str] | None = None):
         else:
             expr = "dict(list(os.environ.items())[:20])"  # limit output
         code = f"import os, json; print(json.dumps({expr}))"
-        msg_id = kc.execute(
+        msg_id = kc.execute(  # noqa: F841
             code, store_history=False, allow_stdin=False, stop_on_error=True
         )
         kc.get_shell_msg(timeout=5)

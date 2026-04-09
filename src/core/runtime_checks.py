@@ -1,4 +1,5 @@
 import logging
+
 from src.core.settings import Settings
 
 logger = logging.getLogger(__name__)

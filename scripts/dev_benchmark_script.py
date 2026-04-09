@@ -1,5 +1,22 @@
 from __future__ import annotations
-import sys, pathlib
+
+import asyncio
+import json
+import logging
+import pathlib
+import sys
+import time
+from dataclasses import dataclass
+
+from src.core.logging_setup import configure_logging
+from src.core.prompting import get_entire_prompt
+from src.services.service_factory import get_authenticator, get_thread_storage
+from src.services.streaming.active_conversations import (
+    new_thread_id,
+    save_conversation,
+)
+from src.services.streaming.stream_orchestrator import prepare_for_stream, run_stream
+from src.services.streaming.stream_variants import from_sv_to_json
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
@@ -11,23 +28,6 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour.
 - RUNS/CONCURRENCY for benchmarks; set CONCURRENCY=1 for clean mode.
 - Uses ONE global McpManager; orchestrator ties MCP session to thread_id.
 """
-import asyncio
-import json
-import logging
-import time
-from dataclasses import dataclass
-from typing import List, Optional
-
-from src.core.logging_setup import configure_logging
-from src.services.streaming.stream_orchestrator import run_stream, prepare_for_stream
-from src.services.streaming.stream_variants import from_sv_to_json
-from src.core.prompting import get_entire_prompt
-from src.services.service_factory import get_authenticator, get_thread_storage
-from src.services.streaming.active_conversations import (
-    new_thread_id,
-    save_conversation,
-    end_conversation,
-)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # CONFIG
@@ -42,7 +42,7 @@ CONCURRENCY = 1  # ← set to 1 for clean mode
 WARMUP_RUNS = 0
 
 NEW_THREAD_PER_RUN = True
-THREAD_ID_BASE: Optional[str] = None
+THREAD_ID_BASE: str | None = None
 
 PRINT_STREAM = False
 PRINT_PER_RUN_SUMMARY = True
@@ -68,8 +68,13 @@ async def _run_once(idx: int, sem: asyncio.Semaphore) -> RunResult:
     async with sem:
         thread_id = new_thread_id()
 
-        Storage = get_thread_storage(user_name=USER_ID, thread_id=thread_id)
         Auth = get_authenticator()
+        if Auth.vault_url:
+            Storage = get_thread_storage(
+                user_name=USER_ID, thread_id=thread_id, vault_url=Auth.vault_url
+            )
+        else:
+            raise ValueError("Please set the vault_url value!")
 
         await prepare_for_stream(thread_id, USER_ID, Auth)
 

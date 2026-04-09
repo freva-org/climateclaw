@@ -1,23 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException
 
+from src.core.logging_setup import configure_logging
 from src.services.service_factory import (
     Authenticator,
     AuthRequired,
     auth_dependency,
     get_thread_storage,
 )
-from src.services.streaming.stream_variants import (
-    from_json_to_sv,
-    from_sv_to_json,
-    SVServerHint,
-    StreamVariant,
-)
 from src.services.streaming.active_conversations import (
-    new_thread_id,
     check_thread_exists,
     initialize_conversation,
+    new_thread_id,
 )
-from src.core.logging_setup import configure_logging
+from src.services.streaming.stream_variants import (
+    StreamVariant,
+    SVServerHint,
+    from_json_to_sv,
+    from_sv_to_json,
+)
 
 router = APIRouter()
 

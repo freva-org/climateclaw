@@ -1,11 +1,9 @@
 from __future__ import annotations
-from dataclasses import dataclass
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from dataclasses import dataclass
 
 from fastapi import Request
-
 from src.core.settings import Settings
 
 # ──────────────────── Base Authenticator Class ──────────────────────────────
@@ -24,10 +22,11 @@ class Authenticator(ABC):
     request: Request
     settings: Settings
     username: str
-    vault_url: Optional[str]
+    vault_url: str
     rest_url: str
     access_token: str
 
+    @staticmethod
     @abstractmethod
     async def build(request: Request) -> Authenticator:
         """

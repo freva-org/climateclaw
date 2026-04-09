@@ -1,6 +1,6 @@
 import os
-import psutil
 
+import psutil
 from src.services.streaming.stream_variants import SVServerHint
 
 
@@ -18,7 +18,6 @@ async def heartbeat_content():
 
     # Current process info
     pid = os.getpid()
-    proc = psutil.Process(pid)
 
     # --- Memory Info ---
     mem = psutil.virtual_memory()

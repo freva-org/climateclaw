@@ -1,18 +1,16 @@
 # tests/conftest.py
-import pytest
-import httpx
-
-import os, sys
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
+import pytest
 
 # Ensure project root on sys.path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.services.mcp.client import McpClient
 
 # ──────────────────────────────────────────────────────────────────────────────
 # GLOBAL / COMMON
@@ -22,8 +20,9 @@ from src.services.mcp.client import McpClient
 @pytest.fixture
 def app():
     # Reload settings after environment patching
-    import src.core.settings as settings
     import importlib
+
+    import src.core.settings as settings
 
     importlib.reload(settings)
 
@@ -196,7 +195,7 @@ def patch_mongo_uri(monkeypatch):
 def patch_read_thread(monkeypatch):
     async def _fake(self, thread_id: str):
         return [
-            {"variant": "ServerHint", "content": {'thread_id': thread_id}},
+            {"variant": "ServerHint", "content": {"thread_id": thread_id}},
             {"variant": "Prompt", "content": "user prompt should be filtered out"},
             {"variant": "User", "content": "kept"},
             {"variant": "Assistant", "content": "also kept"},
@@ -240,7 +239,8 @@ def patch_save_thread(monkeypatch):
                 "append_to_existing": append_to_existing,
             }
         )
-        return 
+        return
+
     import src.services.storage.mongodb_storage as mongo_store
 
     monkeypatch.setattr(
@@ -250,7 +250,7 @@ def patch_save_thread(monkeypatch):
         raising=False,
     )
 
-    return calls 
+    return calls
 
 
 @pytest.fixture
