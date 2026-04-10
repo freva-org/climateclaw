@@ -57,7 +57,7 @@ jobs:
           EOF
 
       - name: Start production stack
-        run: docker-compose up -d --wait --build --remove-orphans
+        run: docker compose up -d --wait --build --remove-orphans
 
       - name: Run mypy
         run: uv run --group type mypy
