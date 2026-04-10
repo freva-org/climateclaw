@@ -1,5 +1,9 @@
+import json
 import os
+from typing import Optional
+from urllib.parse import quote as urlquote
 
+import httpx
 from fastmcp import FastMCP
 
 from src.tools.header_gate import make_header_gate
@@ -10,6 +14,7 @@ from openai import OpenAI
 logger = configure_logging(__name__, named_log="web_search_server")
 
 OPENAI_API_KEY: str = os.getenv("FREVAGPT_OPENAI_API_KEY")
+GITLAB_TOKEN: Optional[str] = os.getenv("FREVAGPT_GITLAB_TOKEN")
 
 mcp = FastMCP("web-search-server")
 
@@ -19,6 +24,19 @@ ALLOWED_DOMAINS = [
     "docs.dkrz.de",
     "docs.icon-model.org",
 ]
+
+# GitLab plugin config
+GITLAB_BASE_URL = "https://gitlab.dkrz.de/api/v4"
+PLUGIN_GROUP_PATH = "kd1418/plugins4freva"
+KNOWN_PLUGINS = [
+    "leadtimeselektor",
+    # "problems",
+    # "cvprepare",
+    # "recalibration",
+]
+MAX_FILE_SIZE_BYTES = 20_000  # skip files larger than this
+MAX_TOTAL_CODE_CHARS = 20_000  # truncate total fetched code
+MAX_RELEVANT_FILES = 5  # max files to fetch after relevance filtering
 
 HOST = os.getenv("FREVAGPT_MCP_HOST", "0.0.0.0")
 PORT = int(os.getenv("FREVAGPT_MCP_PORT", "8052"))
@@ -43,7 +61,9 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 @mcp.tool()
 def web_search(query: str) -> str:
     """
-    Calls a web-search agent to access DKRZ/HPC and ICON model documentation website.
+    Calls a web-search agent to access DKRZ/HPC and ICON model documentation websites.
+    Use this for DKRZ infrastructure, Slurm, and ICON model documentation questions ONLY.
+    Do NOT use this for Freva plugin source code — use plugin_code_search instead.
     Args:
         query (str): The user's (or LLMs) query.
     Returns:
@@ -53,7 +73,7 @@ def web_search(query: str) -> str:
         "Searching for DKRZ/HPC- or ICON-related context in documentation "
         f"for query: {query}"
     )
-    prompt = (
+    system_prompt = (
         "You are a web-search agent that can search documentations for ICON model "
         "and DKRZ/HPC. Use the documentation websites for searching and creating "
         "answers. Make sure the information provided is accurate and up-to-date. "
@@ -61,12 +81,16 @@ def web_search(query: str) -> str:
         "ICON doc 'https://docs.icon-model.org/search.html?q=SEARCHTERM1+SEARCHTERM2'. "
         "Use SEARCHTEAM 1 and 2 to find relevant information. Only answer questions "
         "if claims can be supported by web citations. Include inline citations for "
-        f"URLs found in the web search results.\n\n User query:\n{(query or '')}"
+        "URLs found in the web search results.\n\n"
     )
+    user_query = query or ""
 
     kwargs = {
         "model": WEB_SEARCH_MODEL,
-        "input": [{"role": "user", "content": prompt}],
+        "input": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_query}
+        ],
         "stream": False,
         "tool_choice": "auto",
         "tools": [
@@ -82,7 +106,185 @@ def web_search(query: str) -> str:
         return resp.output_text
     except Exception as e:
         logger.warning("Web-search failed due to error: %s", e)
-        return
+        return "(web search failed)"
+
+
+# ── GitLab helpers ───────────────────────────────────────────────────────────
+_gitlab_http = httpx.Client(
+    base_url=GITLAB_BASE_URL,
+    headers={"PRIVATE-TOKEN": GITLAB_TOKEN or ""},
+    timeout=30.0,
+)
+
+
+def _gitlab_project_id(plugin_name: str) -> str:
+    """URL-encoded project path usable as :id in the GitLab v4 API."""
+    return urlquote(f"{PLUGIN_GROUP_PATH}/{plugin_name}", safe="")
+
+
+def _fetch_repo_tree(plugin_name: str) -> list[str]:
+    """Return the recursive file tree for a plugin repository."""
+    project_id = _gitlab_project_id(plugin_name)
+    items: list[dict] = []
+    page = 1
+    while True:
+        resp = _gitlab_http.get(
+            f"/projects/{project_id}/repository/tree",
+            params={"recursive": "true", "per_page": 100, "page": page},
+        )
+        resp.raise_for_status()
+        batch = resp.json()
+        if not batch:
+            break
+        items.extend(batch)
+        page += 1
+    
+    # filter to file paths with relevant extensions
+    paths = [
+        entry["path"] for entry in items
+        if entry["type"] == "blob" and
+        entry["path"].lower().endswith((".py", ".sh", ".md", ".rst"))
+        ]
+    return paths
+
+
+def _fetch_file_raw(plugin_name: str, file_path: str, ref: str = "levante") -> str:
+    """
+    Fetch raw content of a single file from a plugin repo.
+    The default branch name is "levante".
+    """
+    project_id = _gitlab_project_id(plugin_name)
+    encoded_path = urlquote(file_path, safe="")
+    resp = _gitlab_http.get(
+        f"/projects/{project_id}/repository/files/{encoded_path}/raw",
+        params={"ref": ref},
+    )
+    resp.raise_for_status()
+    return resp.text
+
+
+def _collect_plugin_code(plugin_name: str, query: str) -> str:
+    """
+    Two-stage file retrieval:
+      1. Fetch the full repo tree and ask GPT-4.1 which files are most relevant
+         for the user's query.
+      2. Fetch only those files and return their concatenated contents.
+    """
+    file_paths = _fetch_repo_tree(plugin_name)
+
+    if not file_paths:
+        return "(repository is empty)"
+
+    # ── Stage 1: ask the LLM to pick relevant files ─────────────────────────
+    tree_listing = "\n".join(file_paths)
+    selection_prompt = (
+        f"Below is the file tree of the '{plugin_name}' Freva plugin repository:\n"
+        f"File tree:\n{tree_listing}\n\n"
+        f"The user's query now is:\n\"{query}\"\n\n"
+        "Return ONLY a JSON array of file paths (strings) that seem most relevant "
+        "to answering the user's query. Include README / documentation files when helpful. "
+        f"Return at most {MAX_RELEVANT_FILES} paths. Output nothing but the JSON array."
+    )
+
+    try:
+        selection_resp = client.responses.create(
+            model=WEB_SEARCH_MODEL,
+            input=[{"role": "user", "content": selection_prompt}],
+            stream=False,
+        )
+        raw_text = selection_resp.output_text.strip()
+        logger.debug(
+            "LLM file selection response for plugin '%s': %s", plugin_name, raw_text
+        )
+        # Strip markdown code fences if present
+        if raw_text.startswith("```"):
+            raw_text = "\n".join(raw_text.split("\n")[1:])
+        if raw_text.endswith("```"):
+            raw_text = "\n".join(raw_text.split("\n")[:-1])
+        selected_files: list[str] = json.loads(raw_text.strip())
+    except Exception as e:
+        logger.warning(
+            "LLM file-selection failed (%s); falling back to heuristic.", e
+        )
+        # Fallback: pick all files from the tree search
+        selected_files = file_paths
+
+    # Ensure we only pick paths that actually exist in the tree
+    selected_files = [p for p in selected_files if p in set(file_paths)][:MAX_RELEVANT_FILES]
+    logger.info(
+        "Stage-1 selected %d/%d files for plugin '%s': %s",
+        len(selected_files),
+        len(file_paths),
+        plugin_name,
+        selected_files,
+    )
+
+    # ── Stage 2: fetch selected files ────────────────────────────────────────
+    collected: list[str] = []
+    total_chars = 0
+    for fpath in selected_files:
+        if total_chars >= MAX_TOTAL_CODE_CHARS:
+            collected.append(
+                f"\n--- (truncated: reached {MAX_TOTAL_CODE_CHARS} char limit) ---"
+            )
+            break
+        try:
+            content = _fetch_file_raw(plugin_name, fpath)
+            if len(content) > MAX_FILE_SIZE_BYTES:
+                content = content[:MAX_FILE_SIZE_BYTES] + "\n... (file truncated)"
+            collected.append(f"### FILE: {fpath}\n```\n{content}\n```\n")
+            total_chars += len(content)
+        except Exception as e:
+            logger.debug("Skipping file %s: %s", fpath, e)
+
+    if not collected:
+        return "(no source files could be retrieved)"
+
+    return "\n".join(collected)
+
+
+@mcp.tool()
+def plugin_code_search(plugin_name: str, query: str) -> str:
+    """
+    Search and analyze the source code of a Freva analysis plugin for decadal
+    climate prediction. Use this when the user asks about how a plugin works,
+    how to use it, or wants code based on a plugin.
+
+    Available plugins: leadtimeselektor, problems, cvprepare, recalibration
+
+    Args:
+        plugin_name (str): Name of the plugin (e.g. "leadtimeselektor").
+        query (str): What the user wants to know or do with the plugin.
+    Returns:
+        str: Relevant source files from the plugin repository.
+    """
+    plugin_name = plugin_name.strip().lower()
+
+    if plugin_name not in KNOWN_PLUGINS:
+        return (
+            f"Unknown plugin '{plugin_name}'. "
+            f"Available plugins: {', '.join(KNOWN_PLUGINS)}"
+        )
+
+    if not GITLAB_TOKEN:
+        logger.error("FREVAGPT_GITLAB_TOKEN is not set; cannot access GitLab repos.")
+        return "Plugin code search is unavailable (GitLab access not configured)."
+
+    logger.info(
+        "Fetching source code for plugin '%s' with query: %s", plugin_name, query
+    )
+
+    try:
+        code_content = _collect_plugin_code(plugin_name, query)
+    except Exception as e:
+        logger.warning("Failed to fetch plugin code for '%s': %s", plugin_name, e)
+        return f"Failed to retrieve source code for plugin '{plugin_name}': {e}"
+
+    header = (
+        f"Source code of the '{plugin_name}' plugin "
+        f"(https://gitlab.dkrz.de/{PLUGIN_GROUP_PATH}/{plugin_name}):\n\n"
+    )
+    return header + code_content
 
 
 def debug():

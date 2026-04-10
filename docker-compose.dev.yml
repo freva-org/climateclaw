@@ -63,6 +63,7 @@ services:
       FREVAGPT_DEBUG: ${FREVAGPT_DEBUG:-0}
       FREVAGPT_MCP_HOST: 0.0.0.0
       FREVAGPT_MCP_PORT: 8052
+      FREVAGPT_GITLAB_TOKEN: ${FREVAGPT_GITLAB_TOKEN:-}
     networks: 
       - freva-gpt
     volumes:
