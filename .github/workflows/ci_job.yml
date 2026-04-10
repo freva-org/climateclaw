@@ -51,7 +51,7 @@ jobs:
         run: uv sync --group dev --group test --group type
 
       - name: Start production stack
-        run: ./prod.sh up -d --wait --build --remove-orphans
+        run: ./dev.sh up -d --wait --build --remove-orphans
 
       - name: Run mypy
         run: uv run --group type mypy
@@ -61,4 +61,4 @@ jobs:
 
       - name: Tear down production stack
         if: always()
-        run: ./prod.sh down -v
+        run: ./dev.sh down -v
