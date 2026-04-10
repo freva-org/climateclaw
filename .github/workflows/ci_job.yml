@@ -65,6 +65,14 @@ jobs:
       - name: Run pytest
         run: uv run --group test pytest
 
+      - name: Show web-search logs
+        if: always()
+        run: docker compose -f docker-compose.dev.yml logs web-search
+
+      - name: Show code logs
+        if: always()
+        run: docker compose -f docker-compose.dev.yml logs code
+
       - name: Tear down dev stack
         if: always()
         run: ./dev.sh down -v
@@ -93,7 +101,7 @@ jobs:
 
       - name: Smoke check public surface
         run: |
-          curl -f http://localhost:8502/ping
+          curl -f http://localhost:8502/healthz
 
       - name: Tear down production stack
         if: always()
