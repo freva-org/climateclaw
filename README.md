@@ -36,8 +36,7 @@ Bind mounts expose `/work`, logs, threads, and shared `cache` to other Freva ser
 ## Quick Start (local dev)
 
 ### Requirements
-- Python `3.11.x`
-- LiteLLM instance that fronts OpenAI, Ollama, or Azure models and understands `litellm_config.yaml`
+- `podman` or `docker`
 
 <!-- ### Install dependencies (uv)
 ```bash
