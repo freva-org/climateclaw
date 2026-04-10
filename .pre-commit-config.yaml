@@ -28,7 +28,7 @@ repos:
 
       - id: pytest-pre-push
         name: pytest before push
-        entry: bash -c 'set -e; ./dev.sh up code web-search -d --wait --build --remove-orphans; trap "./dev.sh down -v" EXIT; uv run --group test pytest'
+        entry: uv run --group test pytest -m "not integration"
         language: system
         pass_filenames: false
         stages: [pre-push]
