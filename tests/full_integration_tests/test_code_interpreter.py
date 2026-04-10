@@ -6,7 +6,7 @@ import os
 from typing import Any
 
 import pytest
-from src.services.mcp.client import McpClient
+from freva_gpt.services.mcp.client import McpClient
 
 pytestmark = pytest.mark.integration
 # Run these tests using `pytest -m integration`
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 def _force_dev(monkeypatch):
     monkeypatch.setenv("FREVAGPT_DEV", "1")
     monkeypatch.setenv("FREVAGPT_CODE_SERVER_URL", "http://localhost:8051")
-    import src.core.settings as settings
+    import freva_gpt.core.settings as settings
 
     importlib.reload(settings)
     yield

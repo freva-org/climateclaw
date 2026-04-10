@@ -72,10 +72,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
 EXPOSE ${FREVAGPT_MCP_PORT:-8051}
 
-COPY src /app/src
+COPY freva_gpt /app/freva_gpt
 
 # Launch CI server
-CMD uvicorn src.tools.code.server:app \
+CMD uvicorn freva_gpt.tools.code.server:app \
     --host ${FREVAGPT_MCP_HOST:-0.0.0.0}\
     --port ${FREVAGPT_MCP_PORT:-8051} \
     --proxy-headers

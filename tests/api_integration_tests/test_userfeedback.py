@@ -113,7 +113,7 @@ async def test_userfeedback_remove_success(
             {"variant": "Assistant", "content": "also kept", "feedback": "up"},
         ]
 
-    import src.services.storage.mongodb_storage as mongo_store
+    import freva_gpt.services.storage.mongodb_storage as mongo_store
 
     monkeypatch.setattr(
         mongo_store.ThreadStorage,

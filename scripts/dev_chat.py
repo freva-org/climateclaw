@@ -7,17 +7,20 @@ import pathlib
 import sys
 from typing import Any
 
-from src.api.chatbot.streamresponse import _sse_data
-from src.core.logging_setup import configure_logging
-from src.core.prompting import get_entire_prompt
-from src.core.settings import get_settings
-from src.services.service_factory import get_authenticator, get_thread_storage
-from src.services.streaming.active_conversations import (
+from freva_gpt.api.chatbot.streamresponse import _sse_data
+from freva_gpt.core.logging_setup import configure_logging
+from freva_gpt.core.prompting import get_entire_prompt
+from freva_gpt.core.settings import get_settings
+from freva_gpt.services.service_factory import get_authenticator, get_thread_storage
+from freva_gpt.services.streaming.active_conversations import (
     end_and_save_conversation,
     new_thread_id,
 )
-from src.services.streaming.stream_orchestrator import prepare_for_stream, run_stream
-from src.services.streaming.stream_variants import (
+from freva_gpt.services.streaming.stream_orchestrator import (
+    prepare_for_stream,
+    run_stream,
+)
+from freva_gpt.services.streaming.stream_variants import (
     SVAssistant,
     SVCode,
     from_sv_to_json,

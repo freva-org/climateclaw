@@ -1,6 +1,6 @@
 import pytest
-from src.api.chatbot import editthread
-from src.services.streaming.stream_variants import SVPrompt, SVServerHint
+from freva_gpt.api.chatbot import editthread
+from freva_gpt.services.streaming.stream_variants import SVPrompt, SVServerHint
 
 
 @pytest.mark.asyncio

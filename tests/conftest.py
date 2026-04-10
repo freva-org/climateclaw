@@ -1,20 +1,12 @@
 # tests/conftest.py
 import asyncio
-import sys
 from datetime import datetime, timezone
-from pathlib import Path
 from types import SimpleNamespace
 
+import freva_gpt.services.streaming.active_conversations as act_conv
 import httpx
 import pytest
-import src.services.streaming.active_conversations as act_conv
-from src.services.streaming.stream_variants import from_json_to_sv
-
-# Ensure project root on sys.path
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
+from freva_gpt.services.streaming.stream_variants import from_json_to_sv
 
 # ──────────────────────────────────────────────────────────────────────────────
 # GLOBAL / COMMON
@@ -26,16 +18,16 @@ def app():
     # Reload settings after environment patching
     import importlib
 
-    import src.core.settings as settings
+    import freva_gpt.core.settings as settings
 
     importlib.reload(settings)
 
     # Reload service_factory so that get_authenticator picks up new settings.DEV
-    import src.services.service_factory as sf
+    import freva_gpt.services.service_factory as sf
 
     importlib.reload(sf)
 
-    from src.app import app as fastapi_app
+    from freva_gpt.app import app as fastapi_app
 
     return fastapi_app
 
@@ -168,7 +160,7 @@ def patch_db(monkeypatch, dummy_db, GOOD_HEADERS):
         return dummy_db
 
     monkeypatch.setattr(
-        "src.services.storage.mongodb_storage.get_database",
+        "freva_gpt.services.storage.mongodb_storage.get_database",
         fake_get_database,
         raising=True,
     )
@@ -183,7 +175,7 @@ def patch_mongo_uri(monkeypatch):
         # Return a dummy MongoDB URI; it will be consumed by get_database
         return "mongodb://dummy-host/dummy-db"
 
-    import src.services.storage.helpers as storage_helpers
+    import freva_gpt.services.storage.helpers as storage_helpers
 
     monkeypatch.setattr(
         storage_helpers,
@@ -205,7 +197,7 @@ def patch_read_thread(monkeypatch):
             {"variant": "Assistant", "content": "also kept"},
         ]
 
-    import src.services.storage.mongodb_storage as mongo_store
+    import freva_gpt.services.storage.mongodb_storage as mongo_store
 
     monkeypatch.setattr(
         mongo_store.ThreadStorage,
@@ -247,7 +239,7 @@ def patch_save_thread(monkeypatch):
         )
         return
 
-    import src.services.storage.mongodb_storage as mongo_store
+    import freva_gpt.services.storage.mongodb_storage as mongo_store
 
     monkeypatch.setattr(
         mongo_store.ThreadStorage,
@@ -281,7 +273,7 @@ def patch_user_threads(monkeypatch):
         ]
         return threads, len(threads)
 
-    import src.services.storage.mongodb_storage as mongo_store
+    import freva_gpt.services.storage.mongodb_storage as mongo_store
 
     monkeypatch.setattr(
         mongo_store.ThreadStorage,
@@ -334,7 +326,10 @@ def patch_registry(monkeypatch):
 @pytest.fixture
 def patch_stream(monkeypatch):
     async def fake_run_stream(**kwargs):
-        from src.services.streaming.stream_variants import SVAssistant, SVServerHint
+        from freva_gpt.services.streaming.stream_variants import (
+            SVAssistant,
+            SVServerHint,
+        )
 
         yield SVServerHint(data={"thread_id": "t-abc"})
         yield SVAssistant(text="hello")
@@ -342,7 +337,7 @@ def patch_stream(monkeypatch):
 
     # IMPORTANT: patch where the route resolves it
     monkeypatch.setattr(
-        "src.api.chatbot.streamresponse.run_stream",
+        "freva_gpt.api.chatbot.streamresponse.run_stream",
         fake_run_stream,
         raising=True,
     )

@@ -1,7 +1,10 @@
+import freva_gpt.services.storage.mongodb_storage as mongo_storage
 import pytest
-import src.services.storage.mongodb_storage as mongo_storage
-from src.services.storage.mongodb_storage import MONGODB_COLLECTION_NAME, ThreadStorage
-from src.services.streaming.stream_variants import (
+from freva_gpt.services.storage.mongodb_storage import (
+    MONGODB_COLLECTION_NAME,
+    ThreadStorage,
+)
+from freva_gpt.services.streaming.stream_variants import (
     SVAssistant,
     SVPrompt,
     SVStreamEnd,

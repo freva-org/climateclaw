@@ -1,4 +1,4 @@
-from src.services.streaming.stream_variants import (
+from freva_gpt.services.streaming.stream_variants import (
     StreamVariant,
     SVAssistant,
     SVCode,

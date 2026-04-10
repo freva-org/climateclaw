@@ -21,14 +21,14 @@ repos:
     hooks:
       - id: mypy-pre-push
         name: mypy before push
-        entry: uv run mypy
+        entry: uv run --group type mypy
         language: system
         pass_filenames: false
         stages: [pre-push]
 
       - id: pytest-pre-push
         name: pytest before push
-        entry: bash -c 'set -e; ./dev.sh up code web-search -d --wait --build --remove-orphans; trap "docker compose -f docker-compose.dev.yml down -v" EXIT; uv run pytest'
+        entry: bash -c 'set -e; ./dev.sh up code web-search -d --wait --build --remove-orphans; trap "./dev.sh down -v" EXIT; uv run --group test pytest'
         language: system
         pass_filenames: false
         stages: [pre-push]

@@ -8,15 +8,18 @@ import sys
 import time
 from dataclasses import dataclass
 
-from src.core.logging_setup import configure_logging
-from src.core.prompting import get_entire_prompt
-from src.services.service_factory import get_authenticator, get_thread_storage
-from src.services.streaming.active_conversations import (
+from freva_gpt.core.logging_setup import configure_logging
+from freva_gpt.core.prompting import get_entire_prompt
+from freva_gpt.services.service_factory import get_authenticator, get_thread_storage
+from freva_gpt.services.streaming.active_conversations import (
     new_thread_id,
     save_conversation,
 )
-from src.services.streaming.stream_orchestrator import prepare_for_stream, run_stream
-from src.services.streaming.stream_variants import from_sv_to_json
+from freva_gpt.services.streaming.stream_orchestrator import (
+    prepare_for_stream,
+    run_stream,
+)
+from freva_gpt.services.streaming.stream_variants import from_sv_to_json
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
