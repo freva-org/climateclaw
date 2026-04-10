@@ -50,8 +50,14 @@ jobs:
       - name: Sync dependencies
         run: uv sync --group dev --group test --group type
 
+      - name: Create CI .env
+        run: |
+          cat > .env <<'EOF'
+          FREVAGPT_INSTANCE_NAME=ci
+          EOF
+
       - name: Start production stack
-        run: ./dev.sh up -d --wait --build --remove-orphans
+        run: docker-compose up -d --wait --build --remove-orphans
 
       - name: Run mypy
         run: uv run --group type mypy
