@@ -1,5 +1,5 @@
 services:
-  freva-gpt-backend:
+  freva-gpt:
     image: freva-gpt-backend-${FREVAGPT_INSTANCE_NAME:?Instance name must be set in the .env file to differentiate between instances}
     build:
       context: .
