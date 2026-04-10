@@ -30,8 +30,8 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
 
-  prod-tests:
-    name: CI tests on production setup (Python ${{ matrix.python-version }})
+  dev-tests:
+    name: Full test suite on dev stack (Python 3.13)
     runs-on: ubuntu-latest
 
     steps:
@@ -47,8 +47,37 @@ jobs:
       - name: Set up Python
         run: uv python install 3.13
 
+      - name: Create CI .env
+        run: |
+          cat > .env <<'EOF'
+          FREVAGPT_INSTANCE_NAME=ci
+          EOF
+
       - name: Sync dependencies
         run: uv sync --group dev --group test --group type
+
+      - name: Start dev stack
+        run: ./dev.sh up code web-search -d --wait --build --remove-orphans
+
+      - name: Run mypy
+        run: uv run --group type mypy
+
+      - name: Run pytest
+        run: uv run --group test pytest
+
+      - name: Tear down dev stack
+        if: always()
+        run: ./dev.sh down -v
+
+  prod-smoke:
+    name: Production smoke test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Create CI .env
         run: |
@@ -57,14 +86,15 @@ jobs:
           EOF
 
       - name: Start production stack
-        run: docker compose up -d freva-gpt rag code web-search litellm --wait --build --remove-orphans
+        run: docker compose up freva-gpt code web-search -d --wait --build --remove-orphans
 
-      - name: Run mypy
-        run: uv run --group type mypy
+      - name: Show running services
+        run: docker compose ps
 
-      - name: Run pytest
-        run: uv run --group test pytest
+      - name: Smoke check public surface
+        run: |
+          curl -f http://localhost:8502/ping
 
       - name: Tear down production stack
         if: always()
-        run: ./dev.sh down -v
+        run: docker compose down -v
