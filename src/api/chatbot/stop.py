@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Response
 from starlette.status import HTTP_422_UNPROCESSABLE_CONTENT
 
 from src.services.service_factory import AuthRequired
@@ -35,8 +35,9 @@ async def stop_get(
         HTTPException (422):
             - If `thread_id` is missing or empty.
         HTTPException (404):
-            - If no active conversation with the given thread ID was found
-              or the stop request failed.
+            - If no active conversation with the given thread ID was found.
+        HTTPException (500):
+            - Failure to request stop.
     """
 
     if not thread_id:
@@ -47,12 +48,22 @@ async def stop_get(
 
     logger = configure_logging(__name__, thread_id=thread_id)
 
-    ok = await request_stop(thread_id)
-    logger.debug("Initiated stop request", extra={"thread_id": thread_id})
-
-    if ok:
-        return {"Conversation stopped."}
-    else:
+    try:
+        ok = await request_stop(thread_id)
+        if ok:
+            logger.debug("Initiated stop request", extra={"thread_id": thread_id})
+            return {"detail": "Conversation stopped."}
+        else:
+            logger.exception(
+                f"Thread not found in the registry. Nothing to stop: {thread_id}"
+            )
+            raise HTTPException(
+                status_code=404,
+                detail=f"Conversation with given thread-id not found in the registry: {thread_id}",
+            )
+    except Exception as e:
+        logger.exception(f"Failed to stop the thread {thread_id}: {e}")
         raise HTTPException(
-            status_code=404, detail="Conversation with given thread-id not found."
+            status_code=500,
+            detail=f"Failed to stop the conversation with thread-id: {thread_id}",
         )

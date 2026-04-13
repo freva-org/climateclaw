@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Response
 
 from src.services.service_factory import (
     Authenticator,
@@ -68,7 +68,7 @@ async def set_thread_topic(
         # Thread storage
         Storage = await get_thread_storage(vault_url=auth.vault_url)
     except Exception as e:
-        logger.warning("Failed to connect to MongoDB", extra={"error": str(e)})
+        logger.exception("Failed to connect to MongoDB", extra={"error": str(e)})
         raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
 
     try:
@@ -77,9 +77,9 @@ async def set_thread_topic(
             "Updated thread topic",
             extra={"thread_id": thread_id, "user_id": auth.username},
         )
-        return {"Successfully updated thread topic."}
+        return {"detail": "Topic updated."}
     except Exception as e:
-        logger.warning(
+        logger.exception(
             "Failed to update thread topic",
             extra={"thread_id": thread_id, "user_id": auth.username, "error": str(e)},
         )

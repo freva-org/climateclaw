@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Response
 
 from src.services.service_factory import (
     Authenticator,
@@ -66,9 +66,9 @@ async def delete_thread(
             "Deleted thread from storage",
             extra={"thread_id": thread_id, "user_id": auth.username},
         )
-        return {"Successfully removed thread from storage."}
+        return {"detail": "Thread deleted."}
     except Exception as e:
-        logger.warning(
+        logger.exception(
             "Failed to delete thread from storage",
             extra={"thread_id": thread_id, "user_id": auth.username, "error": str(e)},
         )
