@@ -23,6 +23,7 @@ from src.services.streaming.stream_variants import (
     from_sv_to_json,
     IMAGE,
     SVDict,
+    SVServerHint,
 )
 from src.services.streaming.stream_orchestrator import run_stream, prepare_for_stream
 from src.services.streaming.helpers import chunks
@@ -211,6 +212,12 @@ async def streamresponse(
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
 
     async def event_stream():
+        if is_new_thread:
+            # Append ServerHint with thread_id
+            hint_v = SVServerHint(data={"thread_id": thread_id})
+            for data in _sse_data(from_sv_to_json(hint_v)):
+                yield data
+            await add_to_conversation(thread_id, [hint_v])
 
         last_check = time.monotonic()
         async for variant in run_stream(
@@ -231,8 +238,7 @@ async def streamresponse(
                 if state == ConversationState.STOPPING:
                     end_v = SVStreamEnd(message="Stream is stopped by user.")
                     for data in _sse_data(from_sv_to_json(end_v)):
-                            yield data
-                    await add_to_conversation(thread_id, [end_v])
+                        yield data
                     await cancel_tool_tasks(thread_id)
                     await end_and_save_conversation(thread_id, Storage)
                     logger.info(
