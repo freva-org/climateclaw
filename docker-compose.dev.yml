@@ -69,10 +69,10 @@ services:
       FREVAGPT_DEBUG: ${FREVAGPT_DEBUG:-0}
       FREVAGPT_MCP_HOST: 0.0.0.0
       FREVAGPT_MCP_PORT: 8052
+    ports: 
+      - 8052:8052
     networks:
       - freva-gpt
-    ports:
-      - 8052:8052
     volumes:
       - ./logs/:/app/logs
     healthcheck:

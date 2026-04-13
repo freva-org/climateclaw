@@ -66,9 +66,9 @@ async def delete_thread(
             "Deleted thread from storage",
             extra={"thread_id": thread_id, "user_id": auth.username},
         )
-        return {"Successfully removed thread from storage."}
+        return {"detail": "Thread deleted."}
     except Exception as e:
-        logger.warning(
+        logger.exception(
             "Failed to delete thread from storage",
             extra={"thread_id": thread_id, "user_id": auth.username, "error": str(e)},
         )

@@ -85,7 +85,7 @@ async def search_threads(
         # Thread storage
         Storage: ThreadStorage = await get_thread_storage(vault_url=auth.vault_url)
     except Exception as e:
-        logger.warning("Failed to connect to MongoDB: %s", e)
+        logger.exception("Failed to connect to MongoDB: %s", e)
         raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
 
     num_threads = num_threads or 20  # default to 20 if not provided
@@ -96,7 +96,7 @@ async def search_threads(
             auth.username, query, num_threads, page
         )
     except Exception as e:
-        logger.warning("Failed to query threads: %s", e)
+        logger.exception("Failed to query threads: %s", e)
         raise HTTPException(status_code=500, detail="Failed to query threads.")
 
     return [

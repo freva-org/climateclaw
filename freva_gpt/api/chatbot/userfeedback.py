@@ -57,8 +57,8 @@ async def user_feedback(
 
     Returns:
         dict:
-            - {"Successfully saved user feedback."} on successful save.
-            - {"Successfully removed user feedback."} on successful deletion.
+            - {"detail": "Feedback saved."} on successful save.
+            - {"detail": "Feedback removed."} on successful deletion.
 
     Raises:
         HTTPException (422):
@@ -148,7 +148,7 @@ async def user_feedback(
             logger.info(
                 f"Successfully saved user feedback at index {feedback_at_thread_index}: {thread_id}"
             )
-            return {"Successfully saved user feedback."}
+            return {"detail": "Feedback saved."}
         except Exception:
             logger.exception(
                 f"Failed to save user feedback at index {feedback_at_thread_index}: {thread_id}"
@@ -177,7 +177,7 @@ async def user_feedback(
             logger.info(
                 f"Successfully removed user feedback at index {feedback_at_thread_index}: {thread_id}"
             )
-            return {"Successfully removed user feedback."}
+            return {"detail": "Feedback removed."}
         except Exception:
             logger.exception(f"Failed to delete user feedback: {thread_id}")
             raise HTTPException(
@@ -196,4 +196,5 @@ async def save_feedback(
 
 async def delete_feedback(storage: ThreadStorage, thread_id, user_id, content, f_ind):
     await storage.delete_feedback(thread_id, user_id, content, f_ind)
-    await save_feedback_to_registry(thread_id, f_ind, "remove")
+    if await check_thread_exists(thread_id):
+        await save_feedback_to_registry(thread_id, f_ind, "remove")

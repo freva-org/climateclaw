@@ -92,7 +92,7 @@ async def test_userfeedback_save_success(
                 headers=GOOD_HEADERS,
             )
             assert r.status_code == 200
-            assert r.json() == ["Successfully saved user feedback."]
+            assert r.json().get("detail") == "Feedback saved."
 
 
 @pytest.mark.asyncio
@@ -139,7 +139,7 @@ async def test_userfeedback_remove_success(
                 headers=GOOD_HEADERS,
             )
             assert r.status_code == 200
-            assert r.json() == ["Successfully removed user feedback."]
+            assert r.json().get("detail") == "Feedback removed."
 
 
 @pytest.mark.asyncio

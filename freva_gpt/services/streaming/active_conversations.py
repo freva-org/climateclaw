@@ -77,7 +77,7 @@ async def initialize_conversation(
     logger=None,
 ):
     """
-    Initialize and register a new conversation in the registry with the given thread_id and user_id.
+    Initialize and register a STREAMING conversation in the registry with the given thread_id and user_id.
     If a conversation with the same thread_id already exists, it will be updated to STREAMING state
     and the last_activity timestamp will be refreshed, but the existing conversation will stay unchanged.
     """
@@ -85,9 +85,6 @@ async def initialize_conversation(
     now = datetime.now(UTC)
     # if auth:
     mcp_mgr = await get_mcp_manager(authenticator=auth, thread_id=thread_id)
-    # else:
-    #     log.warning(f"The conversation {thread_id} initialized without MCPManager! "
-    #                 "Please note that the MCP servers cannot be connected!")
 
     # Precreate the conversation object to reduce time spent under lock
     maybe_new_conv = ActiveConversation(
