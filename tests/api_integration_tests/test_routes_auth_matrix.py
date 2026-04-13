@@ -12,6 +12,8 @@ async def test_all_get_routes_require_auth(client):
             "/api/chatbot/getthread",
             "/api/chatbot/getuserthreads",
             "/api/chatbot/streamresponse",
+            "/api/chatbot/editthread",
+            "/api/chatbot/userfeedback",
         ]:
             r = await client.get(ep)
             assert r.status_code == 401, f"{ep} should be protected (missing headers)"
@@ -57,7 +59,7 @@ async def test_routes_succeed_with_auth_and_username_injection(
             # returns a JSON array of stream variants (Prompt filtered out)
             body = r.json()
             assert isinstance(body, list)
-            assert body and body[0]["variant"] == "User"
+            assert body and body[0]["variant"] == "ServerHint"
 
             # 4) GET-only SSE (Rust parity) — just assert it succeeds
             r = await client.get(

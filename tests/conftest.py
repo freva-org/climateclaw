@@ -2,9 +2,14 @@
 import pytest
 import httpx
 
-import os, sys
+import sys
+import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+
+import src.services.streaming.active_conversations as act_conv
+from src.services.streaming.stream_variants import from_json_to_sv
 
 
 # Ensure project root on sys.path
@@ -12,7 +17,6 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.services.mcp.client import McpClient
 
 # ──────────────────────────────────────────────────────────────────────────────
 # GLOBAL / COMMON
@@ -196,9 +200,10 @@ def patch_mongo_uri(monkeypatch):
 def patch_read_thread(monkeypatch):
     async def _fake(self, thread_id: str):
         return [
-            {"variant": "Prompt", "text": "user prompt should be filtered out"},
-            {"variant": "User", "text": "kept"},
-            {"variant": "Assistant", "text": "also kept"},
+            {"variant": "ServerHint", "content": {'thread_id': thread_id}},
+            {"variant": "Prompt", "content": "user prompt should be filtered out"},
+            {"variant": "User", "content": "kept"},
+            {"variant": "Assistant", "content": "also kept"},
         ]
 
     import src.services.storage.mongodb_storage as mongo_store
@@ -215,11 +220,33 @@ def patch_read_thread(monkeypatch):
 
 @pytest.fixture
 def patch_save_thread(monkeypatch):
-    async def _fake_append(
-        database, thread_id: str, user_id: str, messages, append_to_existing
-    ):
-        return
+    calls = []
 
+    calls = []
+
+    async def _fake_append(
+        self,
+        thread_id: str,
+        user_id: str,
+        content,
+        root_thread_id=None,
+        parent_thread_id=None,
+        fork_from_index=None,
+        append_to_existing=False,
+        **kwargs,
+    ):
+        calls.append(
+            {
+                "thread_id": thread_id,
+                "user_id": user_id,
+                "content": content,
+                "root_thread_id": root_thread_id,
+                "parent_thread_id": parent_thread_id,
+                "fork_from_index": fork_from_index,
+                "append_to_existing": append_to_existing,
+            }
+        )
+        return 
     import src.services.storage.mongodb_storage as mongo_store
 
     monkeypatch.setattr(
@@ -229,7 +256,7 @@ def patch_save_thread(monkeypatch):
         raising=False,
     )
 
-    return _fake_append
+    return calls 
 
 
 @pytest.fixture
@@ -264,6 +291,37 @@ def patch_user_threads(monkeypatch):
     )
 
     return fake_get_user_threads
+
+# ──────────────────────────────────────────────────────────────────────────────
+# REGISTRY PATCH
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def patch_registry(monkeypatch):
+    monkeypatch.setattr(act_conv, "RegistryLock", asyncio.Lock())
+    act_conv.Registry.clear()
+
+    def _populate(entries: dict[str, list[dict]]):
+        """
+        entries = {
+            "t-2": [ {...}, {...}, {...} ],
+        }
+        """
+        act_conv.Registry.clear()
+
+        for thread_id, content in entries.items():
+            act_conv.Registry[thread_id] = act_conv.ActiveConversation(
+                thread_id=thread_id,
+                user_id="u-test",
+                state=act_conv.ConversationState.STREAMING,
+                mcp_manager=None,
+                messages=[from_json_to_sv(c) for c in content],
+                last_activity=datetime.now(timezone.utc),
+            )
+
+    yield _populate
+
+    act_conv.Registry.clear()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -309,11 +367,9 @@ def patch_mcp_manager(monkeypatch):
     Avoid hitting the real MCP manager / MCP Mongo from tests.
     initialize_conversation() will still run, but with a dummy manager.
     """
-    from src.services.streaming import active_conversations as ac
-
     async def fake_get_mcp_manager(authenticator, thread_id):
         # You can assert on authenticator if you want
         return DummyMcpManager()
 
-    monkeypatch.setattr(ac, "get_mcp_manager", fake_get_mcp_manager, raising=True)
+    monkeypatch.setattr(act_conv, "get_mcp_manager", fake_get_mcp_manager, raising=True)
     return fake_get_mcp_manager
