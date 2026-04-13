@@ -120,6 +120,7 @@ Generated artifacts that persist across runs:
 - **Unit/functional tests**: `uv run pytest` or focus, e.g. `uv run pytest tests/test_auth.py -k bearer`.
 - **Integration: code interpreter**: `FREVAGPT_CODE_SERVER_URL=http://localhost:8051 uv run pytest tests/full_integration_tests/test_code_interpreter.py -m integration`.
 - **Integration: web-search**: `FREVAGPT_WEB_SEARCH_SERVER_URL=http://localhost:8052 uv run pytest tests/full_integration_tests/test_web_search.py -m integration`.
+- **Interactive chat**: `uv run python scripts/dev_chat.py` starts a REPL that exercises the same orchestrator logic, persisting outputs to disk and optionally pointing at local MCP servers.
 <!-- - **Manual REPL**: `uv run python scripts/dev_chat.py` exercises the full orchestrator; handy for verifying prompts, tool wiring, and thread persistence. -->
 
 ## Scaling & HAProxy
