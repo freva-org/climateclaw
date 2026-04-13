@@ -31,7 +31,7 @@ async def test_editthread_success_path_trims_and_saves(
     body = r.json()
     assert body["new_thread_id"] == "new-thread-123"
     assert body["history"] == [
-        {"variant": "ServerHint", "content": {'thread_id': 'new-thread-123'}},
+        {"variant": "ServerHint", "content": {"thread_id": "new-thread-123"}},
         {"variant": "Prompt", "content": "user prompt should be filtered out"},
     ]
 
@@ -84,4 +84,7 @@ async def test_editthread_rejects_out_of_range_index(
                 headers=GOOD_HEADERS,
             )
     assert r.status_code == 422
-    assert r.json()["detail"] == "user_index outside user message range! Please review query parameters!"
+    assert (
+        r.json()["detail"]
+        == "user_index outside user message range! Please review query parameters!"
+    )

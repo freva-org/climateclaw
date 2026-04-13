@@ -2,7 +2,7 @@
 import pytest
 import httpx
 
-import os, sys
+import sys
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,7 +17,6 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.services.mcp.client import McpClient
 
 # ──────────────────────────────────────────────────────────────────────────────
 # GLOBAL / COMMON
@@ -201,7 +200,7 @@ def patch_mongo_uri(monkeypatch):
 def patch_read_thread(monkeypatch):
     async def _fake(self, thread_id: str):
         return [
-            {"variant": "ServerHint", "content": {"thread_id": thread_id}},
+            {"variant": "ServerHint", "content": {'thread_id': thread_id}},
             {"variant": "Prompt", "content": "user prompt should be filtered out"},
             {"variant": "User", "content": "kept"},
             {"variant": "Assistant", "content": "also kept"},
@@ -221,6 +220,8 @@ def patch_read_thread(monkeypatch):
 
 @pytest.fixture
 def patch_save_thread(monkeypatch):
+    calls = []
+
     calls = []
 
     async def _fake_append(
@@ -256,7 +257,7 @@ def patch_save_thread(monkeypatch):
         raising=False,
     )
 
-    return calls
+    return calls 
 
 
 @pytest.fixture
