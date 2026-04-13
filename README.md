@@ -36,8 +36,7 @@ Bind mounts expose `/work`, logs, threads, and shared `cache` to other Freva ser
 ## Quick Start (local dev)
 
 ### Requirements
-- Python `3.11.x`
-- LiteLLM instance that fronts OpenAI, Ollama, or Azure models and understands `litellm_config.yaml`
+- `podman` or `docker`
 
 <!-- ### Install dependencies (uv)
 ```bash
@@ -121,7 +120,6 @@ Generated artifacts that persist across runs:
 ## Development Workflow
 - **Run tests**: `uv run pytest` (or `uv run pytest tests/test_auth.py -k bearer` for focused cases). Tests cover auth flows, prompt assembly, storage, stream variant conversions, and route parameter validation.
 - **Interactive chat**: `uv run python scripts/dev_chat.py` starts a REPL that exercises the same orchestrator logic, persisting outputs to disk and optionally pointing at local MCP servers.
-- **Check kernel env**: `python scripts/check_kernel_env.py` verifies the code interpreter container has the expected libraries and env vars.
 
 ## Troubleshooting
 - **Auth failures**: verify headers include both `Authorization` and `x-freva-rest-url`. Inspect FastAPI logs for the exact HTTP status.

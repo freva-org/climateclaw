@@ -140,7 +140,7 @@ services:
   freva-web:
     networks:
       - freva-gpt
-    image: ghcr.io/freva-org/freva-web:2604.0.0
+    image: ghcr.io/freva-org/freva-web:2604.1.1
     ports:
       - "8000:8000"
     container_name: freva-web
