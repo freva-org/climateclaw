@@ -15,7 +15,6 @@ os.environ["FREVAGPT_MONGODB_URI_DEV"] = "mongodb://mongo:secret@localhost:27017
 
 import asyncio
 import json
-import logging
 import time
 from dataclasses import dataclass
 
@@ -23,8 +22,8 @@ from src.core.logging_setup import configure_logging
 from src.core.prompting import get_entire_prompt
 from src.services.service_factory import DevAuthenticator, get_thread_storage
 from src.services.streaming.active_conversations import (
-    new_thread_id,
     end_and_save_conversation,
+    new_thread_id,
 )
 from src.services.streaming.stream_orchestrator import (
     prepare_for_stream,
@@ -148,9 +147,7 @@ async def main() -> None:
         total_chars = sum(r.chars for r in results)
 
         print("\n=== Summary ===")
-        print(
-            f"model={MODEL} runs={RUNS} concurrency={CONCURRENCY}"
-        )
+        print(f"model={MODEL} runs={RUNS} concurrency={CONCURRENCY}")
         print(f"success={len(ok)} errors={len(errs)}")
         print(
             f"avg_time={avg:.3f}s p50_time={p50:.3f}s fastest={fastest.duration_s:.3f}s slowest={slowest.duration_s:.3f}s"
