@@ -79,4 +79,4 @@ async def test_routes_succeed_with_auth_and_username_injection(
                 "/api/chatbot/stop", params={"thread_id": "t-123"}, headers=GOOD_HEADERS
             )
             assert r.status_code == 200
-            assert r.json() == ["Conversation stopped."]
+            assert r.json().get("detail") == "Conversation stopped."
