@@ -53,6 +53,7 @@ jobs:
           FREVAGPT_INSTANCE_NAME=ci
           FREVAGPT_FILE_LOGGING=0
           FREVAGPT_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          FREVAGPT_MCP_REQUEST_TIMEOUT_SEC=20
           EOF
 
       - name: Sync dependencies
