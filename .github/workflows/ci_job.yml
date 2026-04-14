@@ -51,6 +51,7 @@ jobs:
         run: |
           cat > .env <<'EOF'
           FREVAGPT_INSTANCE_NAME=ci
+          FREVAGPT_FILE_LOGGING=0
           EOF
 
       - name: Sync dependencies
@@ -83,6 +84,7 @@ jobs:
         run: |
           cat > .env <<'EOF'
           FREVAGPT_INSTANCE_NAME=ci
+          FREVAGPT_FILE_LOGGING=0
           EOF
 
       - name: Start production stack

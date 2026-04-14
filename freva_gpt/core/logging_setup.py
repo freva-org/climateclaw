@@ -1,4 +1,5 @@
 import logging
+import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -10,6 +11,7 @@ _THREAD_HANDLERS: dict[str, RotatingFileHandler] = {}
 _NAMED_HANDLERS: dict[str, RotatingFileHandler] = {}
 
 settings = get_settings()
+ENABLE_FILE_LOGGING = os.getenv("FREVAGPT_FILE_LOGGING", "1") == "1"
 
 LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
 MAIN_LOG = LOG_DIR / "app.log"
@@ -54,7 +56,7 @@ class ThreadFilter(ContextFilter):
 
 def _ensure_base_logging() -> None:
     global _CONFIGURED
-    if _CONFIGURED:
+    if _CONFIGURED or not ENABLE_FILE_LOGGING:
         return
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
