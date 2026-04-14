@@ -66,6 +66,8 @@ services:
       FREVAGPT_MCP_HOST: 0.0.0.0
       FREVAGPT_MCP_PORT: 8052
       FREVAGPT_GITLAB_TOKEN: ${FREVAGPT_GITLAB_TOKEN:-}
+    ports: 
+      - 8052:8052
     networks: 
       - freva-gpt
     volumes:
@@ -141,7 +143,7 @@ services:
   freva-web:
     networks:
       - freva-gpt
-    image: ghcr.io/freva-org/freva-web:2604.0.0
+    image: ghcr.io/freva-org/freva-web:2604.1.1
     ports:
       - "8000:8000"
     container_name: freva-web

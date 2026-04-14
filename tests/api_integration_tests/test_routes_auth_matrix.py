@@ -13,6 +13,7 @@ async def test_all_get_routes_require_auth(client):
             "/api/chatbot/getuserthreads",
             "/api/chatbot/streamresponse",
             "/api/chatbot/editthread",
+            "/api/chatbot/userfeedback",
         ]:
             r = await client.get(ep)
             assert r.status_code == 401, f"{ep} should be protected (missing headers)"
@@ -78,4 +79,4 @@ async def test_routes_succeed_with_auth_and_username_injection(
                 "/api/chatbot/stop", params={"thread_id": "t-123"}, headers=GOOD_HEADERS
             )
             assert r.status_code == 200
-            assert r.json() == ["Conversation stopped."]
+            assert r.json().get("detail") == "Conversation stopped."

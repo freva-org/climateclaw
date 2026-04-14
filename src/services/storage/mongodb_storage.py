@@ -6,7 +6,8 @@ import pymongo
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
-from .helpers import Thread, get_database, summarize_topic
+from .helpers import Thread, get_database
+from .summarize_topic import summarize_topic
 from src.core.settings import get_settings
 from src.services.streaming.stream_variants import (
     StreamVariant,
@@ -23,6 +24,7 @@ DEFAULT_LOGGER = configure_logging(__name__)
 settings = get_settings()
 MONGODB_DATABASE_NAME = settings.MONGODB_DATABASE_NAME
 MONGODB_COLLECTION_NAME = settings.MONGODB_COLLECTION_NAME
+MONGODB_COLLECTION_NAME_FEEDBACK = "userfeedback"
 
 
 class ThreadStorage:
@@ -79,7 +81,7 @@ class ThreadStorage:
             topic = existing.get("topic", "") or None
 
         # compute topic if missing
-        if not topic:
+        if not topic or topic == "No topic yet":
             topic = await summarize_topic(content)
 
         all_stream = [from_sv_to_json(v) for v in merged_sv] if merged_sv else []
@@ -167,6 +169,67 @@ class ThreadStorage:
     ):
         coll = self.db[MONGODB_COLLECTION_NAME]
         await coll.delete_one({"thread_id": thread_id})
+
+
+    async def save_feedback(
+        self,
+        thread_id: str,
+        user_id: str,
+        content_json: List[Dict],
+        index: int,
+        feedback: str,
+    ):
+        coll_feedback = self.db[MONGODB_COLLECTION_NAME_FEEDBACK]
+        feedback_filter ={"thread_id": thread_id, "entry_index": index}
+        existing = await coll_feedback.find_one(feedback_filter)
+        new_feedback: Dict = {
+            "thread_id": thread_id,
+            "user_id": user_id,
+            "entry_index": index,
+            "entry": content_json[index],
+            "feedback": feedback,
+            }
+        if existing:
+            # Check if there was already feedback on this entry, if so update the existing one
+            await coll_feedback.update_one(feedback_filter, {"$set": new_feedback}, upsert=True)
+        else:
+            await coll_feedback.insert_one(new_feedback)
+
+        # Save feedback in the thread history
+        await self._save_feedback_to_thread(thread_id, user_id, content_json, index, feedback)
+ 
+
+    async def delete_feedback(
+        self,
+        thread_id: str,
+        user_id: str,
+        content_json: List[Dict],
+        index: int,
+    ):
+        coll = self.db[MONGODB_COLLECTION_NAME_FEEDBACK]
+        feedback_filter ={"thread_id": thread_id, "user_id": user_id, "entry_index": index}
+        await coll.delete_one(feedback_filter)
+
+        # Save feedback in the thread history
+        await self._save_feedback_to_thread(thread_id, user_id, content_json, index, feedback="remove")
+        
+
+    async def _save_feedback_to_thread(
+        self,
+        thread_id: str,
+        user_id: str,
+        content_json: List[Dict],
+        index: int,
+        feedback: str,
+    ):
+        if feedback == "remove":
+            content_json[index].pop("feedback")
+        else:
+            content_json[index].update({"feedback": feedback})
+
+        content_sv = [from_json_to_sv(l) for l in content_json]
+        await self.save_thread(thread_id, user_id, content_sv)
+
 
     async def query_by_topic(
         self,

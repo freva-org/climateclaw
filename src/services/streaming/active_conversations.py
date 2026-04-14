@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 import asyncio
 
 from src.core.logging_setup import configure_logging
-from src.services.streaming.stream_variants import StreamVariant, SVCode
+from src.services.streaming.stream_variants import StreamVariant, SVCode, from_json_to_sv, from_sv_to_json
 from src.services.service_factory import (
     Authenticator,
     ThreadStorage,
@@ -74,17 +74,14 @@ async def initialize_conversation(
     logger=None,
 ):
     """
-    Initialize and register a new conversation in the registry with the given thread_id and user_id.
+    Initialize and register a STREAMING conversation in the registry with the given thread_id and user_id.
     If a conversation with the same thread_id already exists, it will be updated to STREAMING state
     and the last_activity timestamp will be refreshed, but the existing conversation will stay unchanged.
     """
     log = logger or configure_logging(__name__, thread_id=thread_id, user_id=user_id)
     now = datetime.now(timezone.utc)
-    # if auth:
+    
     mcp_mgr = await get_mcp_manager(authenticator=auth, thread_id=thread_id)
-    # else:
-    #     log.warning(f"The conversation {thread_id} initialized without MCPManager! "
-    #                 "Please note that the MCP servers cannot be connected!")
 
     # Precreate the conversation object to reduce time spent under lock
     maybe_new_conv = ActiveConversation(
@@ -315,6 +312,20 @@ async def cancel_tool_tasks(thread_id: str) -> None:
         tasks = Registry.get(thread_id).tool_tasks or ()
     for t in tasks:
         t.cancel()
+
+
+async def save_feedback_to_registry(thread_id: str, f_ind: int, feedback: str) -> None:
+    async with RegistryLock:
+        conv = Registry.get(thread_id)
+        msg = conv.messages
+        conv.last_activity = datetime.now(timezone.utc)
+        msg_ind = from_sv_to_json(msg[f_ind])
+        if feedback != "remove":
+            msg_ind.update({"feedback": feedback})
+        else:
+            msg_ind.pop("feedback")
+        msg[f_ind] = from_json_to_sv(msg_ind)
+        conv.messages = msg
 
 
 async def cleanup_idle(
