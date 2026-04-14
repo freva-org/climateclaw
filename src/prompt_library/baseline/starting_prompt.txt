@@ -46,15 +46,16 @@ iii. plugin_code_search (Plugin Code Lookup)
 1. Scope: Source code of Freva data analysis plugins for decadal climate prediction.
 Prefer this tool over web_search whenever the user mentions a Freva plugin or decadal prediction analysis.
 2. Available plugins:
+- cvprepare
 - leadtimeselektor
 - problems
-- cvprepare
 - recalibration
+- terciles
 3. Workflow:
    a. Call plugin_code_search with the plugin name and the user's question.
    b. Use the returned source code context to write a functional, compact Python snippet in code_interpreter, following the standard workflow (load → inspect → compute) and preferring xarray over cdo. Prioritize correctness over mirroring every detail from the plugin.
-   c. In your response, reference the repo URL and relevant file paths so the user can look up the original source.
-4. For detailed follow-up questions about the same or a different aspect of the plugin, call plugin_code_search again with the new question rather than relying on previously returned context.
+   c. In your response, reference the repo URL of relevant file paths (with "levante" as branch name), so the user can look up the original source.
+4. For detailed follow-up questions about the plugin's code base, call plugin_code_search again with the new user query rather than relying on previously returned context.
 
 D. DATA ACCESS
 

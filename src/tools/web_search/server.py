@@ -13,7 +13,7 @@ from openai import OpenAI
 
 logger = configure_logging(__name__, named_log="web_search_server")
 
-OPENAI_API_KEY: str = os.getenv("FREVAGPT_OPENAI_API_KEY")
+OPENAI_API_KEY: Optional[str] = os.getenv("FREVAGPT_OPENAI_API_KEY")
 GITLAB_TOKEN: Optional[str] = os.getenv("FREVAGPT_GITLAB_TOKEN")
 
 mcp = FastMCP("web-search-server")
@@ -28,11 +28,12 @@ ALLOWED_DOMAINS = [
 # GitLab plugin config
 GITLAB_BASE_URL = "https://gitlab.dkrz.de/api/v4"
 PLUGIN_GROUP_PATH = "kd1418/plugins4freva"
-KNOWN_PLUGINS = [
+FREVA_PLUGINS = [
+    "cvprepare",
     "leadtimeselektor",
-    # "problems",
-    # "cvprepare",
-    # "recalibration",
+    "problems",
+    "recalibration",
+    "terciles"
 ]
 MAX_FILE_SIZE_BYTES = 20_000  # skip files larger than this
 MAX_TOTAL_CODE_CHARS = 20_000  # truncate total fetched code
@@ -109,6 +110,7 @@ def web_search(query: str) -> str:
         return "(web search failed)"
 
 
+#########################################################################################
 # ── GitLab helpers ───────────────────────────────────────────────────────────
 _gitlab_http = httpx.Client(
     base_url=GITLAB_BASE_URL,
@@ -123,7 +125,10 @@ def _gitlab_project_id(plugin_name: str) -> str:
 
 
 def _fetch_repo_tree(plugin_name: str) -> list[str]:
-    """Return the recursive file tree for a plugin repository."""
+    """
+    Return the recursive file tree for a plugin repository as a list of
+    file paths (strings) that match relevant extensions.
+    """
     project_id = _gitlab_project_id(plugin_name)
     items: list[dict] = []
     page = 1
@@ -148,34 +153,50 @@ def _fetch_repo_tree(plugin_name: str) -> list[str]:
     return paths
 
 
-def _fetch_file_raw(plugin_name: str, file_path: str, ref: str = "levante") -> str:
+def _fetch_plugin_code(plugin_name: str, selected_files: list[str]) -> str:
     """
-    Fetch raw content of a single file from a plugin repo.
+    Fetch the raw content of selected files and concatenate them into a single string.
     The default branch name is "levante".
     """
-    project_id = _gitlab_project_id(plugin_name)
-    encoded_path = urlquote(file_path, safe="")
-    resp = _gitlab_http.get(
-        f"/projects/{project_id}/repository/files/{encoded_path}/raw",
-        params={"ref": ref},
-    )
-    resp.raise_for_status()
-    return resp.text
+    def _fetch_file_raw(plugin_name: str, file_path: str, ref: str="levante") -> str:
+        project_id = _gitlab_project_id(plugin_name)
+        encoded_path = urlquote(file_path, safe="")
+        resp = _gitlab_http.get(
+            f"/projects/{project_id}/repository/files/{encoded_path}/raw",
+            params={"ref": ref},
+        )
+        resp.raise_for_status()
+        return resp.text
+
+    collected: list[str] = []
+    total_chars = 0
+    for file in selected_files:
+        if total_chars >= MAX_TOTAL_CODE_CHARS:
+            collected.append(
+                f"\n--- (truncated: reached {MAX_TOTAL_CODE_CHARS} char limit) ---"
+            )
+            break
+        try:
+            content = _fetch_file_raw(plugin_name, file)
+            if len(content) > MAX_FILE_SIZE_BYTES:
+                content = content[:MAX_FILE_SIZE_BYTES] + "\n... (file truncated)"
+            collected.append(f"### FILE: {file}\n```\n{content}\n```\n")
+            total_chars += len(content)
+        except Exception as e:
+            logger.debug("Skipping file %s: %s", file, e)
+
+    if not collected:
+        return "(no source files could be retrieved)"
+
+    return "\n".join(collected)
 
 
-def _collect_plugin_code(plugin_name: str, query: str) -> str:
+def _pick_relevant_files(plugin_name: str, query: str, file_paths: list[str]) -> list[str]:
     """
-    Two-stage file retrieval:
-      1. Fetch the full repo tree and ask GPT-4.1 which files are most relevant
-         for the user's query.
-      2. Fetch only those files and return their concatenated contents.
+    Given a list of file paths in the plugin repo, ask GPT-4.1 to pick the most relevant
+    ones for the user's query.
+    If the LLM-based selection fails, fall back to a heuristic of picking all files.
     """
-    file_paths = _fetch_repo_tree(plugin_name)
-
-    if not file_paths:
-        return "(repository is empty)"
-
-    # ── Stage 1: ask the LLM to pick relevant files ─────────────────────────
     tree_listing = "\n".join(file_paths)
     selection_prompt = (
         f"Below is the file tree of the '{plugin_name}' Freva plugin repository:\n"
@@ -204,7 +225,7 @@ def _collect_plugin_code(plugin_name: str, query: str) -> str:
         selected_files: list[str] = json.loads(raw_text.strip())
     except Exception as e:
         logger.warning(
-            "LLM file-selection failed (%s); falling back to heuristic.", e
+            "LLM file selection failed (%s); falling back to heuristic.", e
         )
         # Fallback: pick all files from the tree search
         selected_files = file_paths
@@ -218,29 +239,24 @@ def _collect_plugin_code(plugin_name: str, query: str) -> str:
         plugin_name,
         selected_files,
     )
+    return selected_files
+
+
+def _collect_plugin_context(plugin_name: str, query: str, file_paths: list[str]) -> str:
+    """
+    Two-stage file retrieval:
+        1. Fetch the full repo tree and ask GPT-4.1 which files are most relevant
+            for the user's query.
+        2. Fetch only those files and return their concatenated contents.
+    """
+    if not file_paths:
+        return "(repository is empty)"
+
+    # ── Stage 1: ask the LLM to pick relevant files ─────────────────────────
+    selected_files = _pick_relevant_files(plugin_name, query, file_paths)
 
     # ── Stage 2: fetch selected files ────────────────────────────────────────
-    collected: list[str] = []
-    total_chars = 0
-    for fpath in selected_files:
-        if total_chars >= MAX_TOTAL_CODE_CHARS:
-            collected.append(
-                f"\n--- (truncated: reached {MAX_TOTAL_CODE_CHARS} char limit) ---"
-            )
-            break
-        try:
-            content = _fetch_file_raw(plugin_name, fpath)
-            if len(content) > MAX_FILE_SIZE_BYTES:
-                content = content[:MAX_FILE_SIZE_BYTES] + "\n... (file truncated)"
-            collected.append(f"### FILE: {fpath}\n```\n{content}\n```\n")
-            total_chars += len(content)
-        except Exception as e:
-            logger.debug("Skipping file %s: %s", fpath, e)
-
-    if not collected:
-        return "(no source files could be retrieved)"
-
-    return "\n".join(collected)
+    return _fetch_plugin_code(plugin_name, selected_files)
 
 
 @mcp.tool()
@@ -250,7 +266,7 @@ def plugin_code_search(plugin_name: str, query: str) -> str:
     climate prediction. Use this when the user asks about how a plugin works,
     how to use it, or wants code based on a plugin.
 
-    Available plugins: leadtimeselektor, problems, cvprepare, recalibration
+    Available plugins: cvprepare, leadtimeselektor, problems, recalibration, terciles
 
     Args:
         plugin_name (str): Name of the plugin (e.g. "leadtimeselektor").
@@ -260,10 +276,10 @@ def plugin_code_search(plugin_name: str, query: str) -> str:
     """
     plugin_name = plugin_name.strip().lower()
 
-    if plugin_name not in KNOWN_PLUGINS:
+    if plugin_name not in FREVA_PLUGINS:
         return (
             f"Unknown plugin '{plugin_name}'. "
-            f"Available plugins: {', '.join(KNOWN_PLUGINS)}"
+            f"Available Freva plugins: {', '.join(FREVA_PLUGINS)}"
         )
 
     if not GITLAB_TOKEN:
@@ -275,7 +291,8 @@ def plugin_code_search(plugin_name: str, query: str) -> str:
     )
 
     try:
-        code_content = _collect_plugin_code(plugin_name, query)
+        file_paths = _fetch_repo_tree(plugin_name)
+        code_content = _collect_plugin_context(plugin_name, query, file_paths)
     except Exception as e:
         logger.warning("Failed to fetch plugin code for '%s': %s", plugin_name, e)
         return f"Failed to retrieve source code for plugin '{plugin_name}': {e}"
