@@ -5,8 +5,7 @@ import httpx
 from fastapi import HTTPException
 from freva_gpt.core.logging_setup import configure_logging
 from freva_gpt.core.settings import Settings, get_settings
-from freva_gpt.services.streaming.litellm_client import acomplete, first_text
-from freva_gpt.services.streaming.stream_variants import StreamVariant, SVUser
+from freva_gpt.services.streaming.stream_variants import StreamVariant
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
@@ -18,13 +17,10 @@ settings: Settings = get_settings()
 MONGODB_DATABASE_NAME = settings.MONGODB_DATABASE_NAME
 MONGODB_COLLECTION_NAME = settings.MONGODB_COLLECTION_NAME
 
-DEFAULT_LOGGER = configure_logging(__name__)
-
 CACHE_ROOT = Path("./cache")
 
+
 # ──────────────────────────── Model ───────────────────────────────────
-
-
 @dataclass
 class Thread:
     user_id: str
@@ -53,42 +49,6 @@ def create_dir_at_cache(user_id: str, thread_id: str) -> None:
             cache,
             e,
         )
-
-
-# ──────────────────── Summarization for topic ────────────────────
-
-
-def _fallback_topic(raw: str | None) -> str:
-    if not raw:
-        return "Untitled"
-    # naive single-line truncation
-    s = " ".join(raw.split())
-    return (s[:80] + "…") if len(s) > 80 else s
-
-
-async def summarize_topic(content: list[StreamVariant]) -> str:
-    """
-    Try LiteLLM; on any failure, return a safe fallback so requests don't crash.
-    Only the first user text is taken into account.
-    """
-    topic = next((sv.text for sv in content if isinstance(sv, SVUser)), "Untitled")
-
-    prompt = (
-        "Summarize this chat topic in at most ~12 words, neutral tone.\n\n"
-        f"Topic:\n{(topic or '')[:2000]}"
-    )
-    try:
-        resp = await acomplete(
-            messages=[{"role": "user", "content": prompt}],
-            model="gpt-4.1-mini",
-            max_tokens=50,
-            temperature=0.2,
-        )
-        text = (first_text(resp) or "").strip()
-        return text or _fallback_topic(topic)
-    except Exception as e:
-        DEFAULT_LOGGER.warning("summarize_topic: falling back due to error: %s", e)
-        return _fallback_topic(topic)
 
 
 # ──────────────────── Connection ──────────────────────────────

@@ -14,7 +14,8 @@ from freva_gpt.services.streaming.stream_variants import (
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
-from .helpers import Thread, get_database, summarize_topic
+from .helpers import Thread, get_database
+from .summarize_topic import summarize_topic
 
 DEFAULT_LOGGER = configure_logging(__name__)
 
@@ -82,8 +83,8 @@ class ThreadStorage:
             topic = existing.get("topic", "") or None
 
         # compute topic if missing
-        if not topic:
-            topic = await summarize_topic(content_cleaned)
+        if not topic or topic == "No topic yet":
+            topic = await summarize_topic(content)
 
         all_stream = [from_sv_to_json(v) for v in merged_sv] if merged_sv else []
         doc = {
