@@ -14,7 +14,12 @@ services:
       - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
       - /scratch/b/b380001/freva-gpt/cache:/app/cache:rw
     networks:
-      - freva-gpt
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', ${FREVAGPT_TARGET_PORT:-8502})); s.close()\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
   rag:
     image: rag-server-${FREVAGPT_INSTANCE_NAME}
     build:
