@@ -52,13 +52,14 @@ jobs:
           cat > .env <<'EOF'
           FREVAGPT_INSTANCE_NAME=ci
           FREVAGPT_FILE_LOGGING=0
+          FREVAGPT_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           EOF
 
       - name: Sync dependencies
         run: uv sync --group dev --group test --group type
 
       - name: Start dev stack
-        run: ./dev.sh up code -d --wait --build --remove-orphans
+        run: ./dev.sh up code web-search -d --wait --build --remove-orphans
 
       - name: Run mypy
         run: uv run --group type mypy
@@ -95,7 +96,7 @@ jobs:
 
       - name: Smoke check public surface
         run: |
-          curl -f http://localhost:8502/api/chatbot/ping
+          curl -f http://localhost:8502/healthz
 
       - name: Tear down production stack
         if: always()
