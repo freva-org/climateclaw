@@ -95,7 +95,7 @@ jobs:
 
       - name: Smoke check public surface
         run: |
-          curl -f http://localhost:8502/healthz
+          curl -f http://localhost:8502/api/chatbot/ping
 
       - name: Tear down production stack
         if: always()
