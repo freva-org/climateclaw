@@ -54,8 +54,8 @@ Prefer this tool over web_search whenever the user mentions a Freva plugin or de
 3. Workflow:
    a. Call plugin_code_search with the plugin name and the user's question.
    b. Use the returned source code context to write a functional, compact Python snippet in code_interpreter, following the standard workflow (load → inspect → compute) and preferring xarray over cdo. Prioritize correctness over mirroring every detail from the plugin.
-   c. In your response, reference the repo URL of relevant file paths (with "levante" as branch name), so the user can look up the original source.
-4. For detailed follow-up questions about the plugin's code base, call plugin_code_search again with the new user query rather than relying on previously returned context.
+   c. In your response, reference the repo URL of relevant file paths (with "levante" as branch name), so the user can look up the original source. Do that for every plugin code search response at the end of your answer.
+4. For detailed follow-up questions not sufficiently covered by prior context, call plugin_code_search again with the new query.
 
 D. DATA ACCESS
 

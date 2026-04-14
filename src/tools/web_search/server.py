@@ -35,8 +35,8 @@ FREVA_PLUGINS = [
     "recalibration",
     "terciles"
 ]
-MAX_FILE_SIZE_BYTES = 20_000  # skip files larger than this
-MAX_TOTAL_CODE_CHARS = 20_000  # truncate total fetched code
+MAX_FILE_SIZE_BYTES = 50_000  # skip files larger than this
+MAX_TOTAL_CODE_CHARS = 50_000  # truncate total fetched code after this limit
 MAX_RELEVANT_FILES = 5  # max files to fetch after relevance filtering
 
 HOST = os.getenv("FREVAGPT_MCP_HOST", "0.0.0.0")
@@ -191,21 +191,36 @@ def _fetch_plugin_code(plugin_name: str, selected_files: list[str]) -> str:
     return "\n".join(collected)
 
 
-def _pick_relevant_files(plugin_name: str, query: str, file_paths: list[str]) -> list[str]:
+def _search_relevant_files(
+    plugin_name: str, query: str, file_paths: list[str], dep: bool=False
+) -> list[str]:
     """
     Given a list of file paths in the plugin repo, ask GPT-4.1 to pick the most relevant
-    ones for the user's query.
+    ones for the user's query (dep=False) or for searching code dependencies (dep=True).
     If the LLM-based selection fails, fall back to a heuristic of picking all files.
     """
-    tree_listing = "\n".join(file_paths)
-    selection_prompt = (
-        f"Below is the file tree of the '{plugin_name}' Freva plugin repository:\n"
-        f"File tree:\n{tree_listing}\n\n"
-        f"The user's query now is:\n\"{query}\"\n\n"
-        "Return ONLY a JSON array of file paths (strings) that seem most relevant "
-        "to answering the user's query. Include README / documentation files when helpful. "
-        f"Return at most {MAX_RELEVANT_FILES} paths. Output nothing but the JSON array."
-    )
+    if not dep:
+        tree_listing = "\n".join(file_paths)
+        selection_prompt = (
+            f"Below is the file tree of the '{plugin_name}' Freva plugin repository:\n"
+            f"File tree:\n{tree_listing}\n\n"
+            f"The user's query now is:\n\"{query}\"\n\n"
+            "Return ONLY a JSON array of file paths (strings) that seem most relevant to "
+            "answering the user's query. Include README / documentation files when helpful. "
+            f"Return at most {MAX_RELEVANT_FILES} paths. Output nothing but the JSON array."
+        )
+    else:
+        remain_listing = "\n".join(file_paths)
+        selection_prompt = (
+            "You are analyzing Python source code from a repository. "
+            "The code below contains import statements. Identify which of the REMAINING "
+            "repository files are imported or referenced as dependencies by the code.\n\n"
+            f"=== FETCHED CODE ===\n{query}\n=== END ===\n\n"
+            f"Remaining files in the repository:\n{remain_listing}\n\n"
+            "Return ONLY a JSON array of file paths (strings) from the remaining list "
+            "that are imported or depend upon the fetched code. "
+            "If none are needed, return an empty array []."
+        )
 
     try:
         selection_resp = client.responses.create(
@@ -227,13 +242,16 @@ def _pick_relevant_files(plugin_name: str, query: str, file_paths: list[str]) ->
         logger.warning(
             "LLM file selection failed (%s); falling back to heuristic.", e
         )
-        # Fallback: pick all files from the tree search
-        selected_files = file_paths
+        # Fallback: pick all files from the tree search;
+        # or pick nothing for dependency selection to avoid fetching duplicate code
+        selected_files = file_paths if not dep else []
 
     # Ensure we only pick paths that actually exist in the tree
     selected_files = [p for p in selected_files if p in set(file_paths)][:MAX_RELEVANT_FILES]
+    stage = "Initial" if not dep else "Dependency"
     logger.info(
-        "Stage-1 selected %d/%d files for plugin '%s': %s",
+        "%s stage selected %d/%d files for plugin '%s': %s",
+        stage,
         len(selected_files),
         len(file_paths),
         plugin_name,
@@ -242,31 +260,46 @@ def _pick_relevant_files(plugin_name: str, query: str, file_paths: list[str]) ->
     return selected_files
 
 
-def _collect_plugin_context(plugin_name: str, query: str, file_paths: list[str]) -> str:
+def _collect_plugin_context(plugin_name: str, user_query: str, file_paths: list[str]) -> str:
     """
-    Two-stage file retrieval:
-        1. Fetch the full repo tree and ask GPT-4.1 which files are most relevant
-            for the user's query.
-        2. Fetch only those files and return their concatenated contents.
+    Three-stage file retrieval:
+        1. Ask GPT-4.1 which files are most relevant for the user's query.
+        2. Fetch those files, then scan for imports to identify dependent modules.
+        3. Fetch the dependencies and return the combined contents.
     """
     if not file_paths:
         return "(repository is empty)"
 
     # ── Stage 1: ask the LLM to pick relevant files ─────────────────────────
-    selected_files = _pick_relevant_files(plugin_name, query, file_paths)
+    selected_files = _search_relevant_files(plugin_name, user_query, file_paths)
 
     # ── Stage 2: fetch selected files ────────────────────────────────────────
-    return _fetch_plugin_code(plugin_name, selected_files)
+    init_code = _fetch_plugin_code(plugin_name, selected_files)
+
+    # ── Stage 3: resolve dependencies ────────────────────────────────────────
+    tree_remaining = [p for p in file_paths if p not in set(selected_files)]
+    dep_files = _search_relevant_files(plugin_name, init_code, tree_remaining, dep=True)
+
+    if not dep_files:
+        return init_code
+
+    dep_code = _fetch_plugin_code(plugin_name, dep_files)
+    return init_code + "\n\n# ── Dependency files ──\n\n" + dep_code
 
 
 @mcp.tool()
 def plugin_code_search(plugin_name: str, query: str) -> str:
     """
-    Search and analyze the source code of a Freva analysis plugin for decadal
-    climate prediction. Use this when the user asks about how a plugin works,
-    how to use it, or wants code based on a plugin.
+    Search and analyze the source code of a Freva analysis plugin for decadal climate
+    prediction. Use this when the user asks about how a plugin works, how to use it,
+    or wants parts of the plugin code base to be transformed into Python code.
 
-    Available plugins: cvprepare, leadtimeselektor, problems, recalibration, terciles
+    Available plugins:
+        cvprepare: prepares cross-validation datasets for decadal prediction skill assessment
+        leadtimeselektor: extracts and aggregates lead times from decadal prediction ensembles
+        problems: decadal prediction skill assessment of simumlation vs observations
+        recalibration: recalibrates decadal datasets to correct model drift and biases
+        terciles: computes tercile-based statistics for prediction skill assessment
 
     Args:
         plugin_name (str): Name of the plugin (e.g. "leadtimeselektor").
