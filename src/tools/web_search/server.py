@@ -153,10 +153,11 @@ def _fetch_repo_tree(plugin_name: str) -> list[str]:
     return paths
 
 
-def _fetch_plugin_code(plugin_name: str, selected_files: list[str]) -> str:
+def _fetch_plugin_code(plugin_name: str, selected_files: list[str], max_chars: int) -> str:
     """
-    Fetch the raw content of selected files and concatenate them into a single string.
-    The default branch name is "levante".
+    Fetch the raw content of selected files and concatenate them into a single string,
+    until the total character count reaches `max_chars`.
+    The default branch name for all files is "levante".
     """
     def _fetch_file_raw(plugin_name: str, file_path: str, ref: str="levante") -> str:
         project_id = _gitlab_project_id(plugin_name)
@@ -171,9 +172,9 @@ def _fetch_plugin_code(plugin_name: str, selected_files: list[str]) -> str:
     collected: list[str] = []
     total_chars = 0
     for file in selected_files:
-        if total_chars >= MAX_TOTAL_CODE_CHARS:
+        if total_chars >= max_chars:
             collected.append(
-                f"\n--- (truncated: reached {MAX_TOTAL_CODE_CHARS} char limit) ---"
+                f"\n--- (truncated: reached {max_chars} char limit) ---"
             )
             break
         try:
@@ -260,13 +261,17 @@ def _search_relevant_files(
     return selected_files
 
 
-def _collect_plugin_context(plugin_name: str, user_query: str, file_paths: list[str]) -> str:
+def _collect_plugin_context(plugin_name: str, user_query: str) -> str:
     """
-    Three-stage file retrieval:
+    Three-stage context retrieval of code base:
         1. Ask GPT-4.1 which files are most relevant for the user's query.
         2. Fetch those files, then scan for imports to identify dependent modules.
         3. Fetch the dependencies and return the combined contents.
+    Returns a string containing the concatenated relevant code snippets,
+        separated by file and with a header.
     """
+    # ── Stage 0: fetch the repository tree with all files ────────────────────
+    file_paths = _fetch_repo_tree(plugin_name)
     if not file_paths:
         return "(repository is empty)"
 
@@ -274,7 +279,7 @@ def _collect_plugin_context(plugin_name: str, user_query: str, file_paths: list[
     selected_files = _search_relevant_files(plugin_name, user_query, file_paths)
 
     # ── Stage 2: fetch selected files ────────────────────────────────────────
-    init_code = _fetch_plugin_code(plugin_name, selected_files)
+    init_code = _fetch_plugin_code(plugin_name, selected_files, 2*MAX_TOTAL_CODE_CHARS//3)
 
     # ── Stage 3: resolve dependencies ────────────────────────────────────────
     tree_remaining = [p for p in file_paths if p not in set(selected_files)]
@@ -283,7 +288,7 @@ def _collect_plugin_context(plugin_name: str, user_query: str, file_paths: list[
     if not dep_files:
         return init_code
 
-    dep_code = _fetch_plugin_code(plugin_name, dep_files)
+    dep_code = _fetch_plugin_code(plugin_name, dep_files, MAX_TOTAL_CODE_CHARS//3)
     return init_code + "\n\n# ── Dependency files ──\n\n" + dep_code
 
 
@@ -305,7 +310,7 @@ def plugin_code_search(plugin_name: str, query: str) -> str:
         plugin_name (str): Name of the plugin (e.g. "leadtimeselektor").
         query (str): What the user wants to know or do with the plugin.
     Returns:
-        str: Relevant source files from the plugin repository.
+        str: Relevant code context from source files of the plugin repository.
     """
     plugin_name = plugin_name.strip().lower()
 
@@ -324,8 +329,7 @@ def plugin_code_search(plugin_name: str, query: str) -> str:
     )
 
     try:
-        file_paths = _fetch_repo_tree(plugin_name)
-        code_content = _collect_plugin_context(plugin_name, query, file_paths)
+        code_content = _collect_plugin_context(plugin_name, query)
     except Exception as e:
         logger.warning("Failed to fetch plugin code for '%s': %s", plugin_name, e)
         return f"Failed to retrieve source code for plugin '{plugin_name}': {e}"
