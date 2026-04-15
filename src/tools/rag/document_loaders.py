@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import List
 import ast
+import os
 
 from langchain_core.documents import Document
 

@@ -1,6 +1,7 @@
 import hashlib
 import json
 import time
+import os 
 from operator import itemgetter
 
 from pymongo.operations import SearchIndexModel
