@@ -21,20 +21,6 @@ services:
       timeout: 3s
       retries: 20
       start_period: 10s
-  rag:
-    image: rag-server-${FREVAGPT_INSTANCE_NAME}
-    build:
-      context: .
-      dockerfile: docker/rag-server/Dockerfile
-    env_file: .env
-    environment:
-      FREVAGPT_MCP_HOST: 0.0.0.0
-      FREVAGPT_MCP_PORT: 8050
-    volumes:
-      - ./resources:/app/resources:ro
-      - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
-    networks:
-      - freva-gpt
   code:
     image: code-server-${FREVAGPT_INSTANCE_NAME}
     build:
@@ -50,6 +36,12 @@ services:
       - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
     networks:
       - freva-gpt
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 8051)); s.close()\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
   web-search:
     image: web-search-server-${FREVAGPT_INSTANCE_NAME}
     build:
@@ -63,6 +55,12 @@ services:
       - freva-gpt
     volumes:
       - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 8052)); s.close()\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     hostname: litellm-instance-${FREVAGPT_INSTANCE_NAME}
