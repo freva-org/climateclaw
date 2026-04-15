@@ -7,7 +7,7 @@ from openai import OpenAI
 
 logger = configure_logging(__name__, named_log="web_search_server")
 
-OPENAI_API_KEY: str | None = os.getenv("FREVAGPT_OPENAI_API_KEY", "")
+OPENAI_API_KEY: str = os.getenv("FREVAGPT_OPENAI_API_KEY", "")
 
 mcp = FastMCP("web-search-server")
 
