@@ -189,9 +189,6 @@ class ThreadStorage:
             "date": datetime.now(timezone.utc),
             "topic": doc.get("topic", ""),
             "content": content,
-            "root_thread_id": doc.get("root_thread_id", old_thread_id),
-            "parent_thread_id": old_thread_id,
-            "fork_from_index": 0,
         }
         await coll.insert_one(new_doc)
         logger.info(
@@ -254,7 +251,9 @@ class ThreadStorage:
         return total, threads
 
 
-def update_threadid_in_content(new_id: str, content: list[StreamVariant], logger):
+def update_threadid_in_content(
+    new_id: str, content: list[StreamVariant], logger
+) -> list[StreamVariant]:
     if isinstance(content[0], SVServerHint):
         content[0] = SVServerHint(data={"thread_id": new_id})
         logger.info("Updated ServerHint with new thread-id.")
