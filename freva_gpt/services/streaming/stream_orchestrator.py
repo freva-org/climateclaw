@@ -159,7 +159,7 @@ async def stream_with_tools(
             # accumulated code text to be appended to thread
             tool_v = SVCode(code=args_txt, id=id)
         else:
-            tool_v = SVToolCall(arg=args_txt, id=id, tool_name=name)
+            tool_v = SVToolCall(arg=args_txt, id=id, tool_name=name)  # type: ignore[assignment]
             # code is already streamed, we stream the other tool calls here too
             yield tool_v
 

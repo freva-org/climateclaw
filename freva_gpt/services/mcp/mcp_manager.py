@@ -21,9 +21,9 @@ Target = Literal[*settings.AVAILABLE_MCP_SERVERS]  # type: ignore[valid-type]
 
 class McpManager:
     """
-    Keeps one McpClient per target (rag / code), initializes lazily,
-    caches an MCP session id per logical conversation (handled by McpClient),
-    and caches discovered tool schemas for export to LLM.
+    Keeps one McpClient per target (rag-server/ code-server / web-search-server),
+    initializes lazily, caches an MCP session id per logical conversation (handled
+    by McpClient), and caches discovered tool schemas for export to LLM.
 
     Thread-safe for simple web workloads (single-process).
     """
@@ -230,15 +230,15 @@ async def get_mcp_headers(
     auth_header = f"Bearer {access_token}" if access_token else None
 
     headers = {
-        "rag": {
+        "rag-server": {
             "Authorization": auth_header,
             "mongodb-uri": mongodb_uri,
         },
-        "code": {
+        "code-server": {
             "Authorization": auth_header,
             "working-dir": str(cache),
         },
-        "web_search": {
+        "web_search-server": {
             "Authorization": auth_header,
         },
     }

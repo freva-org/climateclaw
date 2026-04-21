@@ -60,7 +60,7 @@ jobs:
         run: uv sync --group dev --group test --group type
 
       - name: Start dev stack
-        run: ./dev.sh up code web-search -d --wait --build --remove-orphans
+        run: ./dev.sh up code-server web-search-server -d --wait --build --remove-orphans
 
       - name: Run mypy
         run: uv run --group type mypy
@@ -90,7 +90,7 @@ jobs:
           EOF
 
       - name: Start production stack
-        run: docker compose up freva-gpt code web-search -d --wait --build --remove-orphans
+        run: docker compose up freva-gpt code-server web-search-server -d --wait --build --remove-orphans
 
       - name: Show running services
         run: docker compose ps
@@ -98,14 +98,14 @@ jobs:
       - name: Smoke check public surface
         run: |
           curl -f http://localhost:8502/healthz
-      
+
       - name: Verify internal services
         run: |
           docker compose ps
-          docker inspect $(docker compose ps -q code) --format '{{.State.Health.Status}}'
-          docker inspect $(docker compose ps -q web-search) --format '{{.State.Health.Status}}'
-          docker compose exec -T code python -c "print('code ok')"
-          docker compose exec -T web-search python -c "print('web-search ok')"
+          docker inspect $(docker compose ps -q code-server) --format '{{.State.Health.Status}}'
+          docker inspect $(docker compose ps -q web-search-server) --format '{{.State.Health.Status}}'
+          docker compose exec -T code-server python -c "print('code-server ok')"
+          docker compose exec -T web-search-server python -c "print('web-search-server ok')"
 
       - name: Tear down production stack
         if: always()

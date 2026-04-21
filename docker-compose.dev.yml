@@ -1,14 +1,14 @@
 services:
-  freva-gpt-backend:
-    image: freva-gpt-backend-${FREVAGPT_INSTANCE_NAME:?Instance name must be set in the .env file to differentiate between instances}
+  freva-gpt:
+    image: freva-gpt-${FREVAGPT_INSTANCE_NAME:?Instance name must be set in the .env file to differentiate between instances}
     build:
       context: .
-      dockerfile: docker/freva-gpt-backend/Dockerfile
+      dockerfile: docker/freva-gpt/Dockerfile
     env_file: .env
     environment:
       FREVAGPT_DEV: ${FREVAGPT_DEV}
       FREVAGPT_DEBUG: ${FREVAGPT_DEBUG:-0}
-    hostname: freva-gpt-backend-instance-${FREVAGPT_INSTANCE_NAME}
+    hostname: freva-gpt-instance-${FREVAGPT_INSTANCE_NAME}
     ports:
       - "${FREVAGPT_TARGET_PORT:-8502}:${FREVAGPT_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
       - "8600:${FREVAGPT_BACKEND_PORT:-8502}" # This is to listen to the backend port without and frontend. localhost:8600/docs give FastAPI docs
@@ -18,7 +18,7 @@ services:
       - ./logs/:/app/logs
     networks:
       - freva-gpt
-  rag:
+  rag-server:
     image: rag-server-${FREVAGPT_INSTANCE_NAME}
     build:
       context: .
@@ -34,7 +34,7 @@ services:
       - ./logs/:/app/logs
     networks:
       - freva-gpt
-  code:
+  code-server:
     image: code-server-${FREVAGPT_INSTANCE_NAME}
     build:
       context: .
@@ -58,7 +58,7 @@ services:
       timeout: 3s
       retries: 20
       start_period: 10s
-  web-search:
+  web-search-server:
     image: web-search-server-${FREVAGPT_INSTANCE_NAME}
     build:
       context: .
@@ -165,7 +165,7 @@ services:
       - REDIS_HOST=freva-cache
       - CSRF_TRUSTED_ORIGINS=http://127.0.0.1,http://localhost
       - FREVA_REST_URL=http://regiklim-dev.dkrz.de:7777
-      - CHAT_BOT_URL=http://freva-gpt-backend:8502
+      - CHAT_BOT_URL=http://freva-gpt:8502
       - ACTIVATE_CHAT_BOT=1
       - STAC_BROWSER=1
       - DEV_MODE=1
