@@ -22,7 +22,7 @@ async def delete_thread(
     Delete a Chat Thread.
 
     Deletes a conversation thread from storage.
-    Requires a valid authenticated user and vault-url.
+    Requires a valid authenticated user.
 
     Parameters:
         thread_id (str):
@@ -31,7 +31,7 @@ async def delete_thread(
 
     Dependencies:
         auth (Authenticator): Injected authentication object containing
-            username and vault_url
+            username
 
     Returns:
         dict:
@@ -40,7 +40,6 @@ async def delete_thread(
     Raises:
         HTTPException (422):
             - If `thread_id` is missing or empty.
-            - If the vault URL header is missing or empty.
         HTTPException (500):
             - If deletion fails due to an internal storage error.
     """
@@ -52,13 +51,7 @@ async def delete_thread(
             detail="Thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    if not auth.vault_url:
-        raise HTTPException(
-            status_code=422,
-            detail="Vault URL not found. Please provide a non-empty vault URL in the headers, of type String.",
-        )
-
-    Storage = await get_thread_storage(vault_url=auth.vault_url)
+    Storage = await get_thread_storage()
 
     try:
         thread_owner = await Storage.get_user_id_for_thread(thread_id)

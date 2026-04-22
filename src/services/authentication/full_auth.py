@@ -32,9 +32,6 @@ class FullAuthenticator(Authenticator):
             "x-freva-user-token"
         )
 
-        # Checking vault_url. If it is not found, the exception is raised in the endpoints, where this is a must-have
-        vault_url: str | None = headers.get("x-freva-vault-url")
-
         if header_val:
             # -> Bearer flow
             try:
@@ -60,7 +57,6 @@ class FullAuthenticator(Authenticator):
                     request=request,
                     settings=settings,
                     username=username,
-                    vault_url=vault_url,
                     rest_url=rest_url,
                     access_token=access_token,
                 )
@@ -121,7 +117,7 @@ async def get_username_from_token(token: str, rest_url: str, logger=None) -> str
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
     except Exception as e:
-        # ServiceUnavailable on request error to vault/rest
+        # ServiceUnavailable on request error to rest
         log.error("Error sending request to systemuser endpoint: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

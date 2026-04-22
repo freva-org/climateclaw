@@ -46,16 +46,15 @@ AuthRequired = Depends(auth_dependency)
 
 
 async def get_thread_storage(
-    vault_url: Optional[str] = None,
     user_name: Optional[str] = None,
     thread_id: Optional[str] = None,
 ) -> ThreadStorage:
     if user_name and thread_id:
         create_dir_at_cache(user_name, thread_id)
-    return await ThreadStorage.create(vault_url=vault_url)
+    return await ThreadStorage.create()
 
 
-async def get_mcp_manager(
+def get_mcp_manager(
     authenticator: Authenticator, thread_id: str
 ) -> McpManager | None:
     """
@@ -63,7 +62,7 @@ async def get_mcp_manager(
     """
     MCP_SERVER_URLs = get_server_url_dict(settings.AVAILABLE_MCP_SERVERS)
 
-    # Defaults to send; per-call headers (vault/rest) are added at call time.
+    # Defaults to send; per-call headers (rest) are added at call time.
     default_headers: Dict[str, str] = {}
 
     logger = configure_logging(
@@ -79,7 +78,7 @@ async def get_mcp_manager(
 
     cache = CACHE_ROOT / thread_id
 
-    extra_headers = await get_mcp_headers(authenticator, cache, logger=logger)
+    extra_headers = get_mcp_headers(authenticator, cache, logger=logger)
 
     try:
         mgr.initialize(extra_headers)

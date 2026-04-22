@@ -26,7 +26,7 @@ async def search_threads(
 
     Searches the authenticated user's conversation threads using a query
     string. Supports only topic-based search.
-    Requires a valid authenticated user and vault-url.
+    Requires a valid authenticated user.
 
     Parameters:
         query (str):
@@ -38,7 +38,7 @@ async def search_threads(
 
     Dependencies:
         auth (Authenticator): Injected authentication object containing
-            username and vault_url
+            username
 
     Returns:
         List[Any]:
@@ -54,7 +54,6 @@ async def search_threads(
     Raises:
         HTTPException (422):
             - If the authenticated user ID is missing.
-            - If the vault URL header is missing or empty.
             - If the query parameter is missing or empty.
         HTTPException (503):
             - If the storage backend (e.g., MongoDB) connection fails.
@@ -69,12 +68,6 @@ async def search_threads(
             detail="Missing user_id (auth).",
         )
 
-    if not auth.vault_url:
-        raise HTTPException(
-            status_code=422,
-            detail="Vault URL not found. Please provide a non-empty vault URL in the headers, of type String.",
-        )
-
     if not query:
         raise HTTPException(
             status_code=422,
@@ -83,7 +76,7 @@ async def search_threads(
 
     try:
         # Thread storage
-        Storage: ThreadStorage = await get_thread_storage(vault_url=auth.vault_url)
+        Storage: ThreadStorage = await get_thread_storage()
     except Exception as e:
         logger.exception("Failed to connect to MongoDB: %s", e)
         raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")

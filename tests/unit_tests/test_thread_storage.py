@@ -17,7 +17,7 @@ async def test_save_and_read_thread(monkeypatch, patch_db, GOOD_HEADERS):
 
     monkeypatch.setattr(mongo_storage, "summarize_topic", fake_topic, raising=True)
 
-    storage = await ThreadStorage.create(vault_url=GOOD_HEADERS["x-freva-vault-url"])
+    storage = await ThreadStorage.create()
 
     tid = "T123"
     user_id = "alice"

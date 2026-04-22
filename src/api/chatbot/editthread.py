@@ -53,7 +53,6 @@ async def edit_thread(
         Auth (Authenticator):
             Injected authentication object containing:
             - username (used as user_id)
-            - vault_url (used to resolve thread storage)
 
     Returns:
         dict:
@@ -65,7 +64,6 @@ async def edit_thread(
     Raises:
         HTTPException (422):
             - Missing `source_thread_id`
-            - Missing `vault_url`
             - `user_index` out of bounds
         HTTPException (404):
             - Source thread not found
@@ -81,7 +79,6 @@ async def edit_thread(
           logic may require refinement.
     """
     user_name = Auth.username
-    vault_url = Auth.vault_url
 
     if not source_thread_id:
         raise HTTPException(
@@ -89,17 +86,11 @@ async def edit_thread(
             detail="Source thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    if not vault_url:
-        raise HTTPException(
-            status_code=422,
-            detail="Vault URL not found in headers",
-        )
-
     logger = configure_logging(__name__, thread_id=source_thread_id, user_id=user_name)
 
     try:
         # Thread storage
-        Storage = await get_thread_storage(vault_url=Auth.vault_url)
+        Storage = await get_thread_storage()
     except Exception:
         raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
 

@@ -216,12 +216,11 @@ class McpManager:
 # ──────────────────── Helper functions ──────────────────────────────
 
 
-async def get_mcp_headers(
+def get_mcp_headers(
     auth: Authenticator, cache: str, logger=None
 ) -> Dict[str, str]:
-    log = logger or DEFAULT_LOGGER
     mongodb_uri = (
-        await get_mongodb_uri(auth.vault_url)
+        get_mongodb_uri()
         if not settings.DEV
         else settings.MONGODB_URI_DEV
     )

@@ -24,7 +24,7 @@ async def set_thread_topic(
 
     Updates the topic/title of a specific conversation thread belonging
     to the authenticated user.
-    Requires a valid authenticated user and vault-url.
+    Requires a valid authenticated user.
 
     Parameters:
         thread_id (str):
@@ -35,7 +35,7 @@ async def set_thread_topic(
 
     Dependencies:
         auth (Authenticator): Injected authentication object containing
-            username and vault_url
+            username
 
     Returns:
         dict:
@@ -44,7 +44,6 @@ async def set_thread_topic(
     Raises:
         HTTPException (422):
             - If `thread_id` is missing or empty.
-            - If the vault URL header is missing or empty.
         HTTPException (503):
             - If the storage backend (e.g., MongoDB) connection fails.
         HTTPException (500):
@@ -56,17 +55,11 @@ async def set_thread_topic(
             detail="Thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    if not auth.vault_url:
-        raise HTTPException(
-            status_code=422,
-            detail="Vault URL not found. Please provide a non-empty vault URL in the headers, of type String.",
-        )
-
     logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.username)
 
     try:
         # Thread storage
-        Storage = await get_thread_storage(vault_url=auth.vault_url)
+        Storage = await get_thread_storage()
     except Exception as e:
         logger.exception("Failed to connect to MongoDB", extra={"error": str(e)})
         raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")

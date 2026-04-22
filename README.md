@@ -14,8 +14,7 @@ Python backend for Freva-GPT assistant. The service mirrors the Rust implementat
 
 ### Requirements
 - `podman` or `docker`
-- MongoDB reachable via vault URL
-- Credentials & headers for the Freva auth/vault services 
+- Credentials & headers for the Freva auth services 
 
 ### Configure environment
 Create `.env` (used by FastAPI, Docker, and MCP servers). See `.env.example` for guidance.
@@ -78,9 +77,9 @@ Generated artifacts that persist across runs:
 - `logs/` (when mounted in Docker)
 
 ## Architecture at a Glance
-1. **FastAPI layer** enforces auth via `AuthRequired` (Bearer tokens validated against `x-freva-rest-url`), injects usernames, and validates per-request headers (`x-freva-vault-url`, `freva-config`, etc.).
+1. **FastAPI layer** enforces auth via `AuthRequired` (Bearer tokens validated against `x-freva-rest-url`), injects usernames, and validates per-request headers.
 2. **LiteLLM proxy** (`FREVAGPT_LITE_LLM_ADDRESS`) provides OpenAI-compatible chat + embeddings endpoints; completions stream into `StreamVariant` classes that normalize assistant text, code blocks, tool hints, images, and server hints.
-3. **Persistence** uses both MongoDB (main storage) and optional disk mirrors. The `x-freva-vault-url` header resolves the Mongo URI at runtime so each tenant can point at its own database.
+3. **Persistence** uses MongoDB for storing threads and user feedback. 
 4. **MCP Manager** (`src/services/mcp/mcp_manager.py`) connects to tool servers listed in `FREVAGPT_AVAILABLE_MCP_SERVERS` (e.g., `["rag", "code"]`), discovers tools, exposes OpenAI function schemas to LiteLLM, and routes tool invocations with per-thread session ids.
 5. **RAG + Code MCP servers** run as separate ASGI apps (dockerized) with optional JWT auth. Requests flow through `header_gate` so required headers (`mongodb-uri`, `freva-config-path`) become ContextVars before code executes.
 6. **Prompting** loads baseline templates + few-shot examples per model and replays thread history (minus prompts, meta) to LiteLLM, matching the Rust semantics.
@@ -93,7 +92,7 @@ Generated artifacts that persist across runs:
 | `GET` | `/api/chatbot/docs` | Docs payload stub | Placeholder |
 | `GET` | `/api/chatbot/help` | Help payload stub | Placeholder |
 | `GET` | `/api/chatbot/availablechatbots` | Returns model names from `litellm_config.yaml` | Requires auth |
-| `GET` | `/api/chatbot/getthread?thread_id=...` | Fetches thread contents omitting prompts + redundant StreamEnd variants | Needs `x-freva-vault-url` |
+| `GET` | `/api/chatbot/getthread?thread_id=...` | Fetches thread contents omitting prompts + redundant StreamEnd variants | Requires auth |
 | `GET` | `/api/chatbot/getuserthreads` | Returns latest 10 threads for authenticated user | Falls back to query `user_id` only if `ALLOW_FALLBACK_OLD_AUTH` |
 | `GET` | `/api/chatbot/streamresponse` | Starts an SSE stream of `StreamVariant` JSON payloads | Query params: `thread_id`, `input` (required), `chatbot` |
 | `GET/POST` | `/api/chatbot/stop` | Initiates stopping of an active conversation | Requires auth |
@@ -125,6 +124,6 @@ Generated artifacts that persist across runs:
 - **Auth failures**: verify headers include both `Authorization` and `x-freva-rest-url`. Inspect FastAPI logs for the exact HTTP status.
 - **Missing models**: ensure `litellm_config.yaml` is readable and contains `model_name` keys. `available_chatbots()` aborts the process if it cannot find any entries.
 - **MCP issues**: backend logs warn but continue when tool discovery fails; LiteLLM will simply not emit tool calls. Use `settings.AVAILABLE_MCP_SERVERS` to enable/disable targets explicitly.
-- **File access**: Make sure `freva-config` headers point at mounted paths and `/work` is mounted read-only where expected.
-- **Mongo connectivity**: `_get_database()` retries without URI query params. Persistent failures return HTTP 503; check vault responses and network policies.
+- **File access**: Make sure `/work` is mounted read-only where expected.
+
 

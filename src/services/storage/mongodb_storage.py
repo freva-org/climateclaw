@@ -31,17 +31,16 @@ MONGODB_COLLECTION_NAME_FEEDBACK = "userfeedback"
 class ThreadStorage:
     """PROD / shared implementation: store threads in MongoDB."""
 
-    def __init__(self, vault_url: str, db: AsyncDatabase) -> None:
-        self.vault_url = vault_url
+    def __init__(self, db: AsyncDatabase) -> None:
         self.db = db
 
     @classmethod
-    async def create(cls, vault_url: str) -> "ThreadStorage":
+    async def create(cls) -> "ThreadStorage":
         if settings.DEV:
             db = AsyncMongoClient(settings.MONGODB_URI_DEV)[MONGODB_DATABASE_NAME]
         else:
-            db = await get_database(vault_url)
-        s = cls(vault_url=vault_url, db=db)
+            db = get_database()
+        s = cls(db=db)
 
         coll = db[MONGODB_COLLECTION_NAME]
         await coll.create_index("thread_id", unique=True)

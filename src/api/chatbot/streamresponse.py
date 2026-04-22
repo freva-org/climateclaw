@@ -70,7 +70,7 @@ async def streamresponse(
     Streams a chatbot response for a given user input using Server-Sent
     Events (NDJSON format). Acts as a HTTP wrapper delegating the actual
     orchestration and model execution to the streaming backend.
-    Requires a valid authenticated user and vault-url.
+    Requires a valid authenticated user.
 
     Behavior:
         - Creates a new thread if `thread_id` is not provided.
@@ -94,7 +94,7 @@ async def streamresponse(
 
     Dependencies:
         Auth (Authenticator): Injected authentication object containing
-            username and vault_url
+            username
 
     Returns:
         StreamingResponse:
@@ -107,7 +107,6 @@ async def streamresponse(
             - If the provided `thread_id` is already active and streaming.
         HTTPException (422):
             - If the user input is missing or empty.
-            - If the vault URL header is missing or empty.
             - If the specified chatbot model is not found in the available chatbots.
         HTTPException (503):
             - If the storage backend (e.g., MongoDB) connection fails.
@@ -157,17 +156,9 @@ async def streamresponse(
     user_name = Auth.username
     logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
 
-    if not Auth.vault_url:
-        raise HTTPException(
-            status_code=422,
-            detail="Vault URL not found. Please provide a non-empty vault URL in the headers, of type String.",
-        )
-
     try:
         # Get thread storage
-        Storage = await get_thread_storage(
-            vault_url=Auth.vault_url, user_name=user_name, thread_id=thread_id
-        )
+        Storage = await get_thread_storage(user_name=user_name, thread_id=thread_id)
         # If the thread does not belong to this user, fork it and continue with a different thread_id
         thread_owner = await Storage.get_user_id_for_thread(thread_id)
         if thread_owner and thread_owner != user_name:

@@ -146,12 +146,7 @@ async def main() -> None:
         read_history = True
 
     Auth = await DevAuthenticator.build(None)
-    if Auth.vault_url:
-        Storage = await get_thread_storage(
-            user_name=USER_ID, thread_id=thread_id, vault_url=Auth.vault_url
-        )
-    else:
-        raise ValueError("Please set the vault_url value!")
+    Storage = await get_thread_storage(user_name=USER_ID, thread_id=thread_id)
 
     system_prompt = get_entire_prompt(USER_ID, thread_id, MODEL)
 

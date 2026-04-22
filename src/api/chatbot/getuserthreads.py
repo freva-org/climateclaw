@@ -25,7 +25,7 @@ async def get_user_threads(
 
     Returns the most recent conversation threads of the authenticated user,
     limited by the requested number.
-    Requires a valid authenticated user and vault-url.
+    Requires a valid authenticated user.
 
     Parameters:
         num_threads (int):
@@ -35,7 +35,7 @@ async def get_user_threads(
 
     Dependencies:
         auth (Authenticator): Injected authentication object containing
-            username and vault_url
+            username
 
     Returns:
         List[Any]:
@@ -52,7 +52,6 @@ async def get_user_threads(
     Raises:
         HTTPException (422):
             - If the authenticated user ID is missing.
-            - If the vault URL header is missing or empty.
         HTTPException (503):
             - If the storage backend (e.g., MongoDB) connection fails.
         HTTPException (500):
@@ -66,15 +65,9 @@ async def get_user_threads(
             detail="Missing user_id (auth).",
         )
 
-    if not auth.vault_url:
-        raise HTTPException(
-            status_code=422,
-            detail="Vault URL not found. Please provide a non-empty vault URL in the headers, of type String.",
-        )
-
     try:
         # Thread storage
-        Storage: ThreadStorage = await get_thread_storage(vault_url=auth.vault_url)
+        Storage: ThreadStorage = await get_thread_storage()
     except Exception as e:
         logger.exception("Failed to connect to MongoDB", extra={"error": str(e)})
         raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")

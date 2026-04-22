@@ -68,7 +68,6 @@ def GOOD_HEADERS():
     return {
         "Authorization": "Bearer test-token",
         "x-freva-rest-url": "http://rest.example",
-        "x-freva-vault-url": "mongodb://vault.example",
         "x-freva-config-path": "dummy.conf",
     }
 
@@ -163,9 +162,7 @@ def dummy_db():
 
 @pytest.fixture
 def patch_db(monkeypatch, dummy_db, GOOD_HEADERS):
-    async def fake_get_database(vault_url: str):
-        # Assert header propagated correctly
-        assert vault_url == GOOD_HEADERS["x-freva-vault-url"]
+    async def fake_get_database():
         return dummy_db
 
     monkeypatch.setattr(
@@ -178,9 +175,7 @@ def patch_db(monkeypatch, dummy_db, GOOD_HEADERS):
 
 @pytest.fixture
 def patch_mongo_uri(monkeypatch):
-    async def fake_mongodb_uri(vault_url: str):
-        # Assert the vault_url was propagated correctly
-        assert vault_url == GOOD_HEADERS["x-freva-vault-url"]
+    async def fake_mongodb_uri():
         # Return a dummy MongoDB URI; it will be consumed by get_database
         return "mongodb://dummy-host/dummy-db"
 
