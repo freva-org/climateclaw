@@ -87,8 +87,8 @@ services:
     ports:
       - 27017:27017
     volumes:
-      - mongodb-data:/data/db:z
-      - mongodb-logs:/data/logs:z
+      - data:/data/db:z
+      - logs:/data/logs:z
     container_name: mongo-test
     tty: true
     networks:
@@ -97,5 +97,10 @@ services:
 networks:
   freva-gpt:
     driver: bridge
-# The subnet is not set to avoid conflicts with other potentially running networks on the same machine.
-# Note: Named networks by default aren't shared between different docker-compose projects, even if they have the same name, as long as they are in separate directories.
+
+volumes:
+  work:
+  logs:
+  cache:
+  resources:
+  data:
