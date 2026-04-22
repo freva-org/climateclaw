@@ -32,13 +32,13 @@ jobs:
       matrix:
         include:
           - image: freva-gpt
-            dockerfile: ./freva-gpt/Dockerfile
+            dockerfile: ./docker/freva-gpt/Dockerfile
             context: .
           - image: code-server
-            dockerfile: ./code-server/Dockerfile
+            dockerfile: ./docker/code-server/Dockerfile
             context: .
           - image: web-search-server
-            dockerfile: ./web-search-server/Dockerfile
+            dockerfile: ./docker/web-search-server/Dockerfile
             context: .
 
     steps:
