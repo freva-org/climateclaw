@@ -10,9 +10,9 @@ services:
       - "${FREVAGPT_TARGET_PORT:-8502}:${FREVAGPT_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
       - "${FREVAGPT_DEBUG_PORT:-5678}:${FREVAGPT_DEBUG_PORT:-5678}" # Port for debugpy
     volumes:
-      - work:/work:ro
-      - logs:/app/logs
-      - cache:/app/cache:rw
+      - /work:/work:ro
+      - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
+      - /scratch/b/b380001/freva-gpt/cache:/app/cache:rw
     networks:
       - freva-gpt
   rag:
@@ -25,8 +25,8 @@ services:
       FREVAGPT_MCP_HOST: 0.0.0.0
       FREVAGPT_MCP_PORT: 8050
     volumes:
-      - resources:/app/resources:ro
-      - logs:/app/logs    
+      - ./resources:/app/resources:ro
+      - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
     networks:
       - freva-gpt
   code:
@@ -39,9 +39,9 @@ services:
       FREVAGPT_MCP_HOST: 0.0.0.0
       FREVAGPT_MCP_PORT: 8051
     volumes:
-      - work:/work:ro
-      - logs:/app/logs
-      - cache:/app/cache:rw
+      - /work:/work:ro
+      - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
+      - /scratch/b/b380001/freva-gpt/cache:/app/cache:rw
     networks:
       - freva-gpt
   web-search:
@@ -56,7 +56,7 @@ services:
     networks: 
       - freva-gpt
     volumes:
-      - logs:/app/logs    
+      - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     hostname: litellm-instance-${FREVAGPT_INSTANCE_NAME}
@@ -99,33 +99,5 @@ networks:
     driver: bridge
 
 volumes:
-  work:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /work
-  logs:
-    name: logs-${FREVAGPT_INSTANCE_NAME}
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs
-  cache:
-    name: cache-${FREVAGPT_INSTANCE_NAME}
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /scratch/b/b380001/freva-gpt/cache
-  resources:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./resources
   mongo-data:
-    name: mongo-data-${FREVAGPT_INSTANCE_NAME}
   mongo-logs:
-    name: mongo-logs-${FREVAGPT_INSTANCE_NAME}
