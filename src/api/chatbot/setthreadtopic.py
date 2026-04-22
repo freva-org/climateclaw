@@ -72,6 +72,13 @@ async def set_thread_topic(
         raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
 
     try:
+        thread_owner = await Storage.get_user_id_for_thread(thread_id)
+        # Only allow the update of the thread topic if the user is the owner of the thread
+        if thread_owner and thread_owner != auth.username:
+            raise HTTPException(
+                status_code=403,
+                detail="You are not the owner of this thread.",
+            )
         await Storage.update_thread_topic(thread_id, topic)
         logger.info(
             "Updated thread topic",

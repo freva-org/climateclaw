@@ -9,14 +9,13 @@ from src.services.service_factory import (
 from src.services.streaming.stream_variants import (
     from_json_to_sv,
     from_sv_to_json,
-    SVServerHint,
-    StreamVariant,
 )
 from src.services.streaming.active_conversations import (
     new_thread_id,
     check_thread_exists,
     initialize_conversation,
 )
+from src.services.storage.mongodb_storage import update_threadid_in_content
 from src.core.logging_setup import configure_logging
 
 router = APIRouter()
@@ -191,19 +190,3 @@ async def edit_thread(
         "new_thread_id": new_id,
         "history": base_json,
     }
-
-
-def update_threadid_in_content(new_id: str, content: list[StreamVariant], logger):
-    if isinstance(content[0], SVServerHint):
-        content[0] = SVServerHint(data={"thread_id": new_id})
-        logger.info("Updated ServerHint with new thread-id.")
-    else:
-        if any(isinstance(c, SVServerHint) for c in content):
-            logger.exception("ServerHint is in unexpected position in thread content!")
-            raise ValueError("ServerHint is in unexpected position in thread content!")
-        else:
-            logger.info(
-                "ServerHint is missing in the thread content. It is inserted with the new thread-id."
-            )
-            content = [SVServerHint(data={"thread_id": new_id})] + content
-    return content

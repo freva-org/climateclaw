@@ -52,3 +52,10 @@ async def test_save_and_read_thread(monkeypatch, patch_db, GOOD_HEADERS):
     # Prompt, User, Assistant, StreamEnd (no unexpected extra StreamEnd)
     assert kinds == ["Prompt", "User", "Assistant", "StreamEnd"]
     assert coll.storage[tid]["content"] == conv
+
+    # Check the user_id is stored correctly
+    assert (
+        coll.storage[tid]["user_id"]
+        == user_id
+        == await storage.get_user_id_for_thread(tid)
+    )
