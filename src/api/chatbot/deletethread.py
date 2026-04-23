@@ -40,6 +40,8 @@ async def delete_thread(
     Raises:
         HTTPException (422):
             - If `thread_id` is missing or empty.
+        HTTPException (503):
+            - If storage connection fails
         HTTPException (500):
             - If deletion fails due to an internal storage error.
     """
@@ -51,7 +53,11 @@ async def delete_thread(
             detail="Thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    Storage = await get_thread_storage()
+    try:
+        Storage = await get_thread_storage()
+    except Exception as e:
+        logger.exception("Failed to connect to MongoDB", extra={"error": str(e)})
+        raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
 
     try:
         thread_owner = await Storage.get_user_id_for_thread(thread_id)

@@ -91,7 +91,8 @@ async def edit_thread(
     try:
         # Thread storage
         Storage = await get_thread_storage()
-    except Exception:
+    except Exception as e:
+        logger.exception("Failed to connect to MongoDB", extra={"error": str(e)})
         raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
 
     # Load original content
