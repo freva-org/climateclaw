@@ -87,9 +87,8 @@ services:
     ports:
       - 27017:27017
     volumes:
-      - mongo-data:/data/db:z
-      - mongo-logs:/data/logs:z
-    container_name: mongo-test
+      - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/mongo-data:/data/db:z
+      - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/mongo-logs:/data/logs:z
     tty: true
     networks:
       - freva-gpt
@@ -97,7 +96,3 @@ services:
 networks:
   freva-gpt:
     driver: bridge
-
-volumes:
-  mongo-data:
-  mongo-logs:

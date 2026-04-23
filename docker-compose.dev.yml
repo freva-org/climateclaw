@@ -98,6 +98,8 @@ services:
     hostname: mongodb
     ports:
       - "27017:27017"
+    volumes:
+      - ./mongo-data:/data/db
     command: --quiet --logpath /dev/null 
 
   freva-db:
