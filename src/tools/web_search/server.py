@@ -37,7 +37,7 @@ FREVA_PLUGINS = [
 ]
 MAX_FILE_SIZE_BYTES = 50_000  # skip files larger than this
 MAX_TOTAL_CODE_CHARS = 50_000  # truncate total fetched code after this limit
-MAX_RELEVANT_FILES = 5  # max files to fetch after relevance filtering
+MAX_RELEVANT_FILES = 3  # max files to fetch after relevance filtering
 
 HOST = os.getenv("FREVAGPT_MCP_HOST", "0.0.0.0")
 PORT = int(os.getenv("FREVAGPT_MCP_PORT", "8052"))
@@ -181,7 +181,7 @@ def _fetch_plugin_code(plugin_name: str, selected_files: list[str], max_chars: i
             content = _fetch_file_raw(plugin_name, file)
             if len(content) > MAX_FILE_SIZE_BYTES:
                 content = content[:MAX_FILE_SIZE_BYTES] + "\n... (file truncated)"
-            collected.append(f"### FILE: {file}\n```\n{content}\n```\n")
+            collected.append(f"### FILE: {file} ###\n```\n{content}\n```\n")
             total_chars += len(content)
         except Exception as e:
             logger.debug("Skipping file %s: %s", file, e)
@@ -207,7 +207,9 @@ def _search_relevant_files(
             f"File tree:\n{tree_listing}\n\n"
             f"The user's query now is:\n\"{query}\"\n\n"
             "Return ONLY a JSON array of file paths (strings) that seem most relevant to "
-            "answering the user's query. Include README / documentation files when helpful. "
+            "answering the user's query, but do not include test files. "
+            "For high-level questions about documentation, focus more on README / documentation"
+            "files; whereas for implementation details, focus more on source code files. "
             f"Return at most {MAX_RELEVANT_FILES} paths. Output nothing but the JSON array."
         )
     else:
@@ -295,16 +297,16 @@ def _collect_plugin_context(plugin_name: str, user_query: str) -> str:
 @mcp.tool()
 def plugin_code_search(plugin_name: str, query: str) -> str:
     """
-    Search and analyze the source code of a Freva analysis plugin for decadal climate
-    prediction. Use this when the user asks about how a plugin works, how to use it,
+    Search and analyze the source code of a Freva data analysis plugin for decadal climate
+    predictions. Use this when the user asks about how a plugin works, how to use it,
     or wants parts of the plugin code base to be transformed into Python code.
 
     Available plugins:
-        cvprepare: prepares cross-validation datasets for decadal prediction skill assessment
-        leadtimeselektor: extracts and aggregates lead times from decadal prediction ensembles
-        problems: decadal prediction skill assessment of simumlation vs observations
-        recalibration: recalibrates decadal datasets to correct model drift and biases
-        terciles: computes tercile-based statistics for prediction skill assessment
+        - cvprepare: prepares cross-validation datasets for decadal prediction skill assessment
+        - leadtimeselektor / leadtimeSelect: extracts and aggregates lead times from decadal prediction ensembles
+        - problems: decadal prediction skill assessment of simulation vs reanalysis or observations
+        - recalibration: recalibrates decadal datasets to correct model drift and biases
+        - terciles: computes tercile-based statistics for prediction skill assessment
 
     Args:
         plugin_name (str): Name of the plugin (e.g. "leadtimeselektor").
