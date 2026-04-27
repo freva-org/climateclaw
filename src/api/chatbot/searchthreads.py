@@ -8,6 +8,7 @@ from src.services.service_factory import (
     AuthRequired,
     auth_dependency,
     get_thread_storage,
+    ThreadStorage
 )
 from src.core.logging_setup import configure_logging
 
@@ -20,6 +21,7 @@ async def search_threads(
     page: int = 0,
     num_threads: int = 20,
     auth: Authenticator = Depends(auth_dependency),
+    storage: ThreadStorage = Depends(get_thread_storage),
 ):
     """
     Search User Threads.
@@ -74,18 +76,11 @@ async def search_threads(
             detail="Missing query parameter.",
         )
 
-    try:
-        # Thread storage
-        Storage: ThreadStorage = await get_thread_storage()
-    except Exception as e:
-        logger.exception("Failed to connect to MongoDB: %s", e)
-        raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
-
     num_threads = num_threads or 20  # default to 20 if not provided
     page = page or 0  # default to 0 if not provided
 
     try:
-        total_num_threads, threads = await Storage.query_by_topic(
+        total_num_threads, threads = await storage.query_by_topic(
             auth.username, query, num_threads, page
         )
     except Exception as e:

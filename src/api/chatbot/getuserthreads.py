@@ -8,6 +8,7 @@ from src.services.service_factory import (
     AuthRequired,
     auth_dependency,
     get_thread_storage,
+    ThreadStorage
 )
 from src.core.logging_setup import configure_logging
 
@@ -19,6 +20,7 @@ async def get_user_threads(
     num_threads: int = 20,
     page: int = 0,
     auth: Authenticator = Depends(auth_dependency),
+    storage: ThreadStorage = Depends(get_thread_storage),
 ):
     """
     Retrieve Recent User Threads.
@@ -66,14 +68,7 @@ async def get_user_threads(
         )
 
     try:
-        # Thread storage
-        Storage: ThreadStorage = await get_thread_storage()
-    except Exception as e:
-        logger.exception("Failed to connect to MongoDB", extra={"error": str(e)})
-        raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
-
-    try:
-        threads, total_num_threads = await Storage.list_recent_threads(
+        threads, total_num_threads = await storage.list_recent_threads(
             auth.username, limit=num_threads, page=page
         )
 

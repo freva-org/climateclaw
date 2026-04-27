@@ -16,7 +16,9 @@ from src.services.service_factory import (
     AuthRequired,
     auth_dependency,
     get_thread_storage,
+    ThreadStorage
 )
+from src.services.storage.helpers import create_dir_at_cache
 
 from src.services.streaming.stream_variants import (
     SVStreamEnd,
@@ -62,7 +64,8 @@ async def streamresponse(
     thread_id: Optional[str] = Query(None),
     input: Optional[str] = Query(None),
     chatbot: Optional[str] = Query(None),
-    Auth: Authenticator = Depends(auth_dependency),
+    auth: Authenticator = Depends(auth_dependency),
+    storage: ThreadStorage = Depends(get_thread_storage),
 ):
     """
     Stream Chatbot Response.
@@ -153,28 +156,21 @@ async def streamresponse(
             detail=f"Chatbot model '{model_name}' not found. Please provide a valid model name from the available chatbots: {available}.",
         )
 
-    user_name = Auth.username
+    user_name = auth.username
     logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
 
-    try:
-        # Get thread storage
-        Storage = await get_thread_storage(user_name=user_name, thread_id=thread_id)
-        # If the thread does not belong to this user, fork it and continue with a different thread_id
-        thread_owner = await Storage.get_user_id_for_thread(thread_id)
-        if thread_owner and thread_owner != user_name:
-            old_thread_id = thread_id
-            thread_id = await new_thread_id()
-            logger.info(
-                f"Thread {old_thread_id} belongs to a different user ({thread_owner}). Forking the thread for the current user with new thread_id: {thread_id}..."
-            )
-            await Storage.fork_thread(old_thread_id, thread_id, user_name)
-            logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
-    except Exception as e:
-        logger.exception(
-            "Failed to connect to MongoDB",
-            extra={"thread_id": thread_id, "user_id": user_name, "error": str(e)},
+    create_dir_at_cache(user_name, thread_id)
+
+    # If the thread does not belong to this user, fork it and continue with a different thread_id
+    thread_owner = await storage.get_user_id_for_thread(thread_id)
+    if thread_owner and thread_owner != user_name:
+        old_thread_id = thread_id
+        thread_id = await new_thread_id()
+        logger.info(
+            f"Thread {old_thread_id} belongs to a different user ({thread_owner}). Forking the thread for the current user with new thread_id: {thread_id}..."
         )
-        raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
+        await storage.fork_thread(old_thread_id, thread_id, user_name)
+        logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
 
     system_prompt = get_entire_prompt(user_name, thread_id, model_name)
 
@@ -191,8 +187,8 @@ async def streamresponse(
         await prepare_for_stream(
             thread_id=thread_id,
             user_id=user_name,
-            Auth=Auth,
-            Storage=Storage,
+            Auth=auth,
+            Storage=storage,
             read_history=read_history,
             logger=logger,
         )
@@ -240,14 +236,14 @@ async def streamresponse(
                     for data in _sse_data(from_sv_to_json(end_v)):
                         yield data
                     await cancel_tool_tasks(thread_id)
-                    await end_and_save_conversation(thread_id, Storage)
+                    await end_and_save_conversation(thread_id, storage)
                     logger.info(
                         "Stopped streaming after client request",
                         extra={"thread_id": thread_id, "user_id": user_name},
                     )
                     return
 
-        await end_and_save_conversation(thread_id, Storage)
+        await end_and_save_conversation(thread_id, storage)
         logger.info(
             "Completed streaming and saved conversation",
             extra={"thread_id": thread_id, "user_id": user_name},

@@ -1,7 +1,6 @@
-import asyncio
 from pathlib import Path
-from typing import Optional, Dict
-from fastapi import Depends, Request
+from typing import Dict
+from fastapi import Depends, Request, HTTPException
 
 from src.core.logging_setup import configure_logging
 from src.core.settings import get_settings, get_server_url_dict
@@ -12,7 +11,6 @@ from .authentication.full_auth import FullAuthenticator
 
 from .mcp.mcp_manager import McpManager, get_mcp_headers
 
-from .storage.helpers import create_dir_at_cache
 from .storage.mongodb_storage import ThreadStorage
 
 log = configure_logging(__name__)
@@ -20,9 +18,6 @@ log = configure_logging(__name__)
 settings = get_settings()
 
 CACHE_ROOT = Path("./cache")
-
-_THREAD_STORE: ThreadStorage = None
-_STORE_LOCK = asyncio.Lock()
 
 
 def get_authenticator() -> type[Authenticator]:
@@ -49,21 +44,14 @@ async def auth_dependency(
 AuthRequired = Depends(auth_dependency)
 
 
-async def get_thread_storage(
-    user_name: Optional[str] = None,
-    thread_id: Optional[str] = None,
-) -> ThreadStorage:
-    global _THREAD_STORE
-
-    if user_name and thread_id:
-        create_dir_at_cache(user_name, thread_id)
-    
-    if _THREAD_STORE:
-        return _THREAD_STORE
-
-    async with _STORE_LOCK:
-        _THREAD_STORE = await ThreadStorage.create()
-        return _THREAD_STORE
+def get_thread_storage(request: Request) -> ThreadStorage:
+    storage = getattr(request.app.state, "thread_storage", None)
+    if storage is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Thread storage is not initialized.",
+        )
+    return storage
 
 
 def get_mcp_manager(

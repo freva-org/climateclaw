@@ -24,6 +24,7 @@ async def user_feedback(
     feedback_index: int,
     feedback: str,
     auth: Authenticator = Depends(auth_dependency),
+    storage: ThreadStorage = Depends(get_thread_storage),
 ):
     """
     Add or remove user feedback for a specific message within a thread.
@@ -84,16 +85,9 @@ async def user_feedback(
 
     logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.username)
 
-    try:
-        # Thread storage
-        Storage = await get_thread_storage()
-    except Exception as e:
-        logger.exception("Failed to connect to MongoDB", extra={"error": str(e)})
-        raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
-
     # Load the thread content
     try:
-        content_json = await Storage.read_thread(thread_id=thread_id)
+        content_json = await storage.read_thread(thread_id=thread_id)
     except FileNotFoundError:
         logger.exception(f"Thread not found: {thread_id}")
         raise HTTPException(status_code=404, detail="Thread not found")
@@ -131,7 +125,7 @@ async def user_feedback(
     if feedback != "remove":
         try:
             await save_feedback(
-                Storage,
+                storage,
                 thread_id,
                 auth.username,
                 content_json,
@@ -161,7 +155,7 @@ async def user_feedback(
             )
         try:
             await delete_feedback(
-                Storage,
+                storage,
                 thread_id,
                 auth.username,
                 content_json,

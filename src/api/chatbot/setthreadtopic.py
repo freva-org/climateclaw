@@ -7,6 +7,7 @@ from src.services.service_factory import (
     AuthRequired,
     auth_dependency,
     get_thread_storage,
+    ThreadStorage
 )
 from src.core.logging_setup import configure_logging
 
@@ -18,6 +19,7 @@ async def set_thread_topic(
     thread_id: str,
     topic: str,
     auth: Authenticator = Depends(auth_dependency),
+    storage: ThreadStorage = Depends(get_thread_storage),
 ):
     """
     Update Thread Topic.
@@ -58,21 +60,14 @@ async def set_thread_topic(
     logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.username)
 
     try:
-        # Thread storage
-        Storage = await get_thread_storage()
-    except Exception as e:
-        logger.exception("Failed to connect to MongoDB", extra={"error": str(e)})
-        raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
-
-    try:
-        thread_owner = await Storage.get_user_id_for_thread(thread_id)
+        thread_owner = await storage.get_user_id_for_thread(thread_id)
         # Only allow the update of the thread topic if the user is the owner of the thread
         if thread_owner and thread_owner != auth.username:
             raise HTTPException(
                 status_code=403,
                 detail="You are not the owner of this thread.",
             )
-        await Storage.update_thread_topic(thread_id, topic)
+        await storage.update_thread_topic(thread_id, topic)
         logger.info(
             "Updated thread topic",
             extra={"thread_id": thread_id, "user_id": auth.username},

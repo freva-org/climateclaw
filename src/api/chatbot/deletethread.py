@@ -6,7 +6,8 @@ from src.services.service_factory import (
     Authenticator,
     AuthRequired,
     auth_dependency,
-    get_thread_storage,
+    get_thread_storage, 
+    ThreadStorage
 )
 from src.core.logging_setup import configure_logging
 
@@ -17,6 +18,7 @@ router = APIRouter()
 async def delete_thread(
     thread_id: str,
     auth: Authenticator = Depends(auth_dependency),
+    storage: ThreadStorage = Depends(get_thread_storage),
 ):
     """
     Delete a Chat Thread.
@@ -54,13 +56,7 @@ async def delete_thread(
         )
 
     try:
-        Storage = await get_thread_storage()
-    except Exception as e:
-        logger.exception("Failed to connect to MongoDB", extra={"error": str(e)})
-        raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
-
-    try:
-        thread_owner = await Storage.get_user_id_for_thread(thread_id)
+        thread_owner = await storage.get_user_id_for_thread(thread_id)
         # Only allow the deletion of the thread if the user is the owner of the thread
         if thread_owner and thread_owner != auth.username:
             raise HTTPException(
@@ -68,7 +64,7 @@ async def delete_thread(
                 detail="You are not the owner of this thread.",
             )
 
-        await Storage.delete_thread(thread_id)
+        await storage.delete_thread(thread_id)
         logger.info(
             "Deleted thread from storage",
             extra={"thread_id": thread_id, "user_id": auth.username},
