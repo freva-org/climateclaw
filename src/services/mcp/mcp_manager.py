@@ -219,11 +219,7 @@ class McpManager:
 def get_mcp_headers(
     auth: Authenticator, cache: str, logger=None
 ) -> Dict[str, str]:
-    mongodb_uri = (
-        get_mongodb_uri()
-        if not settings.DEV
-        else settings.MONGODB_URI_DEV
-    )
+    mongodb_uri = get_mongodb_uri()
     access_token = auth.access_token
 
     auth_header = f"Bearer {access_token}" if access_token else None

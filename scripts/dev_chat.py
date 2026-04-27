@@ -11,7 +11,6 @@ os.environ["FREVAGPT_LITE_LLM_ADDRESS"] = "http://localhost:4000"
 os.environ["FREVAGPT_RAG_SERVER_URL"] = "http://localhost:8050"
 os.environ["FREVAGPT_CODE_SERVER_URL"] = "http://localhost:8051"
 os.environ["FREVAGPT_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
-os.environ["FREVAGPT_MONGODB_URI_DEV"] = "mongodb://mongo:secret@localhost:27017"
 
 import asyncio
 import logging
