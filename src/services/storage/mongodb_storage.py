@@ -14,6 +14,7 @@ from src.services.streaming.stream_variants import (
     cleanup_conversation,
     from_sv_to_json,
     from_json_to_sv,
+    SVServerHint,
 )
 from src.core.logging_setup import configure_logging
 
@@ -35,7 +36,7 @@ class ThreadStorage:
         self.db = db
 
     @classmethod
-    async def create(cls, vault_url: str):
+    async def create(cls, vault_url: str) -> "ThreadStorage":
         if settings.DEV:
             db = AsyncMongoClient(settings.MONGODB_URI_DEV)[MONGODB_DATABASE_NAME]
         else:
@@ -165,6 +166,51 @@ class ThreadStorage:
             raise FileNotFoundError("Thread not found")
         return doc.get("content", [])
 
+    async def get_user_id_for_thread(self, thread_id: str) -> Optional[str]:
+        logger = configure_logging(__name__, thread_id=thread_id)
+        coll = self.db[MONGODB_COLLECTION_NAME]
+        doc = await coll.find_one({"thread_id": thread_id})
+        if not doc:
+            logger.warning(
+                "Thread not found in MongoDB when fetching user_id",
+                extra={"thread_id": thread_id},
+            )
+            return None
+        return doc.get("user_id")
+
+    async def fork_thread(self, old_thread_id: str, new_thread_id: str, user_id: str):
+        logger = configure_logging(__name__, thread_id=old_thread_id, user_id=user_id)
+        coll = self.db[MONGODB_COLLECTION_NAME]
+        doc = await coll.find_one({"thread_id": old_thread_id})
+        if not doc:
+            logger.warning(
+                "Thread not found in MongoDB when forking",
+                extra={"thread_id": old_thread_id},
+            )
+            raise FileNotFoundError("Thread not found")
+
+        content = doc.get("content", [])
+        content = [from_json_to_sv(v) for v in content]
+        content = update_threadid_in_content(new_thread_id, content, logger=logger)
+        content = [from_sv_to_json(v) for v in content]
+
+        new_doc = {
+            "user_id": user_id,
+            "thread_id": new_thread_id,
+            "date": datetime.now(timezone.utc),
+            "topic": doc.get("topic", ""),
+            "content": content,
+        }
+        await coll.insert_one(new_doc)
+        logger.info(
+            "Forked thread in MongoDB",
+            extra={
+                "old_thread_id": old_thread_id,
+                "new_thread_id": new_thread_id,
+                "user_id": user_id,
+            },
+        )
+
     async def update_thread_topic(self, thread_id: str, topic: str):
         logger = configure_logging(__name__, thread_id=thread_id)
         coll = self.db[MONGODB_COLLECTION_NAME]
@@ -276,3 +322,21 @@ class ThreadStorage:
             for d in docs
         ]
         return total, threads
+
+
+def update_threadid_in_content(
+    new_id: str, content: list[StreamVariant], logger
+) -> list[StreamVariant]:
+    if isinstance(content[0], SVServerHint):
+        content[0] = SVServerHint(data={"thread_id": new_id})
+        logger.info("Updated ServerHint with new thread-id.")
+    else:
+        if any(isinstance(c, SVServerHint) for c in content):
+            logger.exception("ServerHint is in unexpected position in thread content!")
+            raise ValueError("ServerHint is in unexpected position in thread content!")
+        else:
+            logger.info(
+                "ServerHint is missing in the thread content. It is inserted with the new thread-id."
+            )
+            content = [SVServerHint(data={"thread_id": new_id})] + content
+    return content

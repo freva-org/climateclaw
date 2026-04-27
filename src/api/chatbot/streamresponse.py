@@ -151,6 +151,16 @@ async def streamresponse(
         Storage = await get_thread_storage(
             vault_url=Auth.vault_url, user_name=user_name, thread_id=thread_id
         )
+        # If the thread does not belong to this user, fork it and continue with a different thread_id
+        thread_owner = await Storage.get_user_id_for_thread(thread_id)
+        if thread_owner and thread_owner != user_name:
+            old_thread_id = thread_id
+            thread_id = await new_thread_id()
+            logger.info(
+                f"Thread {old_thread_id} belongs to a different user ({thread_owner}). Forking the thread for the current user with new thread_id: {thread_id}..."
+            )
+            await Storage.fork_thread(old_thread_id, thread_id, user_name)
+            logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
     except Exception as e:
         logger.exception(
             "Failed to connect to MongoDB",
