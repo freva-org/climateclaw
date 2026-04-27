@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from typing import Optional, Dict
 from fastapi import Depends, Request
@@ -19,6 +20,9 @@ log = configure_logging(__name__)
 settings = get_settings()
 
 CACHE_ROOT = Path("./cache")
+
+_THREAD_STORE: ThreadStorage = None
+_STORE_LOCK = asyncio.Lock()
 
 
 def get_authenticator() -> type[Authenticator]:
@@ -49,9 +53,17 @@ async def get_thread_storage(
     user_name: Optional[str] = None,
     thread_id: Optional[str] = None,
 ) -> ThreadStorage:
+    global _THREAD_STORE
+
     if user_name and thread_id:
         create_dir_at_cache(user_name, thread_id)
-    return await ThreadStorage.create()
+    
+    if _THREAD_STORE:
+        return _THREAD_STORE
+
+    async with _STORE_LOCK:
+        _THREAD_STORE = await ThreadStorage.create()
+        return _THREAD_STORE
 
 
 def get_mcp_manager(
