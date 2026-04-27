@@ -20,7 +20,9 @@ from src.api.chatbot.streamresponse import _sse_data
 from src.core.logging_setup import configure_logging
 from src.core.prompting import get_entire_prompt
 from src.core.settings import get_settings
-from src.services.service_factory import DevAuthenticator, get_thread_storage
+from src.services.service_factory import DevAuthenticator
+from src.services.storage.mongodb_storage import ThreadStorage
+from src.services.storage.helpers import create_dir_at_cache
 from src.services.streaming.active_conversations import (
     end_and_save_conversation,
     new_thread_id,
@@ -145,7 +147,9 @@ async def main() -> None:
         read_history = True
 
     Auth = await DevAuthenticator.build(None)
-    Storage = await get_thread_storage(user_name=USER_ID, thread_id=thread_id)
+    Storage = await ThreadStorage.create()
+    create_dir_at_cache(USER_ID, thread_id)
+
 
     system_prompt = get_entire_prompt(USER_ID, thread_id, MODEL)
 

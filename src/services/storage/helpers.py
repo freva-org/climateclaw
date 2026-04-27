@@ -62,13 +62,3 @@ def get_mongodb_uri() -> str:
         raise ValueError("Please set the MongoDB user and password in environment variables!")
     uri = f"mongodb://{user}:{password}@mongodb:27017"
     return uri
-
-
-def get_database() -> AsyncDatabase:
-    """
-    Gets mongoDB URI, and creates the async client.
-    """
-    mongodb_uri = get_mongodb_uri()
-
-    client = AsyncMongoClient(mongodb_uri, connectTimeoutMS=30000)
-    return client[MONGODB_DATABASE_NAME]

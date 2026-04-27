@@ -3,9 +3,10 @@ from datetime import datetime, timezone
 import re
 
 import pymongo
+from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
-from .helpers import Thread, get_database
+from .helpers import Thread, get_mongodb_uri
 from .summarize_topic import summarize_topic
 from src.core.settings import get_settings
 from src.services.streaming.stream_variants import (
@@ -28,15 +29,19 @@ MONGODB_COLLECTION_NAME_FEEDBACK = "userfeedback"
 
 
 class ThreadStorage:
-    """PROD / shared implementation: store threads in MongoDB."""
+    """Store threads in MongoDB."""
 
-    def __init__(self, db: AsyncDatabase) -> None:
+    def __init__(self, client: AsyncMongoClient, db: AsyncDatabase) -> None:
+        self.client = client
         self.db = db
 
     @classmethod
     async def create(cls) -> "ThreadStorage":
-        db = get_database()
-        s = cls(db=db)
+        mongo_uri = get_mongodb_uri()
+        client = AsyncMongoClient(mongo_uri, connectTimeoutMS=30000)
+        db = client[MONGODB_DATABASE_NAME]
+
+        storage = cls(db=db)
 
         coll = db[MONGODB_COLLECTION_NAME]
         await coll.create_index("thread_id", unique=True)
@@ -44,7 +49,10 @@ class ThreadStorage:
             [("user_id", pymongo.ASCENDING), ("date", pymongo.DESCENDING)]
         )
 
-        return s
+        return storage
+    
+    async def close(self) -> None:
+        self.client.close()
 
     async def save_thread(
         self,
