@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 import re
 
 import pymongo
-from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
 from .helpers import Thread, get_database
@@ -36,10 +35,7 @@ class ThreadStorage:
 
     @classmethod
     async def create(cls) -> "ThreadStorage":
-        if settings.DEV:
-            db = AsyncMongoClient(settings.MONGODB_URI_DEV)[MONGODB_DATABASE_NAME]
-        else:
-            db = get_database()
+        db = get_database()
         s = cls(db=db)
 
         coll = db[MONGODB_COLLECTION_NAME]

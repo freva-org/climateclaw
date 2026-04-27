@@ -81,7 +81,7 @@ services:
     image: ghcr.io/freva-org/freva-mongo:latest
     hostname: mongodb-instance-${FREVAGPT_INSTANCE_NAME}
     environment:
-      - API_MONGO_USER=${FREVAGPT_MONGODB_USER}
+      - API_MONGO_USER=${FREVAGPT_MONGODB_USER:?MongoDB user and password must be set in the .env file. See .env.example.}
       - API_MONGO_PASSWORD=${FREVAGPT_MONGODB_PASSWORD}
       - API_MONGO_DB=${FREVAGPT_MONGODB_DATABASE_NAME}
     ports:
