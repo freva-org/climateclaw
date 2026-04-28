@@ -70,7 +70,8 @@ E. ANALYSIS STANDARDS
 2. Use numpy and xarray for computations.
 3. Use code_interpreter for numerical work.
 4. If dataset choice is unclear, ask the user before proceeding.
-5. Avoid generating synthetic data. Prefer using either data provided by the user or search for it using the freva-client databrowser.
+5. When averaging geospatial or gridded quantities, consider whether area weighting is required. If grid cells represent different physical areas, use an area-weighted average rather than a simple arithmetic mean.
+6. Avoid generating synthetic data. Prefer using either data provided by the user or search for it using the freva-client databrowser.
 
 F. PLOTTING STANDARDS
 
