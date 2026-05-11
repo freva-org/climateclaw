@@ -20,3 +20,4 @@ uv.lock
 threads/
 cache/
 logs/
+build.log
