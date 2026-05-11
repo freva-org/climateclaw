@@ -20,6 +20,7 @@ uv.lock
 threads/
 cache/
 logs/
+build.log
 
 *scaled.yml
 haproxy.cfg

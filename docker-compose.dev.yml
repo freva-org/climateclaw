@@ -84,11 +84,8 @@ services:
       - "4000:4000" # Expose LiteLLM port to the host machine for direct access if needed, e.g. local dev
     networks: 
       - freva-gpt
-  ollama: # Ollama is only for the backend and not accessible from the outside. Port 11434 is not exposed.
-    image: ollama
-    build:
-      context: .
-      dockerfile: docker/ollama/Dockerfile.dev
+  ollama:
+    image: ollama/ollama:latest
     hostname: ollama-instance-${FREVAGPT_INSTANCE_NAME}
     networks: 
       - freva-gpt

@@ -72,11 +72,10 @@ services:
     networks:
       - freva-gpt
   ollama: # Ollama is only for the backend and not accessible from the outside. Port 11434 is not exposed.
-    image: ollama
-    build:
-      context: .
-      dockerfile: docker/ollama/Dockerfile
+    image: ollama/ollama:latest
     hostname: ollama-instance-${FREVAGPT_INSTANCE_NAME}
+    volumes:
+      - /container/da/freva-gpt-ollama-models/.ollama:/root/.ollama
     networks:
       - freva-gpt
     devices:
