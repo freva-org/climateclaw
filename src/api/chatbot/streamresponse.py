@@ -34,6 +34,7 @@ from src.services.streaming.active_conversations import (
     get_conversation_state,
     end_and_save_conversation,
     add_to_conversation,
+    new_thread_id,
     check_thread_exists,
     cancel_tool_tasks,
 )
@@ -157,7 +158,8 @@ async def streamresponse(
 
     # Check if thread-id exists in DB
     read_history=False
-    if await Storage.thread_exists(thread_id=thread_id):
+    is_new_thread = False
+    if await storage.thread_exists(thread_id=thread_id):
         logger.info(f"Resuming conversation with thread_id: {thread_id}...")
         if not await check_thread_exists(thread_id):
             logger.info(f"Existing conversation is not found in the registry: {thread_id} ! "\
@@ -171,6 +173,7 @@ async def streamresponse(
                 detail=f"Conversation with thread_id: {thread_id} is already active and streaming. Please use a different thread_id or wait for the current stream to finish."
                 )
     else:
+        is_new_thread = True
         logger.info(f"Starting a new conversation with thread_id: {thread_id}...")
 
     system_prompt = get_entire_prompt(user_name, thread_id, model_name)
