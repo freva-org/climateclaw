@@ -11,6 +11,7 @@ from src.core.settings import get_settings
 from src.core.logging_setup import configure_logging
 from src.core.runtime_checks import run_startup_checks
 from src.services.streaming.active_conversations import cleanup_idle
+from src.services.storage.mongodb_storage import ThreadStorage
 
 settings = get_settings()
 logger = configure_logging(__name__)
@@ -25,6 +26,7 @@ async def lifespan(app: FastAPI):
     # Startup (was @app.on_event("startup"))
     configure_logging()
     run_startup_checks(get_settings())
+    app.state.thread_storage = await ThreadStorage.create()
 
     async def periodic_cleanup_task():
         while True:
@@ -46,8 +48,9 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        # Shutdown (was @app.on_event("shutdown"))
+        # Shutdown
         app.state.periodic_cleanup.cancel()
+        await app.state.thread_storage.close()
 
 
 app = FastAPI(

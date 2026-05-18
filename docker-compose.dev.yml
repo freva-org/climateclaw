@@ -94,11 +94,13 @@ services:
       - freva-gpt
     image: mongo:latest
     environment:
-      MONGO_INITDB_ROOT_USERNAME: mongo
-      MONGO_INITDB_ROOT_PASSWORD: secret
+      MONGO_INITDB_ROOT_USERNAME: ${FREVAGPT_MONGODB_USER:?MongoDB user and password must be set in the .env file. See .env.example.}
+      MONGO_INITDB_ROOT_PASSWORD: ${FREVAGPT_MONGODB_PASSWORD}
     hostname: mongodb
     ports:
       - "27017:27017"
+    volumes:
+      - ./mongo-data:/data/db
     command: --quiet --logpath /dev/null 
 
   freva-db:

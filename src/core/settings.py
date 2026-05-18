@@ -18,9 +18,6 @@ class Settings:
     AVAILABLE_MCP_SERVERS: ClassVar[list[str]] = [
         s for s in os.getenv("FREVAGPT_AVAILABLE_MCP_SERVERS", "").split(",")
     ]
-    MONGODB_URI_DEV: str = os.getenv(
-        "FREVAGPT_MONGODB_URI_DEV", "mongodb://mongo:secret@mongodb:27017"
-    )
     MONGODB_DATABASE_NAME: str = os.getenv("FREVAGPT_MONGODB_DATABASE_NAME", "chatbot")
     MONGODB_COLLECTION_NAME: str = os.getenv(
         "FREVAGPT_MONGODB_COLLECTION_NAME", "threads"

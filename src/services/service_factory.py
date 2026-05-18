@@ -1,6 +1,6 @@
 from pathlib import Path
-from typing import Optional, Dict
-from fastapi import Depends, Request
+from typing import Dict
+from fastapi import Depends, Request, HTTPException
 
 from src.core.logging_setup import configure_logging
 from src.core.settings import get_settings, get_server_url_dict
@@ -11,7 +11,6 @@ from .authentication.full_auth import FullAuthenticator
 
 from .mcp.mcp_manager import McpManager, get_mcp_headers
 
-from .storage.helpers import create_dir_at_cache
 from .storage.mongodb_storage import ThreadStorage
 
 log = configure_logging(__name__)
@@ -45,17 +44,17 @@ async def auth_dependency(
 AuthRequired = Depends(auth_dependency)
 
 
-async def get_thread_storage(
-    vault_url: Optional[str] = None,
-    user_name: Optional[str] = None,
-    thread_id: Optional[str] = None,
-) -> ThreadStorage:
-    if user_name and thread_id:
-        create_dir_at_cache(user_name, thread_id)
-    return await ThreadStorage.create(vault_url=vault_url)
+def get_thread_storage(request: Request) -> ThreadStorage:
+    storage = getattr(request.app.state, "thread_storage", None)
+    if storage is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Thread storage is not initialized.",
+        )
+    return storage
 
 
-async def get_mcp_manager(
+def get_mcp_manager(
     authenticator: Authenticator, thread_id: str
 ) -> McpManager | None:
     """
@@ -66,7 +65,7 @@ async def get_mcp_manager(
     access_token = authenticator.access_token
     auth_header = f"Bearer {access_token}" if access_token else None
 
-    # Defaults to send; per-call headers (vault/rest) are added at call time.
+    # Defaults to send; per-call headers (rest) are added at call time.
     default_headers: Dict[str, str] = {
         "Authorization": auth_header,
         "thread-id": thread_id,
@@ -85,7 +84,7 @@ async def get_mcp_manager(
 
     cache = CACHE_ROOT / thread_id
 
-    extra_headers = await get_mcp_headers(authenticator, cache, logger=logger)
+    extra_headers = get_mcp_headers(authenticator, cache, logger=logger)
 
     try:
         await mgr.initialize(extra_headers)

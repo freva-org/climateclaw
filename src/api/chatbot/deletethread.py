@@ -6,7 +6,8 @@ from src.services.service_factory import (
     Authenticator,
     AuthRequired,
     auth_dependency,
-    get_thread_storage,
+    get_thread_storage, 
+    ThreadStorage
 )
 from src.core.logging_setup import configure_logging
 
@@ -17,12 +18,13 @@ router = APIRouter()
 async def delete_thread(
     thread_id: str,
     auth: Authenticator = Depends(auth_dependency),
+    storage: ThreadStorage = Depends(get_thread_storage),
 ):
     """
     Delete a Chat Thread.
 
     Deletes a conversation thread from storage.
-    Requires a valid authenticated user and vault-url.
+    Requires a valid authenticated user.
 
     Parameters:
         thread_id (str):
@@ -31,7 +33,7 @@ async def delete_thread(
 
     Dependencies:
         auth (Authenticator): Injected authentication object containing
-            username and vault_url
+            username
 
     Returns:
         dict:
@@ -40,7 +42,8 @@ async def delete_thread(
     Raises:
         HTTPException (422):
             - If `thread_id` is missing or empty.
-            - If the vault URL header is missing or empty.
+        HTTPException (503):
+            - If storage connection fails
         HTTPException (500):
             - If deletion fails due to an internal storage error.
     """
@@ -52,16 +55,8 @@ async def delete_thread(
             detail="Thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    if not auth.vault_url:
-        raise HTTPException(
-            status_code=422,
-            detail="Vault URL not found. Please provide a non-empty vault URL in the headers, of type String.",
-        )
-
-    Storage = await get_thread_storage(vault_url=auth.vault_url)
-
     try:
-        thread_owner = await Storage.get_user_id_for_thread(thread_id)
+        thread_owner = await storage.get_user_id_for_thread(thread_id)
         # Only allow the deletion of the thread if the user is the owner of the thread
         if thread_owner and thread_owner != auth.username:
             raise HTTPException(
@@ -69,7 +64,7 @@ async def delete_thread(
                 detail="You are not the owner of this thread.",
             )
 
-        await Storage.delete_thread(thread_id)
+        await storage.delete_thread(thread_id)
         logger.info(
             "Deleted thread from storage",
             extra={"thread_id": thread_id, "user_id": auth.username},
