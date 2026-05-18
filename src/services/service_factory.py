@@ -54,7 +54,7 @@ def get_thread_storage(request: Request) -> ThreadStorage:
     return storage
 
 
-def get_mcp_manager(
+async def get_mcp_manager(
     authenticator: Authenticator, thread_id: str
 ) -> McpManager | None:
     """
