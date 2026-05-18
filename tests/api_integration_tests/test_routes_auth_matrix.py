@@ -49,7 +49,7 @@ async def test_routes_succeed_with_auth_and_username_injection(
             assert r.status_code == 200
             assert r.json()[0][0].get("user_id") == "alice"
 
-            # 3) /getthread: must pass thread_id + vault header
+            # 3) /getthread: must pass thread_id
             r = await client.get(
                 "/api/chatbot/getthread",
                 params={"thread_id": "t-123"},

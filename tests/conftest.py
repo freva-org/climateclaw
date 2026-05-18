@@ -68,7 +68,6 @@ def GOOD_HEADERS():
     return {
         "Authorization": "Bearer test-token",
         "x-freva-rest-url": "http://rest.example",
-        "x-freva-vault-url": "mongodb://vault.example",
         "x-freva-config-path": "dummy.conf",
     }
 
@@ -84,7 +83,7 @@ def stub_resp(respx_mock):
     Provide a default stub for the auth system call used in routes.
     Individual tests can override or add more routes to respx_mock.
     """
-    respx_mock.get("http://rest.example/api/freva-nextgen/auth/v2/systemuser").respond(
+    respx_mock.get("http://rest.example/api/freva-nextgen/auth/v2/userinfo").respond(
         200, json={"pw_name": "alice"}
     )
     return respx_mock
@@ -163,9 +162,7 @@ def dummy_db():
 
 @pytest.fixture
 def patch_db(monkeypatch, dummy_db, GOOD_HEADERS):
-    async def fake_get_database(vault_url: str):
-        # Assert header propagated correctly
-        assert vault_url == GOOD_HEADERS["x-freva-vault-url"]
+    async def fake_get_database():
         return dummy_db
 
     monkeypatch.setattr(
@@ -178,9 +175,7 @@ def patch_db(monkeypatch, dummy_db, GOOD_HEADERS):
 
 @pytest.fixture
 def patch_mongo_uri(monkeypatch):
-    async def fake_mongodb_uri(vault_url: str):
-        # Assert the vault_url was propagated correctly
-        assert vault_url == GOOD_HEADERS["x-freva-vault-url"]
+    async def fake_mongodb_uri():
         # Return a dummy MongoDB URI; it will be consumed by get_database
         return "mongodb://dummy-host/dummy-db"
 
@@ -200,7 +195,7 @@ def patch_mongo_uri(monkeypatch):
 def patch_read_thread(monkeypatch):
     async def _fake(self, thread_id: str):
         return [
-            {"variant": "ServerHint", "content": {'thread_id': thread_id}},
+            {"variant": "ServerHint", "content": {"thread_id": thread_id}},
             {"variant": "Prompt", "content": "user prompt should be filtered out"},
             {"variant": "User", "content": "kept"},
             {"variant": "Assistant", "content": "also kept"},
@@ -246,7 +241,8 @@ def patch_save_thread(monkeypatch):
                 "append_to_existing": append_to_existing,
             }
         )
-        return 
+        return
+
     import src.services.storage.mongodb_storage as mongo_store
 
     monkeypatch.setattr(
@@ -256,7 +252,7 @@ def patch_save_thread(monkeypatch):
         raising=False,
     )
 
-    return calls 
+    return calls
 
 
 @pytest.fixture
@@ -292,9 +288,11 @@ def patch_user_threads(monkeypatch):
 
     return fake_get_user_threads
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # REGISTRY PATCH
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def patch_registry(monkeypatch):
@@ -367,6 +365,7 @@ def patch_mcp_manager(monkeypatch):
     Avoid hitting the real MCP manager / MCP Mongo from tests.
     initialize_conversation() will still run, but with a dummy manager.
     """
+
     async def fake_get_mcp_manager(authenticator, thread_id):
         # You can assert on authenticator if you want
         return DummyMcpManager()

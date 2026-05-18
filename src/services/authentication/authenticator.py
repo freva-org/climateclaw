@@ -17,14 +17,13 @@ class Authenticator(ABC):
     Per-request authenticator.
 
     - Holds request + settings
-    - After `await run()`, attributes like `username`, `vault_url`, `rest_url`
+    - After `await run()`, attributes like `username`, `rest_url`
       are populated (or HTTPException is raised).
     """
 
     request: Request
     settings: Settings
     username: str
-    vault_url: Optional[str]
     rest_url: str
     access_token: str
 

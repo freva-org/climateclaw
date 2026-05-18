@@ -24,6 +24,7 @@ async def user_feedback(
     feedback_index: int,
     feedback: str,
     auth: Authenticator = Depends(auth_dependency),
+    storage: ThreadStorage = Depends(get_thread_storage),
 ):
     """
     Add or remove user feedback for a specific message within a thread.
@@ -32,7 +33,7 @@ async def user_feedback(
     specific entry (by index) in an existing conversation thread.
     If `feedback` is set to `"remove"`, the feedback at the given index
     will be deleted instead.
-    Requires a valid authenticated user and vault-url.
+    Requires a valid authenticated user.
 
     Parameters:
         thread_id (str):
@@ -53,7 +54,6 @@ async def user_feedback(
         auth (Authenticator):
             Injected authentication object containing:
             - username (used as user_id)
-            - vault_url (used to resolve thread storage)
 
     Returns:
         dict:
@@ -63,7 +63,6 @@ async def user_feedback(
     Raises:
         HTTPException (422):
             - Missing thread_id
-            - Missing vault_url
             - feedback_at_index out of bounds
 
         HTTPException (404):
@@ -84,23 +83,11 @@ async def user_feedback(
             detail="Thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    if not auth.vault_url:
-        raise HTTPException(
-            status_code=422,
-            detail="Vault URL not found. Please provide a non-empty vault URL in the headers, of type String.",
-        )
-
     logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.username)
-
-    try:
-        # Thread storage
-        Storage = await get_thread_storage(vault_url=auth.vault_url)
-    except Exception:
-        raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
 
     # Load the thread content
     try:
-        content_json = await Storage.read_thread(thread_id=thread_id)
+        content_json = await storage.read_thread(thread_id=thread_id)
     except FileNotFoundError:
         logger.exception(f"Thread not found: {thread_id}")
         raise HTTPException(status_code=404, detail="Thread not found")
@@ -138,7 +125,7 @@ async def user_feedback(
     if feedback != "remove":
         try:
             await save_feedback(
-                Storage,
+                storage,
                 thread_id,
                 auth.username,
                 content_json,
@@ -168,7 +155,7 @@ async def user_feedback(
             )
         try:
             await delete_feedback(
-                Storage,
+                storage,
                 thread_id,
                 auth.username,
                 content_json,

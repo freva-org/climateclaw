@@ -1,13 +1,14 @@
 from __future__ import annotations
 from typing import List
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Request
 
 from src.services.service_factory import (
     Authenticator,
     AuthRequired,
     auth_dependency,
     get_thread_storage,
+    ThreadStorage
 )
 from src.services.streaming.stream_variants import (
     StreamVariant,
@@ -41,14 +42,15 @@ def _post_process(variants: List[StreamVariant]) -> List[SVDict]:
 @router.get("/getthread", dependencies=[AuthRequired])
 async def get_thread(
     thread_id: str | None = Query(None),
-    Auth: Authenticator = Depends(auth_dependency),
+    auth: Authenticator = Depends(auth_dependency),
+    storage: ThreadStorage = Depends(get_thread_storage),
 ):
     """
     Retrieve a Chat Thread.
 
     Returns the full conversation content of a specific thread as a list
     of JSON objects.
-    Requires a valid authenticated user and vault-url.
+    Requires a valid authenticated user.
 
     Parameters:
         thread_id (str | None):
@@ -56,8 +58,8 @@ async def get_thread(
             as a query parameter.
 
     Dependencies:
-        Auth (Authenticator): Injected authentication object containing
-            username and vault_url
+        auth (Authenticator): Injected authentication object containing
+            username
 
     Returns:
         List[dict]:
@@ -67,7 +69,6 @@ async def get_thread(
     Raises:
         HTTPException (422):
             - If `thread_id` is missing or empty.
-            - If the vault URL header is missing or empty.
         HTTPException (503):
             - If the storage backend (e.g., MongoDB) connection fails.
         HTTPException (404):
@@ -82,25 +83,12 @@ async def get_thread(
             detail="Thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    if not Auth.vault_url:
-        raise HTTPException(
-            status_code=422,
-            detail="Vault URL not found. Please provide a non-empty vault URL in the headers, of type String.",
-        )
-
-    logger = configure_logging(__name__, thread_id=thread_id, user_id=Auth.username)
-
-    try:
-        # Thread storage
-        Storage = await get_thread_storage(vault_url=Auth.vault_url)
-    except Exception as e:
-        logger.exception("Failed to connect to MongoDB", extra={"error": str(e)})
-        raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
+    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.username)
 
     try:
         messages = await get_conversation_history(
             thread_id=thread_id,
-            Storage=Storage,
+            Storage=storage,
         )
         # If the messages are None, it means there was no Storage to read from and we raise a 404.
         if not messages:
@@ -118,7 +106,7 @@ async def get_thread(
 
     logger.info(
         "Fetched thread content.",
-        extra={"thread_id": thread_id, "user_id": Auth.username},
+        extra={"thread_id": thread_id, "user_id": auth.username},
     )
 
     return content

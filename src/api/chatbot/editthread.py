@@ -5,18 +5,18 @@ from src.services.service_factory import (
     AuthRequired,
     auth_dependency,
     get_thread_storage,
+    ThreadStorage
 )
 from src.services.streaming.stream_variants import (
     from_json_to_sv,
     from_sv_to_json,
-    SVServerHint,
-    StreamVariant,
 )
 from src.services.streaming.active_conversations import (
     new_thread_id,
     check_thread_exists,
     initialize_conversation,
 )
+from src.services.storage.mongodb_storage import update_threadid_in_content
 from src.core.logging_setup import configure_logging
 
 router = APIRouter()
@@ -26,7 +26,9 @@ router = APIRouter()
 async def edit_thread(
     source_thread_id: str,
     user_index: int,
-    Auth: Authenticator = Depends(auth_dependency),
+    auth: Authenticator = Depends(auth_dependency),
+    storage: ThreadStorage = Depends(get_thread_storage),
+
 ):
     """
     Fork an existing conversation thread at a given message index.
@@ -54,7 +56,6 @@ async def edit_thread(
         Auth (Authenticator):
             Injected authentication object containing:
             - username (used as user_id)
-            - vault_url (used to resolve thread storage)
 
     Returns:
         dict:
@@ -66,7 +67,6 @@ async def edit_thread(
     Raises:
         HTTPException (422):
             - Missing `source_thread_id`
-            - Missing `vault_url`
             - `user_index` out of bounds
         HTTPException (404):
             - Source thread not found
@@ -81,8 +81,7 @@ async def edit_thread(
           `source_thread_id`. If deep branching is introduced, root tracking
           logic may require refinement.
     """
-    user_name = Auth.username
-    vault_url = Auth.vault_url
+    user_name = auth.username
 
     if not source_thread_id:
         raise HTTPException(
@@ -90,23 +89,11 @@ async def edit_thread(
             detail="Source thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    if not vault_url:
-        raise HTTPException(
-            status_code=422,
-            detail="Vault URL not found in headers",
-        )
-
     logger = configure_logging(__name__, thread_id=source_thread_id, user_id=user_name)
-
-    try:
-        # Thread storage
-        Storage = await get_thread_storage(vault_url=Auth.vault_url)
-    except Exception:
-        raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
 
     # Load original content
     try:
-        orig_json = await Storage.read_thread(thread_id=source_thread_id)
+        orig_json = await storage.read_thread(thread_id=source_thread_id)
         orig_sv = [from_json_to_sv(v) for v in orig_json]
 
         # In case the user edits an input during active stream, frontend calls /stop
@@ -122,7 +109,7 @@ async def edit_thread(
                 thread_id=source_thread_id,
                 user_id=user_name,
                 messages=orig_sv,
-                auth=Auth,
+                auth=auth,
                 logger=logger,
             )
 
@@ -162,13 +149,13 @@ async def edit_thread(
 
     new_id = await new_thread_id()
     logger.info(f"Continuing the edited thread with thread-id: {new_id}")
-    logger = configure_logging(__name__, thread_id=new_id, user_id=Auth.username)
+    logger = configure_logging(__name__, thread_id=new_id, user_id=auth.username)
     base_sv = update_threadid_in_content(new_id, base_sv, logger=logger)
 
     root_thread_id = source_thread_id
 
     try:
-        await Storage.save_thread(
+        await storage.save_thread(
             thread_id=new_id,
             user_id=user_name,
             content=base_sv,
@@ -191,19 +178,3 @@ async def edit_thread(
         "new_thread_id": new_id,
         "history": base_json,
     }
-
-
-def update_threadid_in_content(new_id: str, content: list[StreamVariant], logger):
-    if isinstance(content[0], SVServerHint):
-        content[0] = SVServerHint(data={"thread_id": new_id})
-        logger.info("Updated ServerHint with new thread-id.")
-    else:
-        if any(isinstance(c, SVServerHint) for c in content):
-            logger.exception("ServerHint is in unexpected position in thread content!")
-            raise ValueError("ServerHint is in unexpected position in thread content!")
-        else:
-            logger.info(
-                "ServerHint is missing in the thread content. It is inserted with the new thread-id."
-            )
-            content = [SVServerHint(data={"thread_id": new_id})] + content
-    return content
