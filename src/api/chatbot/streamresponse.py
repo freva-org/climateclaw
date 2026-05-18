@@ -34,6 +34,7 @@ from src.services.streaming.active_conversations import (
     get_conversation_state,
     end_and_save_conversation,
     add_to_conversation,
+    new_thread_id,
     check_thread_exists,
     cancel_tool_tasks,
 )
@@ -156,9 +157,9 @@ async def streamresponse(
         logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
 
     # Check if thread-id exists in DB
-    read_history = False
+    read_history=False
     is_new_thread = False
-    if await Storage.thread_exists(thread_id=thread_id):
+    if await storage.thread_exists(thread_id=thread_id):
         logger.info(f"Resuming conversation with thread_id: {thread_id}...")
         if not await check_thread_exists(thread_id):
             logger.info(
