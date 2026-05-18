@@ -7,6 +7,7 @@ from src.services.service_factory import (
     AuthRequired,
     auth_dependency,
     get_thread_storage,
+    ThreadStorage
 )
 from src.core.logging_setup import configure_logging
 
@@ -18,13 +19,14 @@ async def set_thread_topic(
     thread_id: str,
     topic: str,
     auth: Authenticator = Depends(auth_dependency),
+    storage: ThreadStorage = Depends(get_thread_storage),
 ):
     """
     Update Thread Topic.
 
     Updates the topic/title of a specific conversation thread belonging
     to the authenticated user.
-    Requires a valid authenticated user and vault-url.
+    Requires a valid authenticated user.
 
     Parameters:
         thread_id (str):
@@ -35,7 +37,7 @@ async def set_thread_topic(
 
     Dependencies:
         auth (Authenticator): Injected authentication object containing
-            username and vault_url
+            username
 
     Returns:
         dict:
@@ -44,7 +46,6 @@ async def set_thread_topic(
     Raises:
         HTTPException (422):
             - If `thread_id` is missing or empty.
-            - If the vault URL header is missing or empty.
         HTTPException (503):
             - If the storage backend (e.g., MongoDB) connection fails.
         HTTPException (500):
@@ -56,30 +57,17 @@ async def set_thread_topic(
             detail="Thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    if not auth.vault_url:
-        raise HTTPException(
-            status_code=422,
-            detail="Vault URL not found. Please provide a non-empty vault URL in the headers, of type String.",
-        )
-
     logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.username)
 
     try:
-        # Thread storage
-        Storage = await get_thread_storage(vault_url=auth.vault_url)
-    except Exception as e:
-        logger.exception("Failed to connect to MongoDB", extra={"error": str(e)})
-        raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
-
-    try:
-        thread_owner = await Storage.get_user_id_for_thread(thread_id)
+        thread_owner = await storage.get_user_id_for_thread(thread_id)
         # Only allow the update of the thread topic if the user is the owner of the thread
         if thread_owner and thread_owner != auth.username:
             raise HTTPException(
                 status_code=403,
                 detail="You are not the owner of this thread.",
             )
-        await Storage.update_thread_topic(thread_id, topic)
+        await storage.update_thread_topic(thread_id, topic)
         logger.info(
             "Updated thread topic",
             extra={"thread_id": thread_id, "user_id": auth.username},
