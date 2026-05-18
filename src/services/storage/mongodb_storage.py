@@ -41,7 +41,7 @@ class ThreadStorage:
         client = AsyncMongoClient(mongo_uri, connectTimeoutMS=30000)
         db = client[MONGODB_DATABASE_NAME]
 
-        storage = cls(db=db)
+        storage = cls(client=client, db=db)
 
         coll = db[MONGODB_COLLECTION_NAME]
         await coll.create_index("thread_id", unique=True)
