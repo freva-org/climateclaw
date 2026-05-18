@@ -20,3 +20,4 @@ uv.lock
 mongo-data/
 cache/
 logs/
+build.log
