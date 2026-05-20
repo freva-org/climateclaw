@@ -61,7 +61,13 @@ jobs:
         run: uv sync --group dev --group test --group type
 
       - name: Start dev stack
-        run: ./dev.sh up code-server web-search-server -d --wait --build --remove-orphans
+        run: |
+          ./dev.sh up code-server web-search-server -d --wait --build --remove-orphans || {
+            docker compose ps -a
+            docker compose logs web-search-server
+            docker compose logs code-server
+            exit 1
+          }
 
       - name: Run mypy
         run: uv run --group type mypy
@@ -93,7 +99,14 @@ jobs:
           EOF
 
       - name: Start production stack
-        run: docker compose up freva-gpt code-server web-search-server -d --wait --build --remove-orphans
+        run: |
+          docker compose up freva-gpt code-server web-search-server -d --wait --build --remove-orphans || {
+            docker compose ps -a
+            docker compose logs freva-gpt
+            docker compose logs code-server
+            docker compose logs web-search-server
+            exit 1
+          }
 
       - name: Show running services
         run: docker compose ps
