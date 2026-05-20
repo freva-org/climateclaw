@@ -54,6 +54,7 @@ jobs:
           FREVAGPT_FILE_LOGGING=0
           FREVAGPT_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           FREVAGPT_MCP_REQUEST_TIMEOUT_SEC=20
+          FREVAGPT_MONGODB_USER=ci-user
           EOF
 
       - name: Sync dependencies
@@ -87,6 +88,8 @@ jobs:
           cat > .env <<'EOF'
           FREVAGPT_INSTANCE_NAME=ci
           FREVAGPT_FILE_LOGGING=0
+          FREVAGPT_CACHE_PATH=/ci-path/cache
+          FREVAGPT_MONGODB_USER=ci-user
           EOF
 
       - name: Start production stack
