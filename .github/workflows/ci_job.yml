@@ -54,7 +54,10 @@ jobs:
           FREVAGPT_FILE_LOGGING=0
           FREVAGPT_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           FREVAGPT_MCP_REQUEST_TIMEOUT_SEC=20
+          FREVAGPT_CACHE_PATH=/ci-path/cache
           FREVAGPT_MONGODB_USER=ci-user
+          FREVAGPT_MONGODB_PASSWORD=ci-psswrd
+          FREVAGPT_MONGODB_DATABASE_NAME=ci-db
           EOF
 
       - name: Sync dependencies
@@ -96,6 +99,8 @@ jobs:
           FREVAGPT_FILE_LOGGING=0
           FREVAGPT_CACHE_PATH=/ci-path/cache
           FREVAGPT_MONGODB_USER=ci-user
+          FREVAGPT_MONGODB_PASSWORD=ci-psswrd
+          FREVAGPT_MONGODB_DATABASE_NAME=ci-db
           EOF
 
       - name: Start production stack
