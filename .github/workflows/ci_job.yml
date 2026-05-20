@@ -106,7 +106,7 @@ jobs:
 
       - name: Start production stack
         run: |
-          docker compose up freva-gpt code-server web-search-server -d --wait --build --remove-orphans || {
+          docker compose up freva-gpt code-server web-search-server mongodb -d --wait --build --remove-orphans || {
             docker compose ps -a
             docker compose logs freva-gpt
             docker compose logs code-server
