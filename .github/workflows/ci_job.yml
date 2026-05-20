@@ -101,6 +101,7 @@ jobs:
           FREVAGPT_MONGODB_USER=ci-user
           FREVAGPT_MONGODB_PASSWORD=ci-psswrd
           FREVAGPT_MONGODB_DATABASE_NAME=ci-db
+          FREVAGPT_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           EOF
 
       - name: Start production stack
