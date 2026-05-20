@@ -33,7 +33,7 @@ RUN set -eux; \
 ENV PATH="/opt/conda/bin:$PATH"
 
 # Create environment
-RUN conda create --name env "python>=3.13"
+RUN conda create --name env "python>=3.13" pip uv
 RUN conda init bash
 RUN echo "conda activate env" >> ~/.bashrc
 

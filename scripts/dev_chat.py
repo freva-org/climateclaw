@@ -11,7 +11,6 @@ os.environ["FREVAGPT_LITE_LLM_ADDRESS"] = "http://localhost:4000"
 os.environ["FREVAGPT_RAG_SERVER_URL"] = "http://localhost:8050"
 os.environ["FREVAGPT_CODE_SERVER_URL"] = "http://localhost:8051"
 os.environ["FREVAGPT_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
-os.environ["FREVAGPT_MONGODB_URI_DEV"] = "mongodb://mongo:secret@localhost:27017"
 
 import asyncio
 import logging
@@ -21,7 +20,9 @@ from src.api.chatbot.streamresponse import _sse_data
 from src.core.logging_setup import configure_logging
 from src.core.prompting import get_entire_prompt
 from src.core.settings import get_settings
-from src.services.service_factory import DevAuthenticator, get_thread_storage
+from src.services.service_factory import DevAuthenticator
+from src.services.storage.helpers import create_dir_at_cache
+from src.services.storage.mongodb_storage import ThreadStorage
 from src.services.streaming.active_conversations import (
     end_and_save_conversation,
     new_thread_id,
@@ -146,12 +147,8 @@ async def main() -> None:
         read_history = True
 
     Auth = await DevAuthenticator.build(None)
-    if Auth.vault_url:
-        Storage = await get_thread_storage(
-            user_name=USER_ID, thread_id=thread_id, vault_url=Auth.vault_url
-        )
-    else:
-        raise ValueError("Please set the vault_url value!")
+    Storage = await ThreadStorage.create()
+    create_dir_at_cache(USER_ID, thread_id)
 
     system_prompt = get_entire_prompt(USER_ID, thread_id, MODEL)
 

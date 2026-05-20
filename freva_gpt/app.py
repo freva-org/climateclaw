@@ -11,6 +11,7 @@ from .api import chatbot, static
 from .core.logging_setup import configure_logging
 from .core.runtime_checks import run_startup_checks
 from .core.settings import get_settings
+from .services.storage.mongodb_storage import ThreadStorage
 from .services.streaming.active_conversations import cleanup_idle
 
 settings = get_settings()
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI):
     # Startup (was @app.on_event("startup"))
     configure_logging()
     run_startup_checks(get_settings())
+    app.state.thread_storage = await ThreadStorage.create()
 
     async def periodic_cleanup_task():
         while True:
@@ -47,8 +49,9 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        # Shutdown (was @app.on_event("shutdown"))
+        # Shutdown
         app.state.periodic_cleanup.cancel()
+        await app.state.thread_storage.close()
 
 
 app = FastAPI(

@@ -13,13 +13,13 @@ from freva_gpt.services.streaming.stream_variants import (
 
 
 @pytest.mark.asyncio
-async def test_save_and_read_thread(monkeypatch, patch_db, GOOD_HEADERS):
+async def test_save_and_read_thread(monkeypatch, patch_mongodb, GOOD_HEADERS):
     async def fake_topic(content):
         return "topic"
 
     monkeypatch.setattr(mongo_storage, "summarize_topic", fake_topic, raising=True)
 
-    storage = await ThreadStorage.create(vault_url=GOOD_HEADERS["x-freva-vault-url"])
+    storage = await ThreadStorage.create()
 
     tid = "T123"
     user_id = "alice"
@@ -45,7 +45,7 @@ async def test_save_and_read_thread(monkeypatch, patch_db, GOOD_HEADERS):
         append_to_existing=True,
     )
 
-    coll = patch_db[MONGODB_COLLECTION_NAME]
+    coll = patch_mongodb[MONGODB_COLLECTION_NAME]
     assert tid in coll.storage
 
     # Read back as wire variants (dicts)
@@ -54,3 +54,10 @@ async def test_save_and_read_thread(monkeypatch, patch_db, GOOD_HEADERS):
     # Prompt, User, Assistant, StreamEnd (no unexpected extra StreamEnd)
     assert kinds == ["Prompt", "User", "Assistant", "StreamEnd"]
     assert coll.storage[tid]["content"] == conv
+
+    # Check the user_id is stored correctly
+    assert (
+        coll.storage[tid]["user_id"]
+        == user_id
+        == await storage.get_user_id_for_thread(tid)
+    )

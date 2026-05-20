@@ -13,9 +13,11 @@ from freva_gpt.core.prompting import get_entire_prompt
 from freva_gpt.services.service_factory import (
     Authenticator,
     AuthRequired,
+    ThreadStorage,
     auth_dependency,
     get_thread_storage,
 )
+from freva_gpt.services.storage.helpers import create_dir_at_cache
 from freva_gpt.services.streaming.active_conversations import (
     ConversationState,
     add_to_conversation,
@@ -63,7 +65,8 @@ async def streamresponse(
     thread_id: str | None = Query(None),
     input: str | None = Query(None),
     chatbot: str | None = Query(None),
-    Auth: Authenticator = Depends(auth_dependency),
+    auth: Authenticator = Depends(auth_dependency),
+    storage: ThreadStorage = Depends(get_thread_storage),
 ):
     """
     Stream Chatbot Response.
@@ -71,7 +74,7 @@ async def streamresponse(
     Streams a chatbot response for a given user input using Server-Sent
     Events (NDJSON format). Acts as a HTTP wrapper delegating the actual
     orchestration and model execution to the streaming backend.
-    Requires a valid authenticated user and vault-url.
+    Requires a valid authenticated user.
 
     Behavior:
         - Creates a new thread if `thread_id` is not provided.
@@ -95,7 +98,7 @@ async def streamresponse(
 
     Dependencies:
         Auth (Authenticator): Injected authentication object containing
-            username and vault_url
+            username
 
     Returns:
         StreamingResponse:
@@ -108,7 +111,6 @@ async def streamresponse(
             - If the provided `thread_id` is already active and streaming.
         HTTPException (422):
             - If the user input is missing or empty.
-            - If the vault URL header is missing or empty.
             - If the specified chatbot model is not found in the available chatbots.
         HTTPException (503):
             - If the storage backend (e.g., MongoDB) connection fails.
@@ -155,26 +157,21 @@ async def streamresponse(
             detail=f"Chatbot model '{model_name}' not found. Please provide a valid model name from the available chatbots: {available}.",
         )
 
-    user_name = Auth.username
+    user_name = auth.username
     logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
 
-    if not Auth.vault_url:
-        raise HTTPException(
-            status_code=422,
-            detail="Vault URL not found. Please provide a non-empty vault URL in the headers, of type String.",
-        )
+    create_dir_at_cache(user_name, thread_id)
 
-    try:
-        # Get thread storage
-        Storage = await get_thread_storage(
-            vault_url=Auth.vault_url, user_name=user_name, thread_id=thread_id
+    # If the thread does not belong to this user, fork it and continue with a different thread_id
+    thread_owner = await storage.get_user_id_for_thread(thread_id)
+    if thread_owner and thread_owner != user_name:
+        old_thread_id = thread_id
+        thread_id = await new_thread_id()
+        logger.info(
+            f"Thread {old_thread_id} belongs to a different user ({thread_owner}). Forking the thread for the current user with new thread_id: {thread_id}..."
         )
-    except Exception as e:
-        logger.exception(
-            "Failed to connect to MongoDB",
-            extra={"thread_id": thread_id, "user_id": user_name, "error": str(e)},
-        )
-        raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
+        await storage.fork_thread(old_thread_id, thread_id, user_name)
+        logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
 
     system_prompt = get_entire_prompt(user_name, thread_id, model_name)
 
@@ -191,8 +188,8 @@ async def streamresponse(
         await prepare_for_stream(
             thread_id=thread_id,
             user_id=user_name,
-            Auth=Auth,
-            Storage=Storage,
+            Auth=auth,
+            Storage=storage,
             read_history=read_history,
             logger=logger,
         )
@@ -240,14 +237,14 @@ async def streamresponse(
                     for data in _sse_data(from_sv_to_json(end_v)):
                         yield data
                     await cancel_tool_tasks(thread_id)
-                    await end_and_save_conversation(thread_id, Storage)
+                    await end_and_save_conversation(thread_id, storage)
                     logger.info(
                         "Stopped streaming after client request",
                         extra={"thread_id": thread_id, "user_id": user_name},
                     )
                     return
 
-        await end_and_save_conversation(thread_id, Storage)
+        await end_and_save_conversation(thread_id, storage)
         logger.info(
             "Completed streaming and saved conversation",
             extra={"thread_id": thread_id, "user_id": user_name},

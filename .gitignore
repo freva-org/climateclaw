@@ -22,6 +22,7 @@ htmlcov/
 .python-version
 uv.lock
 
-threads/
+mongo-data/
 cache/
 logs/
+build.log

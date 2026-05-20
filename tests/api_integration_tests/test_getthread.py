@@ -5,9 +5,6 @@ import pytest
 async def test_getthread_returns_404_when_thread_missing(
     stub_resp,
     client,
-    patch_db,
-    patch_mongo_uri,
-    patch_mcp_manager,
     GOOD_HEADERS,
     monkeypatch,
 ):
@@ -36,8 +33,6 @@ async def test_getthread_returns_404_when_thread_missing(
 async def test_getthread_returns_500_when_history_invalid(
     stub_resp,
     client,
-    patch_db,
-    patch_mongo_uri,
     GOOD_HEADERS,
     monkeypatch,
 ):

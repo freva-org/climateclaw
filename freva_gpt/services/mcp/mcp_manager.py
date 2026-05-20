@@ -217,14 +217,10 @@ class McpManager:
 # ──────────────────── Helper functions ──────────────────────────────
 
 
-async def get_mcp_headers(
-    auth: Authenticator, cache: os.PathLike, logger=None
+def get_mcp_headers(
+    auth: Authenticator, cache: os.PathLike
 ) -> dict[str, dict[str, str | None]]:
-    mongodb_uri = (
-        await get_mongodb_uri(auth.vault_url)
-        if not settings.DEV
-        else settings.MONGODB_URI_DEV
-    )
+    mongodb_uri = get_mongodb_uri()
     access_token = auth.access_token
 
     auth_header = f"Bearer {access_token}" if access_token else None

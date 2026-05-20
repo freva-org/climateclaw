@@ -5,8 +5,6 @@ import pytest
 async def test_streamresponse_returns_500_on_prepare_failure(
     stub_resp,
     client,
-    patch_db,
-    patch_mongo_uri,
     GOOD_HEADERS,
     monkeypatch,
 ):

@@ -2,7 +2,7 @@ import asyncio
 import random
 import string
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 
 from freva_gpt.core.logging_setup import configure_logging
@@ -83,8 +83,8 @@ async def initialize_conversation(
     """
     log = logger or configure_logging(__name__, thread_id=thread_id, user_id=user_id)
     now = datetime.now(UTC)
-    # if auth:
-    mcp_mgr = await get_mcp_manager(authenticator=auth, thread_id=thread_id)
+
+    mcp_mgr = get_mcp_manager(authenticator=auth, thread_id=thread_id)
 
     # Precreate the conversation object to reduce time spent under lock
     maybe_new_conv = ActiveConversation(
@@ -335,7 +335,7 @@ async def save_feedback_to_registry(thread_id: str, f_ind: int, feedback: str) -
         conv = Registry.get(thread_id)
         if conv:
             msg = conv.messages
-            conv.last_activity = datetime.now(timezone.utc)
+            conv.last_activity = datetime.now(UTC)
             msg_ind = from_sv_to_json(msg[f_ind])
             if feedback != "remove":
                 msg_ind.update({"feedback": feedback})

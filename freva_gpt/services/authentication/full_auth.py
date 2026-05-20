@@ -31,9 +31,6 @@ class FullAuthenticator(Authenticator):
             "x-freva-user-token"
         )
 
-        # Checking vault_url. If it is not found, the exception is raised in the endpoints, where this is a must-have
-        vault_url: str = headers.get("x-freva-vault-url", "")
-
         if header_val:
             # -> Bearer flow
             try:
@@ -59,7 +56,6 @@ class FullAuthenticator(Authenticator):
                     request=request,
                     settings=settings,
                     username=username,
-                    vault_url=vault_url,
                     rest_url=rest_url,
                     access_token=access_token,
                 )
@@ -91,28 +87,28 @@ def bearer_token_from_header(header_val: str) -> str:
     return header_val[len("Bearer ") :]
 
 
-def _normalize_systemuser_path(rest_url: str) -> str:
+def _normalize_userinfo_path(rest_url: str) -> str:
     """
-    The entire url ending is "/api/freva-nextgen/auth/v2/systemuser",
+    The entire url ending is "/api/freva-nextgen/auth/v2/userinfo",
     But it sometimes doesn't send the api and nextgen part, so we need to add it ourselves.
     """
-    if rest_url.endswith("/api/freva-nextgen/auth/v2/systemuser"):
+    if rest_url.endswith("/api/freva-nextgen/auth/v2/userinfo"):
         return ""
     if rest_url.endswith("/api/freva-nextgen/"):
-        return "auth/v2/systemuser"
+        return "auth/v2/userinfo"
     if rest_url.endswith("/api/freva-nextgen"):
-        return "/auth/v2/systemuser"
-    return "/api/freva-nextgen/auth/v2/systemuser"
+        return "/auth/v2/userinfo"
+    return "/api/freva-nextgen/auth/v2/userinfo"
 
 
 async def get_username_from_token(token: str, rest_url: str, logger=None) -> str:
     """
-    Calls the token-check endpoint at <rest_url>/api/freva-nextgen/auth/v2/systemuser
+    Calls the token-check endpoint at <rest_url>/api/freva-nextgen/auth/v2/userinfo
     and returns the username (pw_name).
     """
     log = logger or configure_logging(__name__)
 
-    path = _normalize_systemuser_path(rest_url)
+    path = _normalize_userinfo_path(rest_url)
     url = f"{rest_url}{path}"
     log.debug("Token check URL: %s", url)
 
@@ -120,14 +116,14 @@ async def get_username_from_token(token: str, rest_url: str, logger=None) -> str
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
     except Exception as e:
-        # ServiceUnavailable on request error to vault/rest
-        log.error("Error sending request to systemuser endpoint: %s", e)
+        # ServiceUnavailable on request error to rest
+        log.error("Error sending request to userinfo endpoint: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Error sending token check request, is the URL correct?",
         )
 
-    # on any non-2xx from systemuser, return 401 immediately (don’t parse JSON)
+    # on any non-2xx from userinfo, return 401 immediately (don’t parse JSON)
     if not (200 <= resp.status_code < 300):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

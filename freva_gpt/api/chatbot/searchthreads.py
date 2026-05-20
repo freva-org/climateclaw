@@ -20,13 +20,14 @@ async def search_threads(
     page: int = 0,
     num_threads: int = 20,
     auth: Authenticator = Depends(auth_dependency),
+    storage: ThreadStorage = Depends(get_thread_storage),
 ):
     """
     Search User Threads.
 
     Searches the authenticated user's conversation threads using a query
     string. Supports only topic-based search.
-    Requires a valid authenticated user and vault-url.
+    Requires a valid authenticated user.
 
     Parameters:
         query (str):
@@ -38,7 +39,7 @@ async def search_threads(
 
     Dependencies:
         auth (Authenticator): Injected authentication object containing
-            username and vault_url
+            username
 
     Returns:
         List[Any]:
@@ -54,7 +55,6 @@ async def search_threads(
     Raises:
         HTTPException (422):
             - If the authenticated user ID is missing.
-            - If the vault URL header is missing or empty.
             - If the query parameter is missing or empty.
         HTTPException (503):
             - If the storage backend (e.g., MongoDB) connection fails.
@@ -69,30 +69,17 @@ async def search_threads(
             detail="Missing user_id (auth).",
         )
 
-    if not auth.vault_url:
-        raise HTTPException(
-            status_code=422,
-            detail="Vault URL not found. Please provide a non-empty vault URL in the headers, of type String.",
-        )
-
     if not query:
         raise HTTPException(
             status_code=422,
             detail="Missing query parameter.",
         )
 
-    try:
-        # Thread storage
-        Storage: ThreadStorage = await get_thread_storage(vault_url=auth.vault_url)
-    except Exception as e:
-        logger.exception("Failed to connect to MongoDB: %s", e)
-        raise HTTPException(status_code=503, detail="Failed to connect to MongoDB.")
-
     num_threads = num_threads or 20  # default to 20 if not provided
     page = page or 0  # default to 0 if not provided
 
     try:
-        total_num_threads, threads = await Storage.query_by_topic(
+        total_num_threads, threads = await storage.query_by_topic(
             auth.username, query, num_threads, page
         )
     except Exception as e:
