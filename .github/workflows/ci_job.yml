@@ -111,6 +111,7 @@ jobs:
             docker compose logs freva-gpt
             docker compose logs code-server
             docker compose logs web-search-server
+            docker compose logs mongodb
             exit 1
           }
 
