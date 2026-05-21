@@ -99,15 +99,11 @@ services:
     networks:
       - freva-gpt
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "mongosh \"mongodb://$${API_MONGO_USER}:$${API_MONGO_PASSWORD}@127.0.0.1:27017\" --quiet --eval 'db.runCommand({ ping: 1 }).ok' | grep -q 1"
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 10s
+      test: ["CMD", "healthchecks", "-s", "mongo"]
+      interval: 35s
+      timeout: 2s
+      retries: 3
+      start_period: 15s
 
 networks:
   freva-gpt:
