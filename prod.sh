@@ -90,7 +90,7 @@ done
 
 if [ "$do_build" = true ]; then
     echo "[prod.sh] Building images ..."
-    ${COMPOSE} -f "${SCALED_FILE}" build
+    ${COMPOSE} -f "${COMPOSE_FILE}" build
 fi
 
 # --- Start ---
