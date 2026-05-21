@@ -21,6 +21,9 @@ services:
       timeout: 3s
       retries: 20
       start_period: 10s
+    depends_on:
+      mongodb:
+        condition: service_healthy
   code-server:
     image: code-server-${FREVAGPT_INSTANCE_NAME}
     build:
