@@ -145,9 +145,12 @@ async def streamresponse(
 
     create_dir_at_cache(user_name, thread_id)
 
+    is_new_thread = False
+
     # If the thread does not belong to this user, fork it and continue with a different thread_id
     thread_owner = await storage.get_user_id_for_thread(thread_id)
     if thread_owner and thread_owner != user_name:
+        is_new_thread = True
         old_thread_id = thread_id
         thread_id = await new_thread_id()
         logger.info(
@@ -158,7 +161,6 @@ async def streamresponse(
 
     # Check if thread-id exists in DB
     read_history=False
-    is_new_thread = False
     if await storage.thread_exists(thread_id=thread_id):
         logger.info(f"Resuming conversation with thread_id: {thread_id}...")
         if not await check_thread_exists(thread_id):
