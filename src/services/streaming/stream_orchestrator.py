@@ -65,6 +65,7 @@ async def stream_with_tools(
     messages: List[Dict[str, Any]],  # system_prompt
     acomplete_func=acomplete,
     stream_state: StreamState,
+    storage: ThreadStorage,
     logger=None,
 ) -> AsyncIterator[StreamVariant]:
     log = logger or DEFAULT_LOGGER
@@ -136,7 +137,7 @@ async def stream_with_tools(
 
     if accumulated_asst_text:
         asst_v = SVAssistant(text="".join(accumulated_asst_text))
-        await add_to_conversation(thread_id, [asst_v])
+        await add_to_conversation(thread_id, [asst_v], storage=storage)
 
     # If no tool calls, wrap up everything and return
     if not tool_calls:
@@ -160,6 +161,8 @@ async def stream_with_tools(
             tool_v = SVToolCall(arg=args_txt, id=id, tool_name=name)
             # code is already streamed, we stream the other tool calls here too
             yield tool_v 
+
+        await add_to_conversation(thread_id, [tool_v], storage=storage)
 
         async def run_with_heartbeat():
             """Run the tool while periodically sending heartbeats."""
@@ -212,10 +215,6 @@ async def stream_with_tools(
             log.exception("Tool %s failed", name)
             result_text = json.dumps({"error": str(e)})
 
-        # We collect tool input and output as Stream Variants and append to thread
-        tc_variants: List[StreamVariant] = []
-        tc_variants.append(tool_v)
-
         tool_out_v: List[StreamVariant] = []
         tool_msgs: List[Dict[str, Any]] = []
         # Parsing tool call output as StreamVariants and messages to model
@@ -229,8 +228,7 @@ async def stream_with_tools(
             else:
                 yield r  # Streaming the result to endpoint
 
-        tc_variants.extend(tool_out_v)
-        await add_to_conversation(thread_id, tc_variants)
+        await add_to_conversation(thread_id, tool_out_v, storage=storage)
 
         if tool_msgs:
             messages.extend(tool_msgs)
@@ -247,6 +245,7 @@ async def run_stream(
     thread_id: str,
     user_input: str,
     system_prompt: List[Dict[str, Any]],
+    storage: ThreadStorage,
     logger=None,
 ) -> AsyncGenerator[StreamVariant, None]:
     """
@@ -256,7 +255,7 @@ async def run_stream(
 
     # Append user content
     user_v = SVUser(text=user_input or "")
-    await add_to_conversation(thread_id, [user_v])
+    await add_to_conversation(thread_id, [user_v], storage=storage)
 
     stream_state = StreamState()
 
@@ -272,6 +271,7 @@ async def run_stream(
                 model=model,
                 acomplete_func=acomplete,
                 stream_state=stream_state,
+                storage=storage,
                 logger=log,
             ):
                 yield piece
@@ -284,7 +284,7 @@ async def run_stream(
             log.exception("Stream error: %s", e)
             err_v = SVServerError(message=str(e))
             end_v = SVStreamEnd(message="Stream ended with an error.")
-            await add_to_conversation(thread_id, [err_v])
+            await add_to_conversation(thread_id, [err_v], storage=storage)
             stream_state.finished = True
             yield err_v
             yield end_v
