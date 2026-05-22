@@ -148,7 +148,7 @@ async def add_to_conversation(
 
     # Save conversation
     await storage.save_thread(
-        conv.thread_id, conv.user_id, conv.messages, append_to_existing=False
+        conv.thread_id, conv.user_id, conv.messages
     )
     return conv
 
@@ -216,7 +216,7 @@ async def end_and_save_conversation(
         conv.last_activity = datetime.now(timezone.utc)
         # Save conversation
         await Storage.save_thread(
-            conv.thread_id, conv.user_id, conv.messages, append_to_existing=False
+            conv.thread_id, conv.user_id, conv.messages
         )
         return True
 
