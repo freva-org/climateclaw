@@ -214,7 +214,7 @@ async def streamresponse(
             hint_v = SVServerHint(data={"thread_id": thread_id})
             for data in _sse_data(from_sv_to_json(hint_v)):
                 yield data
-            await add_to_conversation(thread_id, [hint_v])
+            await add_to_conversation(thread_id, [hint_v], storage=storage)
 
         last_check = time.monotonic()
         async for variant in run_stream(
@@ -222,6 +222,7 @@ async def streamresponse(
             thread_id=thread_id,
             user_input=input,
             system_prompt=system_prompt,
+            storage=storage,
             logger=logger,
         ):
             for data in _sse_data(from_sv_to_json(variant)):

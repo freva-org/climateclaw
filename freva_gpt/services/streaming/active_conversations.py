@@ -2,7 +2,7 @@ import asyncio
 import random
 import string
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from freva_gpt.core.logging_setup import configure_logging
@@ -37,7 +37,7 @@ class ActiveConversation:
     mcp_manager: McpManager | None
     tool_tasks: set[asyncio.Task] = field(default_factory=set)
     messages: list[StreamVariant] = field(default_factory=list)
-    last_activity: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 Registry: dict[str, ActiveConversation] = {}
@@ -82,7 +82,7 @@ async def initialize_conversation(
     and the last_activity timestamp will be refreshed, but the existing conversation will stay unchanged.
     """
     log = logger or configure_logging(__name__, thread_id=thread_id, user_id=user_id)
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
 
     mcp_mgr = get_mcp_manager(authenticator=auth, thread_id=thread_id)
 
@@ -112,7 +112,7 @@ async def initialize_conversation(
             log.debug("Conversation was found in the Registry. Starting streaming...")
 
             conv.state = ConversationState.STREAMING
-            conv.last_activity = datetime.now(UTC)
+            conv.last_activity = datetime.now(timezone.utc)
             return  # Don't continue with initialization if conversation already exists; we just update the state and timestamp.
 
         # In order to not have any race conditions, we keep the lock until we've written to the registry
@@ -136,6 +136,7 @@ async def initialize_conversation(
 async def add_to_conversation(
     thread_id: str,
     messages: list[StreamVariant],
+    storage: ThreadStorage,
 ) -> ActiveConversation:
     """
     Check if an ActiveConversation exists for thread_id and append new variants.
@@ -146,8 +147,13 @@ async def add_to_conversation(
         if conv is None:
             raise ValueError("Conversation does not exist. Please initialize first!")
         conv.messages.extend(messages)
-        conv.last_activity = datetime.now(UTC)
-        return conv
+        conv.last_activity = datetime.now(timezone.utc)
+
+    # Save conversation
+    await storage.save_thread(
+        conv.thread_id, conv.user_id, conv.messages
+    )
+    return conv
 
 
 async def get_conversation_state(thread_id: str) -> ConversationState | None:
@@ -191,7 +197,7 @@ async def request_stop(thread_id: str) -> bool:
         if conv is None:
             return False
         conv.state = ConversationState.STOPPING
-        conv.last_activity = datetime.now(UTC)
+        conv.last_activity = datetime.now(timezone.utc)
         return True
 
 
@@ -210,10 +216,10 @@ async def end_and_save_conversation(
             return False
         # End conversation
         conv.state = ConversationState.ENDED
-        conv.last_activity = datetime.now(UTC)
+        conv.last_activity = datetime.now(timezone.utc)
         # Save conversation
         await Storage.save_thread(
-            conv.thread_id, conv.user_id, conv.messages, append_to_existing=False
+            conv.thread_id, conv.user_id, conv.messages
         )
         return True
 
@@ -335,7 +341,7 @@ async def save_feedback_to_registry(thread_id: str, f_ind: int, feedback: str) -
         conv = Registry.get(thread_id)
         if conv:
             msg = conv.messages
-            conv.last_activity = datetime.now(UTC)
+            conv.last_activity = datetime.now(timezone.utc)
             msg_ind = from_sv_to_json(msg[f_ind])
             if feedback != "remove":
                 msg_ind.update({"feedback": feedback})
@@ -354,7 +360,7 @@ async def cleanup_idle(
     Each removed conversation is persisted via `end_and_save_conversation`.
     Returns a list of evicted thread_ids.
     """
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     to_evict: list[ActiveConversation] = []
     evicted_ids: list[str] = []
 

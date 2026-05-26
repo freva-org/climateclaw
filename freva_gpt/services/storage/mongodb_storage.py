@@ -83,6 +83,15 @@ class ThreadStorage:
                 merged_sv: list[StreamVariant] = existing_sv + content_cleaned  # type: ignore[no-redef]
             # topic: keep existing if present
             topic = existing.get("topic", "") or None
+            if not root_thread_id:
+                root_thread_id = existing.get("root_thread_id")
+                parent_thread_id = existing.get("parent_thread_id")
+                fork_from_index = existing.get("fork_from_index")
+        else:
+            if not root_thread_id:
+                root_thread_id = thread_id
+                parent_thread_id = thread_id
+                fork_from_index = 0
 
         # compute topic if missing
         if not topic or topic == "No topic yet":
@@ -95,9 +104,9 @@ class ThreadStorage:
             "date": datetime.now(UTC),
             "topic": topic,
             "content": all_stream,
-            "root_thread_id": thread_id or root_thread_id,
-            "parent_thread_id": thread_id or parent_thread_id,
-            "fork_from_index": 0 or fork_from_index,
+            "root_thread_id": root_thread_id,
+            "parent_thread_id": parent_thread_id,
+            "fork_from_index": fork_from_index,
         }
 
         if existing:
@@ -204,6 +213,18 @@ class ThreadStorage:
                 "user_id": user_id,
             },
         )
+
+    async def get_root_id_for_thread(self, thread_id: str) -> Optional[str]:
+        logger = configure_logging(__name__, thread_id=thread_id)
+        coll = self.db[MONGODB_COLLECTION_NAME]
+        doc = await coll.find_one({"thread_id": thread_id})
+        if not doc:
+            logger.warning(
+                "Thread not found in MongoDB when fetching root_thread_id",
+                extra={"thread_id": thread_id},
+            )
+            return None
+        return doc.get("root_thread_id")
 
     async def update_thread_topic(self, thread_id: str, topic: str):
         logger = configure_logging(__name__, thread_id=thread_id)
