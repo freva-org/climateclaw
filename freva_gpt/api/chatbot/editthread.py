@@ -151,7 +151,10 @@ async def edit_thread(
     logger = configure_logging(__name__, thread_id=new_id, user_id=auth.username)
     base_sv = update_threadid_in_content(new_id, base_sv, logger=logger)
 
-    root_thread_id = await storage.get_root_id_for_thread(thread_id=source_thread_id)
+    root_thread_id = (
+        await storage.get_root_id_for_thread(thread_id=source_thread_id)
+        or source_thread_id
+    )
 
     try:
         await storage.save_thread(
