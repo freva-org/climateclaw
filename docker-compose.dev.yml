@@ -18,6 +18,10 @@ services:
       - ./logs/:/app/logs
     networks: 
       - freva-gpt
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
   rag:
     image: rag-server-${FREVAGPT_INSTANCE_NAME}
     build:
@@ -34,6 +38,7 @@ services:
       - ./logs/:/app/logs
     networks: 
       - freva-gpt
+
   code:
     image: code-server-${FREVAGPT_INSTANCE_NAME}
     build:
@@ -52,6 +57,7 @@ services:
       - ./logs/:/app/logs
     networks: 
       - freva-gpt
+
   web-search:
     image: web-search-server-${FREVAGPT_INSTANCE_NAME}
     build:
@@ -69,6 +75,7 @@ services:
       - freva-gpt
     volumes:
       - ./logs/:/app/logs
+
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     hostname: litellm-instance-${FREVAGPT_INSTANCE_NAME}
@@ -85,6 +92,7 @@ services:
     hostname: ollama-instance-${FREVAGPT_INSTANCE_NAME}
     networks: 
       - freva-gpt
+
   mongodb:
     networks:
       - freva-gpt
@@ -98,14 +106,12 @@ services:
       - "27017:27017"
     volumes:
       - ./mongo-data:/data/db
-    tty: True
     healthcheck:
       test: ["CMD", "healthchecks", "-s", "mongo"]
       interval: 35s
       timeout: 2s
       retries: 3
       start_period: 15s
-
 
   freva-db:
     networks:
@@ -123,26 +129,6 @@ services:
       - MYSQL_ROOT_PASSWORD=test_password_please_ignore
     ports:
       - "3306:3306"
-
-  freva-vault:
-    networks:
-      - freva-gpt
-    image: ghcr.io/freva-org/freva-vault:latest
-    hostname: freva-vault
-    container_name: freva-vault
-    cap_add:
-      - IPC_LOCK
-      - SYS_NICE
-    environment:
-      - ROOT_PW=T3st
-      - KEY_FILE=/vault/file/keys
-      - VAULT_ADD_VAR_DB_DB=frevadb
-      - VAULT_ADD_VAR_DB_HOST=freva-db
-      - VAULT_ADD_VAR_DB_PASSWD=T3st
-      - VAULT_ADD_VAR_MONGO_DB=search_stats
-      - VAULT_ADD_VAR_MONGO_PASSWD=secret
-      - VAULT_ADD_VAR_MONGO_USER=mongo
-      - VAULT_ADD_VAR_MONGO_URL='mongodb://mongo:secret@freva-mongo:27017'
 
   freva-web:
     networks:
@@ -275,7 +261,7 @@ services:
         curl -fsSL \
           "https://raw.githubusercontent.com/freva-org/freva-nextgen/refs/heads/main/dev-env/create-user.sh"\
           -o create_user.sh &&
-        sh create_user.sh
+        sh create_user.sh || true
       '
     networks:
       - freva-gpt
