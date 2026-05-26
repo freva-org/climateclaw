@@ -150,9 +150,7 @@ async def add_to_conversation(
         conv.last_activity = datetime.now(timezone.utc)
 
     # Save conversation
-    await storage.save_thread(
-        conv.thread_id, conv.user_id, conv.messages
-    )
+    await storage.save_thread(conv.thread_id, conv.user_id, conv.messages)
     return conv
 
 
@@ -218,9 +216,7 @@ async def end_and_save_conversation(
         conv.state = ConversationState.ENDED
         conv.last_activity = datetime.now(timezone.utc)
         # Save conversation
-        await Storage.save_thread(
-            conv.thread_id, conv.user_id, conv.messages
-        )
+        await Storage.save_thread(conv.thread_id, conv.user_id, conv.messages)
         return True
 
 
