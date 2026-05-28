@@ -6,7 +6,7 @@ import pymongo
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
-from .helpers import Thread, get_database
+from .helpers import Thread, get_mongodb_uri
 from .summarize_topic import summarize_topic
 from src.core.settings import get_settings
 from src.services.streaming.stream_variants import (
@@ -14,6 +14,7 @@ from src.services.streaming.stream_variants import (
     cleanup_conversation,
     from_sv_to_json,
     from_json_to_sv,
+    SVServerHint,
 )
 from src.core.logging_setup import configure_logging
 
@@ -28,19 +29,19 @@ MONGODB_COLLECTION_NAME_FEEDBACK = "userfeedback"
 
 
 class ThreadStorage:
-    """PROD / shared implementation: store threads in MongoDB."""
+    """Store threads in MongoDB."""
 
-    def __init__(self, vault_url: str, db: AsyncDatabase) -> None:
-        self.vault_url = vault_url
+    def __init__(self, client: AsyncMongoClient, db: AsyncDatabase) -> None:
+        self.client = client
         self.db = db
 
     @classmethod
-    async def create(cls, vault_url: str):
-        if settings.DEV:
-            db = AsyncMongoClient(settings.MONGODB_URI_DEV)[MONGODB_DATABASE_NAME]
-        else:
-            db = await get_database(vault_url)
-        s = cls(vault_url=vault_url, db=db)
+    async def create(cls) -> "ThreadStorage":
+        mongo_uri = get_mongodb_uri()
+        client = AsyncMongoClient(mongo_uri, connectTimeoutMS=30000)
+        db = client[MONGODB_DATABASE_NAME]
+
+        storage = cls(client=client, db=db)
 
         coll = db[MONGODB_COLLECTION_NAME]
         await coll.create_index("thread_id", unique=True)
@@ -48,7 +49,10 @@ class ThreadStorage:
             [("user_id", pymongo.ASCENDING), ("date", pymongo.DESCENDING)]
         )
 
-        return s
+        return storage
+    
+    async def close(self) -> None:
+        self.client.close()
 
     async def save_thread(
         self,
@@ -79,6 +83,15 @@ class ThreadStorage:
                 merged_sv: List[StreamVariant] = existing_sv + content
             # topic: keep existing if present
             topic = existing.get("topic", "") or None
+            if not root_thread_id:
+                root_thread_id = existing.get("root_thread_id")
+                parent_thread_id = existing.get("parent_thread_id")
+                fork_from_index = existing.get("fork_from_index")
+        else:
+            if not root_thread_id:
+                root_thread_id = thread_id
+                parent_thread_id = thread_id
+                fork_from_index = 0
 
         # compute topic if missing
         if not topic or topic == "No topic yet":
@@ -91,9 +104,9 @@ class ThreadStorage:
             "date": datetime.now(timezone.utc),
             "topic": topic,
             "content": all_stream,
-            "root_thread_id": thread_id or root_thread_id,
-            "parent_thread_id": thread_id or parent_thread_id,
-            "fork_from_index": 0 or fork_from_index,
+            "root_thread_id": root_thread_id,
+            "parent_thread_id": parent_thread_id,
+            "fork_from_index": fork_from_index,
         }
 
         if existing:
@@ -156,6 +169,63 @@ class ThreadStorage:
             raise FileNotFoundError("Thread not found")
         return doc.get("content", [])
 
+    async def get_user_id_for_thread(self, thread_id: str) -> Optional[str]:
+        logger = configure_logging(__name__, thread_id=thread_id)
+        coll = self.db[MONGODB_COLLECTION_NAME]
+        doc = await coll.find_one({"thread_id": thread_id})
+        if not doc:
+            logger.warning(
+                "Thread not found in MongoDB when fetching user_id",
+                extra={"thread_id": thread_id},
+            )
+            return None
+        return doc.get("user_id")
+
+    async def fork_thread(self, old_thread_id: str, new_thread_id: str, user_id: str):
+        logger = configure_logging(__name__, thread_id=old_thread_id, user_id=user_id)
+        coll = self.db[MONGODB_COLLECTION_NAME]
+        doc = await coll.find_one({"thread_id": old_thread_id})
+        if not doc:
+            logger.warning(
+                "Thread not found in MongoDB when forking",
+                extra={"thread_id": old_thread_id},
+            )
+            raise FileNotFoundError("Thread not found")
+
+        content = doc.get("content", [])
+        content = [from_json_to_sv(v) for v in content]
+        content = update_threadid_in_content(new_thread_id, content, logger=logger)
+        content = [from_sv_to_json(v) for v in content]
+
+        new_doc = {
+            "user_id": user_id,
+            "thread_id": new_thread_id,
+            "date": datetime.now(timezone.utc),
+            "topic": doc.get("topic", ""),
+            "content": content,
+        }
+        await coll.insert_one(new_doc)
+        logger.info(
+            "Forked thread in MongoDB",
+            extra={
+                "old_thread_id": old_thread_id,
+                "new_thread_id": new_thread_id,
+                "user_id": user_id,
+            },
+        )
+
+    async def get_root_id_for_thread(self, thread_id: str) -> Optional[str]:
+        logger = configure_logging(__name__, thread_id=thread_id)
+        coll = self.db[MONGODB_COLLECTION_NAME]
+        doc = await coll.find_one({"thread_id": thread_id})
+        if not doc:
+            logger.warning(
+                "Thread not found in MongoDB when fetching root_thread_id",
+                extra={"thread_id": thread_id},
+            )
+            return None
+        return doc.get("root_thread_id")
+
     async def update_thread_topic(self, thread_id: str, topic: str):
         logger = configure_logging(__name__, thread_id=thread_id)
         coll = self.db[MONGODB_COLLECTION_NAME]
@@ -169,7 +239,6 @@ class ThreadStorage:
     ):
         coll = self.db[MONGODB_COLLECTION_NAME]
         await coll.delete_one({"thread_id": thread_id})
-
 
     async def save_feedback(
         self,
@@ -197,7 +266,6 @@ class ThreadStorage:
 
         # Save feedback in the thread history
         await self._save_feedback_to_thread(thread_id, user_id, content_json, index, feedback)
- 
 
     async def delete_feedback(
         self,
@@ -212,7 +280,6 @@ class ThreadStorage:
 
         # Save feedback in the thread history
         await self._save_feedback_to_thread(thread_id, user_id, content_json, index, feedback="remove")
-        
 
     async def _save_feedback_to_thread(
         self,
@@ -229,7 +296,6 @@ class ThreadStorage:
 
         content_sv = [from_json_to_sv(l) for l in content_json]
         await self.save_thread(thread_id, user_id, content_sv)
-
 
     async def query_by_topic(
         self,
@@ -266,3 +332,21 @@ class ThreadStorage:
             for d in docs
         ]
         return total, threads
+
+
+def update_threadid_in_content(
+    new_id: str, content: list[StreamVariant], logger
+) -> list[StreamVariant]:
+    if isinstance(content[0], SVServerHint):
+        content[0] = SVServerHint(data={"thread_id": new_id})
+        logger.info("Updated ServerHint with new thread-id.")
+    else:
+        if any(isinstance(c, SVServerHint) for c in content):
+            logger.exception("ServerHint is in unexpected position in thread content!")
+            raise ValueError("ServerHint is in unexpected position in thread content!")
+        else:
+            logger.info(
+                "ServerHint is missing in the thread content. It is inserted with the new thread-id."
+            )
+            content = [SVServerHint(data={"thread_id": new_id})] + content
+    return content

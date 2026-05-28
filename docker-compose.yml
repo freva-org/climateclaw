@@ -12,7 +12,7 @@ services:
     volumes:
       - /work:/work:ro
       - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
-      - /scratch/b/b380001/freva-gpt/cache:/app/cache:rw
+      - ${FREVAGPT_CACHE_PATH}:/app/cache:rw
     networks:
       - freva-gpt
   rag:
@@ -40,8 +40,8 @@ services:
       FREVAGPT_MCP_PORT: 8051
     volumes:
       - /work:/work:ro
-      - /scratch/b/b380001/freva-gpt/cache:/app/cache:rw
       - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
+      - ${FREVAGPT_CACHE_PATH}:/app/cache:rw
     networks:
       - freva-gpt
   web-search:
@@ -68,18 +68,31 @@ services:
     networks:
       - freva-gpt
   ollama: # Ollama is only for the backend and not accessible from the outside. Port 11434 is not exposed.
-    image: ollama
-    build:
-      context: .
-      dockerfile: docker/ollama/Dockerfile
+    image: ollama/ollama:latest
     hostname: ollama-instance-${FREVAGPT_INSTANCE_NAME}
+    volumes:
+      - /container/da/freva-gpt-ollama-models/.ollama:/root/.ollama
     networks:
       - freva-gpt
     devices:
       - nvidia.com/gpu=all
+  mongodb:
+    user: 0:0
+    image: ghcr.io/freva-org/freva-mongo:latest
+    hostname: mongodb-instance-${FREVAGPT_INSTANCE_NAME}
+    environment:
+      - API_MONGO_USER=${FREVAGPT_MONGODB_USER:?MongoDB user and password must be set in the .env file. See .env.example.}
+      - API_MONGO_PASSWORD=${FREVAGPT_MONGODB_PASSWORD}
+      - API_MONGO_DB=${FREVAGPT_MONGODB_DATABASE_NAME}
+    ports:
+      - 27017:27017
+    volumes:
+      - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/mongo-data:/data/db:z
+      - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/mongo-logs:/data/logs:z
+    tty: true
+    networks:
+      - freva-gpt
 
 networks:
   freva-gpt:
     driver: bridge
-# The subnet is not set to avoid conflicts with other potentially running networks on the same machine.
-# Note: Named networks by default aren't shared between different docker-compose projects, even if they have the same name, as long as they are in separate directories.

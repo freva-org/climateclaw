@@ -81,7 +81,7 @@ async def initialize_conversation(
     log = logger or configure_logging(__name__, thread_id=thread_id, user_id=user_id)
     now = datetime.now(timezone.utc)
     
-    mcp_mgr = await get_mcp_manager(authenticator=auth, thread_id=thread_id)
+    mcp_mgr = get_mcp_manager(authenticator=auth, thread_id=thread_id)
 
     # Precreate the conversation object to reduce time spent under lock
     maybe_new_conv = ActiveConversation(
@@ -133,6 +133,7 @@ async def initialize_conversation(
 async def add_to_conversation(
     thread_id: str,
     messages: List[StreamVariant],
+    storage: ThreadStorage,
 ) -> ActiveConversation:
     """
     Check if an ActiveConversation exists for thread_id and append new variants.
@@ -144,7 +145,12 @@ async def add_to_conversation(
             raise ValueError("Conversation does not exist. Please initialize first!")
         conv.messages.extend(messages)
         conv.last_activity = datetime.now(timezone.utc)
-        return conv
+
+    # Save conversation
+    await storage.save_thread(
+        conv.thread_id, conv.user_id, conv.messages
+    )
+    return conv
 
 
 async def get_conversation_state(thread_id: str) -> Optional[ConversationState]:
@@ -210,7 +216,7 @@ async def end_and_save_conversation(
         conv.last_activity = datetime.now(timezone.utc)
         # Save conversation
         await Storage.save_thread(
-            conv.thread_id, conv.user_id, conv.messages, append_to_existing=False
+            conv.thread_id, conv.user_id, conv.messages
         )
         return True
 

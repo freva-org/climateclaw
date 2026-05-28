@@ -2,8 +2,7 @@ from typing import List
 from pathlib import Path
 from dataclasses import dataclass
 
-import httpx
-from fastapi import HTTPException
+import os
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
@@ -56,43 +55,10 @@ def create_dir_at_cache(user_id: str, thread_id: str) -> None:
 # ──────────────────── Connection ──────────────────────────────
 
 
-async def get_mongodb_uri(vault_url: str) -> str:
-    # 1) GET vault_url
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(vault_url)
-    except Exception:
-        # 503 ServiceUnavailable
-        raise HTTPException(status_code=503, detail="Error sending request to vault.")
-    if not r.is_success:
-        # 502 BadGateway
-        raise HTTPException(
-            status_code=502,
-            detail="Failed to get MongoDB URL. Is Nginx running correctly?",
-        )
-
-    # 2) Parse JSON and extract key
-    try:
-        data = r.json()
-    except Exception:
-        # 502 BadGateway
-        raise HTTPException(status_code=502, detail="Vault response was malformed.")
-
-    uri = data.get("mongodb.url") or data.get("mongo.url")
-    if not uri:
-        # 502 BadGateway
-        raise HTTPException(
-            status_code=502, detail="MongoDB URL not found in vault response."
-        )
-    return uri.strip()
-
-
-async def get_database(vault_url: str) -> AsyncDatabase:
-    """
-    Parity with Rust: fetch URI from vault via auth.get_mongodb_uri, connect with Motor.
-    If connection fails, retry once without URI options (strip trailing ?query).
-    """
-    mongodb_uri = await get_mongodb_uri(vault_url)
-
-    client = AsyncMongoClient(mongodb_uri, connectTimeoutMS=30000)
-    return client[MONGODB_DATABASE_NAME]
+def get_mongodb_uri() -> str:
+    user = os.getenv("FREVAGPT_MONGODB_USER", "")
+    password = os.getenv("FREVAGPT_MONGODB_PASSWORD", "")
+    if not user or not password:
+        raise ValueError("Please set the MongoDB user and password in environment variables!")
+    uri = f"mongodb://{user}:{password}@mongodb:27017"
+    return uri
