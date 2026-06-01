@@ -48,7 +48,7 @@ class McpManager:
         self._tools_by_target: Dict[Target, List[Dict[str, Any]]] = {
             t: [] for t in self._servers
         }
-        self._openai_tools_cache: Optional[List[Dict[str, Any]]] = None
+        self._tools_cache: Optional[List[Dict[str, Any]]] = None
 
     # ────────── lifecycle ──────────
 
@@ -101,13 +101,13 @@ class McpManager:
                         )
 
                 # build OpenAI tool list (merged)
-                self._openai_tools_cache = []
+                self._tools_cache = []
                 for tgt in self._servers:
                     for t in self._tools_by_target[tgt]:
-                        self._openai_tools_cache.append(mcp_tool_to_openai_function(t))
+                        self._tools_cache.append(mcp_tool_to_openai_function(t))
 
                 self.log.info(
-                    f"MCP initialized. Tools discovered: total:{len(self._openai_tools_cache)} "
+                    f"MCP initialized. Tools discovered: total:{len(self._tools_cache)} "
                     + " ".join(
                         [
                             s + ":" + str(len(self._tools_by_target[s]))
@@ -145,7 +145,12 @@ class McpManager:
         for tool in tools:
             name = tool.get("name") or tool.get("tool_name") or ""
             desc = tool.get("description") or ""
-            schema = tool.get("input_schema") or tool.get("parameters") or {}
+            schema = (
+                tool.get("inputSchema")
+                or tool.get("input_schema")
+                or tool.get("parameters")
+                or {}
+            )
             normalized.append(
                 {"name": name, "description": desc, "input_schema": schema}
             )
@@ -153,7 +158,7 @@ class McpManager:
         with self._lock:
             self._tools_by_target[target] = normalized
             # invalidate merged cache
-            self._openai_tools_cache = None
+            self._tools_cache = None
 
     def get_server_from_tool(self, tool_name: str) -> Optional[Target]:
         """
@@ -169,19 +174,19 @@ class McpManager:
 
     # ────────── tool export to LLM ──────────
 
-    def openai_tools(self) -> List[Dict[str, Any]]:
+    def available_tools(self) -> List[Dict[str, Any]]:
         """
         Return cached OpenAI-style tool schemas. Empty list if discovery failed.
         """
         with self._lock:
-            if self._openai_tools_cache is None:
+            if self._tools_cache is None:
                 # rebuild merged cache on-demand
                 merged: List[Dict[str, Any]] = []
                 for tgt in self._servers:
                     for t in self._tools_by_target[tgt]:
                         merged.append(mcp_tool_to_openai_function(t))
-                self._openai_tools_cache = merged
-            return list(self._openai_tools_cache)
+                self._tools_cache = merged
+            return list(self._tools_cache)
 
     # ────────── calling tools ──────────
 
@@ -216,9 +221,7 @@ class McpManager:
 # ──────────────────── Helper functions ──────────────────────────────
 
 
-def get_mcp_headers(
-    auth: Authenticator, cache: str, logger=None
-) -> Dict[str, str]:
+def get_mcp_headers(auth: Authenticator, cache: str, logger=None) -> Dict[str, str]:
     mongodb_uri = get_mongodb_uri()
     access_token = auth.access_token
 
