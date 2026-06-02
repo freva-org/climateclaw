@@ -50,7 +50,7 @@ def get_settings() -> Settings:
 def get_server_url_dict(server_list: list):
     url_dict: dict[str, str] = {}
     for s in server_list:
-        s_url = os.getenv(f"FREVAGPT_{s.upper()}_URL", "")
+        s_url = os.getenv(f"FREVAGPT_{s.upper().replace('-', '_')}_URL", "")
         if s_url:
             url_dict.update({s: s_url})
         else:
