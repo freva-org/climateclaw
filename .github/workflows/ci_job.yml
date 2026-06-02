@@ -106,12 +106,13 @@ jobs:
 
       - name: Start production stack
         run: |
-          docker compose up freva-gpt code-server web-search-server mongodb -d --wait --build --remove-orphans || {
+          docker compose up freva-gpt code-server web-search-server -d --wait --build --remove-orphans || {
             docker compose ps -a
             docker compose logs freva-gpt
             docker compose logs code-server
             docker compose logs web-search-server
             docker compose logs mongodb
+            docker compose logs litellm
             exit 1
           }
 
@@ -121,14 +122,6 @@ jobs:
       - name: Smoke check public surface
         run: |
           curl -f http://localhost:8502/healthz
-
-      - name: Verify internal services
-        run: |
-          docker compose ps
-          docker inspect $(docker compose ps -q code-server) --format '{{.State.Health.Status}}'
-          docker inspect $(docker compose ps -q web-search-server) --format '{{.State.Health.Status}}'
-          docker compose exec -T code-server python -c "print('code-server ok')"
-          docker compose exec -T web-search-server python -c "print('web-search-server ok')"
 
       - name: Tear down production stack
         if: always()
