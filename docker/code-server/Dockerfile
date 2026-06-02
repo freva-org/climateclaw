@@ -76,6 +76,6 @@ COPY freva_gpt /app/freva_gpt
 
 # Launch CI server
 CMD uvicorn freva_gpt.tools.code.server:app \
-    --host ${FREVAGPT_MCP_HOST:-0.0.0.0}\
+    --host ${FREVAGPT_MCP_HOST:-0.0.0.0} \
     --port ${FREVAGPT_MCP_PORT:-8051} \
     --proxy-headers
