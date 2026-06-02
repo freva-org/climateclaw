@@ -16,7 +16,9 @@ services:
     networks:
       - freva-gpt
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', ${FREVAGPT_TARGET_PORT:-8502})); s.close()\""]
+      test:
+        - CMD-SHELL
+        - python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', ${FREVAGPT_TARGET_PORT:-8502})); s.close()\"
       interval: 5s
       timeout: 3s
       retries: 20
@@ -24,6 +26,9 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+      litellm:
+        condition: service_healthy
+
   code-server:
     image: code-server-${FREVAGPT_INSTANCE_NAME}
     build:
@@ -40,11 +45,14 @@ services:
     networks:
       - freva-gpt
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 8051)); s.close()\""]
+      test:
+        - CMD-SHELL
+        - python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 8051)); s.close()\"
       interval: 5s
       timeout: 3s
       retries: 20
       start_period: 10s
+
   web-search-server:
     image: web-search-server-${FREVAGPT_INSTANCE_NAME}
     build:
@@ -59,11 +67,14 @@ services:
     volumes:
       - /container/da/freva-gpt-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 8052)); s.close()\""]
+      test:
+        - CMD-SHELL
+        - python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 8052)); s.close()\"
       interval: 5s
       timeout: 3s
       retries: 20
       start_period: 10s
+
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     hostname: litellm-instance-${FREVAGPT_INSTANCE_NAME}
@@ -73,6 +84,15 @@ services:
     env_file: .env
     networks:
       - freva-gpt
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   ollama: # Ollama is only for the backend and not accessible from the outside. Port 11434 is not exposed.
     image: ollama/ollama:latest
     hostname: ollama-instance-${FREVAGPT_INSTANCE_NAME}
@@ -82,6 +102,7 @@ services:
       - freva-gpt
     devices:
       - nvidia.com/gpu=all
+
   mongodb:
     user: 0:0
     image: ghcr.io/freva-org/freva-mongo:latest
@@ -104,6 +125,7 @@ services:
       timeout: 2s
       retries: 3
       start_period: 15s
+
 
 networks:
   freva-gpt:
