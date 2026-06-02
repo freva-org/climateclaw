@@ -19,7 +19,7 @@ GITLAB_TOKEN: Optional[str] = os.getenv("FREVAGPT_GITLAB_TOKEN")
 mcp = FastMCP("web-search-server")
 
 # ── Config ───────────────────────────────────────────────────────────────────
-WEB_SEARCH_MODEL = "gpt-4.1"
+WEB_SEARCH_MODEL = "gpt-5.4-mini"
 ALLOWED_DOMAINS = [
     "docs.dkrz.de",
     "docs.icon-model.org",
@@ -27,17 +27,24 @@ ALLOWED_DOMAINS = [
 
 # GitLab plugin config
 GITLAB_BASE_URL = "https://gitlab.dkrz.de/api/v4"
-PLUGIN_GROUP_PATH = "kd1418/plugins4freva"
+FREVA_PROJECT_NAMES = {"codes": "kd1418", "xces": "bm1159", "regiklim": "ch1187"}
 FREVA_PLUGINS = [
     "cvprepare",
     "leadtimeselektor",
     "problems",
     "recalibration",
-    "terciles"
+    "terciles",
 ]
+ALLOWED_FILE_EXTENSIONS = (
+    ".py",
+    ".sh",
+    ".R",
+    ".md",
+    ".rst",
+)  # only fetch these file types
 MAX_FILE_SIZE_BYTES = 50_000  # skip files larger than this
 MAX_TOTAL_CODE_CHARS = 50_000  # truncate total fetched code after this limit
-MAX_RELEVANT_FILES = 3  # max files to fetch after relevance filtering
+MAX_RELEVANT_FILES = 3  # max files to fetch for relevance filtering
 
 HOST = os.getenv("FREVAGPT_MCP_HOST", "0.0.0.0")
 PORT = int(os.getenv("FREVAGPT_MCP_PORT", "8052"))
@@ -71,8 +78,7 @@ def web_search(query: str) -> str:
         str: Relevant context extracted from web-page.
     """
     logger.info(
-        "Searching for DKRZ/HPC- or ICON-related context in documentation "
-        f"for query: {query}"
+        "Searching for DKRZ/HPC- or ICON-related context in documentation " f"for query: {query}"
     )
     system_prompt = (
         "You are a web-search agent that can search documentations for ICON model "
@@ -90,13 +96,11 @@ def web_search(query: str) -> str:
         "model": WEB_SEARCH_MODEL,
         "input": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_query}
+            {"role": "user", "content": user_query},
         ],
         "stream": False,
         "tool_choice": "auto",
-        "tools": [
-            {"type": "web_search", "filters": {"allowed_domains": ALLOWED_DOMAINS}}
-        ],
+        "tools": [{"type": "web_search", "filters": {"allowed_domains": ALLOWED_DOMAINS}}],
         "include": ["web_search_call.action.sources"],
     }
 
@@ -111,7 +115,7 @@ def web_search(query: str) -> str:
 
 
 #########################################################################################
-# ── GitLab helpers ───────────────────────────────────────────────────────────
+# ── GitLab helpers ────────────────────────────────────────────────
 _gitlab_http = httpx.Client(
     base_url=GITLAB_BASE_URL,
     headers={"PRIVATE-TOKEN": GITLAB_TOKEN or ""},
@@ -119,17 +123,17 @@ _gitlab_http = httpx.Client(
 )
 
 
-def _gitlab_project_id(plugin_name: str) -> str:
+def _gitlab_project_id(project: str, plugin: str) -> str:
     """URL-encoded project path usable as :id in the GitLab v4 API."""
-    return urlquote(f"{PLUGIN_GROUP_PATH}/{plugin_name}", safe="")
+    return urlquote(f"{project}/plugins4freva/{plugin}", safe="")
 
 
-def _fetch_repo_tree(plugin_name: str) -> list[str]:
+def fetch_repo_tree(project: str, plugin: str) -> list[str]:
     """
     Return the recursive file tree for a plugin repository as a list of
     file paths (strings) that match relevant extensions.
     """
-    project_id = _gitlab_project_id(plugin_name)
+    project_id = _gitlab_project_id(project, plugin)
     items: list[dict] = []
     page = 1
     while True:
@@ -143,24 +147,25 @@ def _fetch_repo_tree(plugin_name: str) -> list[str]:
             break
         items.extend(batch)
         page += 1
-    
+
     # filter to file paths with relevant extensions
     paths = [
-        entry["path"] for entry in items
-        if entry["type"] == "blob" and
-        entry["path"].lower().endswith((".py", ".sh", ".md", ".rst"))
-        ]
+        entry["path"]
+        for entry in items
+        if entry["type"] == "blob" and entry["path"].lower().endswith(ALLOWED_FILE_EXTENSIONS)
+    ]
     return paths
 
 
-def _fetch_plugin_code(plugin_name: str, selected_files: list[str], max_chars: int) -> str:
+def fetch_plugin_code(project: str, plugin: str, selected_files: list[str], max_chars: int) -> str:
     """
     Fetch the raw content of selected files and concatenate them into a single string,
     until the total character count reaches `max_chars`.
     The default branch name for all files is "levante".
     """
-    def _fetch_file_raw(plugin_name: str, file_path: str, ref: str="levante") -> str:
-        project_id = _gitlab_project_id(plugin_name)
+
+    def _fetch_file_raw(file_path: str, ref: str = "levante") -> str:
+        project_id = _gitlab_project_id(project, plugin)
         encoded_path = urlquote(file_path, safe="")
         resp = _gitlab_http.get(
             f"/projects/{project_id}/repository/files/{encoded_path}/raw",
@@ -173,12 +178,10 @@ def _fetch_plugin_code(plugin_name: str, selected_files: list[str], max_chars: i
     total_chars = 0
     for file in selected_files:
         if total_chars >= max_chars:
-            collected.append(
-                f"\n--- (truncated: reached {max_chars} char limit) ---"
-            )
+            collected.append(f"\n--- (truncated: reached {max_chars} char limit) ---")
             break
         try:
-            content = _fetch_file_raw(plugin_name, file)
+            content = _fetch_file_raw(file)
             if len(content) > MAX_FILE_SIZE_BYTES:
                 content = content[:MAX_FILE_SIZE_BYTES] + "\n... (file truncated)"
             collected.append(f"### FILE: {file} ###\n```\n{content}\n```\n")
@@ -192,20 +195,23 @@ def _fetch_plugin_code(plugin_name: str, selected_files: list[str], max_chars: i
     return "\n".join(collected)
 
 
-def _search_relevant_files(
-    plugin_name: str, query: str, file_paths: list[str], dep: bool=False
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def search_relevant_files(
+    plugin: str, query: str, file_paths: list[str], dep: bool = False
 ) -> list[str]:
     """
-    Given a list of file paths in the plugin repo, ask GPT-4.1 to pick the most relevant
+    Given a list of file paths in the plugin repo, ask the model to pick the most relevant
     ones for the user's query (dep=False) or for searching code dependencies (dep=True).
     If the LLM-based selection fails, fall back to a heuristic of picking all files.
     """
     if not dep:
         tree_listing = "\n".join(file_paths)
         selection_prompt = (
-            f"Below is the file tree of the '{plugin_name}' Freva plugin repository:\n"
-            f"File tree:\n{tree_listing}\n\n"
-            f"The user's query now is:\n\"{query}\"\n\n"
+            f"You are analyzing the '{plugin}' Freva plugin repository, "
+            f"which contains the following files:\n{tree_listing}\n\n"
+            f'The user\'s query now is:\n"{query}"\n\n'
             "Return ONLY a JSON array of file paths (strings) that seem most relevant to "
             "answering the user's query, but do not include test files. "
             "For high-level questions about documentation, focus more on README / documentation"
@@ -232,9 +238,7 @@ def _search_relevant_files(
             stream=False,
         )
         raw_text = selection_resp.output_text.strip()
-        logger.debug(
-            "LLM file selection response for plugin '%s': %s", plugin_name, raw_text
-        )
+        logger.debug("LLM file selection response for plugin '%s': %s", plugin, raw_text)
         # Strip markdown code fences if present
         if raw_text.startswith("```"):
             raw_text = "\n".join(raw_text.split("\n")[1:])
@@ -242,60 +246,96 @@ def _search_relevant_files(
             raw_text = "\n".join(raw_text.split("\n")[:-1])
         selected_files: list[str] = json.loads(raw_text.strip())
     except Exception as e:
-        logger.warning(
-            "LLM file selection failed (%s); falling back to heuristic.", e
-        )
+        logger.warning("LLM file selection failed (%s); falling back to heuristic.", e)
         # Fallback: pick all files from the tree search;
         # or pick nothing for dependency selection to avoid fetching duplicate code
         selected_files = file_paths if not dep else []
 
-    # Ensure we only pick paths that actually exist in the tree
-    selected_files = [p for p in selected_files if p in set(file_paths)][:MAX_RELEVANT_FILES]
-    stage = "Initial" if not dep else "Dependency"
-    logger.info(
-        "%s stage selected %d/%d files for plugin '%s': %s",
-        stage,
-        len(selected_files),
-        len(file_paths),
-        plugin_name,
-        selected_files,
-    )
-    return selected_files
+    # Return only paths that actually exist in the tree
+    return [p for p in selected_files if p in set(file_paths)][:MAX_RELEVANT_FILES]
 
 
-def _collect_plugin_context(plugin_name: str, user_query: str) -> str:
+def collect_plugin_context(project: str, plugin: str, user_query: str) -> str:
     """
     Three-stage context retrieval of code base:
-        1. Ask GPT-4.1 which files are most relevant for the user's query.
+        1. Ask LLM which files are most relevant for the user's query.
         2. Fetch those files, then scan for imports to identify dependent modules.
         3. Fetch the dependencies and return the combined contents.
     Returns a string containing the concatenated relevant code snippets,
         separated by file and with a header.
     """
+
+    def _log_stage(stage: str, files: list[str]):
+        logger.info(
+            "%s retrieval selected %d/%d files for plugin '%s': %s",
+            stage,
+            len(files),
+            len(file_paths),
+            plugin,
+            files,
+        )
+
     # ── Stage 0: fetch the repository tree with all files ────────────────────
-    file_paths = _fetch_repo_tree(plugin_name)
+    file_paths = fetch_repo_tree(project, plugin)
     if not file_paths:
         return "(repository is empty)"
 
     # ── Stage 1: ask the LLM to pick relevant files ─────────────────────────
-    selected_files = _search_relevant_files(plugin_name, user_query, file_paths)
+    base_files = search_relevant_files(plugin, user_query, file_paths)
+    _log_stage("Initial", base_files)
 
     # ── Stage 2: fetch selected files ────────────────────────────────────────
-    init_code = _fetch_plugin_code(plugin_name, selected_files, 2*MAX_TOTAL_CODE_CHARS//3)
+    init_code = fetch_plugin_code(project, plugin, base_files, 2 * MAX_TOTAL_CODE_CHARS // 3)
 
     # ── Stage 3: resolve dependencies ────────────────────────────────────────
-    tree_remaining = [p for p in file_paths if p not in set(selected_files)]
-    dep_files = _search_relevant_files(plugin_name, init_code, tree_remaining, dep=True)
-
+    tree_remaining = [p for p in file_paths if p not in set(base_files)]
+    dep_files = search_relevant_files(plugin, init_code, tree_remaining, dep=True)
+    _log_stage("Dependency", dep_files)
     if not dep_files:
         return init_code
 
-    dep_code = _fetch_plugin_code(plugin_name, dep_files, MAX_TOTAL_CODE_CHARS//3)
+    dep_code = fetch_plugin_code(project, plugin, dep_files, MAX_TOTAL_CODE_CHARS // 3)
     return init_code + "\n\n# ── Dependency files ──\n\n" + dep_code
 
 
+def validate_plugin_call(project: str, plugin: str) -> Optional[str]:
+    """
+    Validate the project and plugin names, and check if GitLab access is configured.
+    Returns an error message string if validation fails, or None if valid.
+    """
+    # validate project and plugin names
+    if project not in FREVA_PROJECT_NAMES.values():
+        return (
+            f"Unknown project '{project}'. "
+            f"Available projects: {', '.join(FREVA_PROJECT_NAMES.values())}"
+        )
+    if plugin not in FREVA_PLUGINS:
+        return (
+            f"Unknown plugin '{plugin}'. " f"Available Freva plugins: {', '.join(FREVA_PLUGINS)}"
+        )
+
+    # validate GitLab access of user
+    if not GITLAB_TOKEN:
+        return "Plugin code search is unavailable (GitLab access not configured)."
+
+    # Check user membership in the project's GitLab group
+    # TODO: replace with actual user identification from backend container
+    user = "unknown_user"
+    try:
+        encoded_group = urlquote(project, safe="")
+        resp = _gitlab_http.get(f"/groups/{encoded_group}/members", params={"per_page": 100})
+        resp.raise_for_status()
+        members = resp.json()
+        member_usernames = [m.get("username") for m in members]
+        if user not in member_usernames:
+            return f"User '{user}' is not a member of the GitLab group '{project}'. Access denied."
+    except httpx.HTTPError as e:
+        logger.error(f"Error checking GitLab group membership: {e}")
+        return "Plugin code search is unavailable (GitLab access error)."
+
+
 @mcp.tool()
-def plugin_code_search(plugin_name: str, query: str) -> str:
+def plugin_code_search(project_name: str, plugin_name: str, query: str) -> str:
     """
     Search and analyze the source code of a Freva data analysis plugin for decadal climate
     predictions. Use this when the user asks about how a plugin works, how to use it,
@@ -305,40 +345,38 @@ def plugin_code_search(plugin_name: str, query: str) -> str:
         - cvprepare: prepares cross-validation datasets for decadal prediction skill assessment
         - leadtimeselektor / leadtimeSelect: extracts and aggregates lead times from decadal prediction ensembles
         - problems: decadal prediction skill assessment of simulation vs reanalysis or observations
-        - recalibration: recalibrates decadal datasets to correct model drift and biases
+        - recalibration: calibrates decadal datasets to observation for model drift and bias correction
         - terciles: computes tercile-based statistics for prediction skill assessment
 
     Args:
-        plugin_name (str): Name of the plugin (e.g. "leadtimeselektor").
-        query (str): What the user wants to know or do with the plugin.
+        project_name (str): Name of the Freva instance/project. Available options:
+            - "codes" (aka Coming Decade)
+            - "xces" (aka ClimXtreme)
+            - "regiklim" (aka Regional Climate Projections)
+        plugin_name (str): Name of the repo or plugin (e.g. "leadtimeselektor").
+        query (str): What the user wants to know about or do with the plugin.
     Returns:
-        str: Relevant code context from source files of the plugin repository.
+        str: Relevant code context fetched from source files of the plugin repository.
     """
-    plugin_name = plugin_name.strip().lower()
+    project = FREVA_PROJECT_NAMES.get(project_name.strip().lower(), "")
+    plugin = plugin_name.strip().lower()
 
-    if plugin_name not in FREVA_PLUGINS:
-        return (
-            f"Unknown plugin '{plugin_name}'. "
-            f"Available Freva plugins: {', '.join(FREVA_PLUGINS)}"
-        )
+    # Validate the plugin call
+    warning = validate_plugin_call(project, plugin)
+    if warning:
+        return warning
 
-    if not GITLAB_TOKEN:
-        logger.error("FREVAGPT_GITLAB_TOKEN is not set; cannot access GitLab repos.")
-        return "Plugin code search is unavailable (GitLab access not configured)."
-
-    logger.info(
-        "Fetching source code for plugin '%s' with query: %s", plugin_name, query
-    )
-
+    # Fetch the plugin code and return it with a header
+    logger.info("Fetching source code for plugin '%s' with query: %s", plugin, query)
     try:
-        code_content = _collect_plugin_context(plugin_name, query)
+        code_content = collect_plugin_context(project, plugin, query)
     except Exception as e:
-        logger.warning("Failed to fetch plugin code for '%s': %s", plugin_name, e)
-        return f"Failed to retrieve source code for plugin '{plugin_name}': {e}"
+        logger.warning("Failed to fetch plugin code for '%s': %s", plugin, e)
+        return f"Failed to retrieve source code for plugin '{plugin}': {e}"
 
     header = (
-        f"Source code of the '{plugin_name}' plugin "
-        f"(https://gitlab.dkrz.de/{PLUGIN_GROUP_PATH}/{plugin_name}):\n\n"
+        f"Relevant retrieved code of the '{plugin}' plugin "
+        f"(https://gitlab.dkrz.de/{project}/plugins4freva/{plugin}):\n\n"
     )
     return header + code_content
 
