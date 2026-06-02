@@ -11,6 +11,7 @@ services:
       - "${FREVAGPT_DEBUG_PORT:-5678}:${FREVAGPT_DEBUG_PORT:-5678}" # Port for debugpy
     volumes:
       - /work:/work:ro
+      - /pool/data:/pool/data:ro
       - /container/da/freva-gpt-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
       - ${FREVAGPT_CACHE_PATH}:/app/cache:rw
     networks:
@@ -40,6 +41,7 @@ services:
       FREVAGPT_MCP_PORT: 8051
     volumes:
       - /work:/work:ro
+      - /pool/data:/pool/data:ro
       - /container/da/freva-gpt-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
       - ${FREVAGPT_CACHE_PATH}:/app/cache:rw
     networks:
