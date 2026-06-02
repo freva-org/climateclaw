@@ -32,11 +32,11 @@ async def lifespan(app: FastAPI):
     async def periodic_cleanup_task():
         while True:
             try:
-                await asyncio.sleep(60 * 60)  # check every hour
+                await asyncio.sleep(60)  # check every min
                 # Storage is not needed here, conversation must have been saved when it was last used
-                evicted = await cleanup_idle(max_idle=timedelta(days=1))
+                evicted = await cleanup_idle(max_idle=timedelta(minutes=30))
                 if evicted:
-                    logger.info(f"Evicted idle > 1 day: {evicted}")
+                    logger.info(f"Evicted idle > 30 mins: {evicted}")
             except asyncio.CancelledError:
                 break
             except Exception as e:
