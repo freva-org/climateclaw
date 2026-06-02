@@ -1,3 +1,4 @@
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
@@ -40,6 +41,21 @@ def make_header_gate(
                 return await self.app(scope, receive, send)
 
             path = scope.get("path", "")
+
+            if path == "/healthz":
+                body = json.dumps({"status": "ok"}).encode("utf-8")
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 200,
+                        "headers": [(b"content-type", b"application/json")],
+                    }
+                )
+                await send(
+                    {"type": "http.response.body", "body": body, "more_body": False}
+                )
+                return
+
             if path != mcp_path:
                 return await self.app(scope, receive, send)
 

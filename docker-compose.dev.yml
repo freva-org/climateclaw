@@ -18,6 +18,12 @@ services:
       - ./logs/:/app/logs
     networks:
       - freva-gpt
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${FREVAGPT_BACKEND_PORT:-8502}/healthz')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
       mongodb:
         condition: service_healthy
@@ -60,12 +66,10 @@ services:
     networks:
       - freva-gpt
     healthcheck:
-      test:
-        - CMD-SHELL
-        - python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 8051)); s.close()\"
-      interval: 5s
-      timeout: 3s
-      retries: 20
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8051/healthz')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
       start_period: 10s
 
   web-search-server:
@@ -86,12 +90,10 @@ services:
     volumes:
       - ./logs/:/app/logs
     healthcheck:
-      test:
-        - CMD-SHELL
-        - python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 8052)); s.close()\"
-      interval: 5s
-      timeout: 3s
-      retries: 20
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8052/healthz')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
       start_period: 10s
 
   litellm:
@@ -106,9 +108,7 @@ services:
     networks:
       - freva-gpt
     healthcheck:
-      test:
-        - CMD-SHELL
-        - python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')"
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
       interval: 30s
       timeout: 10s
       retries: 3
