@@ -4,9 +4,7 @@ from fastapi import Depends, HTTPException, Request
 from freva_gpt.core.logging_setup import configure_logging
 from freva_gpt.core.settings import get_server_url_dict, get_settings
 
-from .authentication.authenticator import Authenticator
-from .authentication.dev_auth import DevAuthenticator
-from .authentication.full_auth import FullAuthenticator
+from .authentication.auth import Authenticator
 from .mcp.mcp_manager import McpManager, get_mcp_headers
 from .storage.mongodb_storage import ThreadStorage
 
@@ -17,23 +15,14 @@ settings = get_settings()
 CACHE_ROOT = Path("./cache")
 
 
-def get_authenticator() -> type[Authenticator]:
-    if settings.DEV:
-        return DevAuthenticator
-    return FullAuthenticator
-
-
 async def auth_dependency(
     request: Request,
 ) -> Authenticator:
     """
     FastAPI dependency:
-    - builds the appropriate authenticator for this request
-    - runs it
     - returns the authenticated object (or raises HTTPException)
     """
-    AuthCls = get_authenticator()
-    auth = await AuthCls.build(request)
+    auth = await Authenticator.build(request)
     return auth
 
 

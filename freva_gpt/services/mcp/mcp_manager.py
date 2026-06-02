@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from freva_gpt.core.logging_setup import configure_logging
 from freva_gpt.core.settings import get_settings
-from freva_gpt.services.authentication.authenticator import Authenticator
+from freva_gpt.services.authentication.auth import Authenticator
 from freva_gpt.services.mcp.client import McpClient
 from freva_gpt.services.storage.helpers import get_mongodb_uri
 from freva_gpt.services.streaming.stream_variants import mcp_tool_to_openai_function

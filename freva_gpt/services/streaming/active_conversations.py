@@ -137,6 +137,7 @@ async def add_to_conversation(
     thread_id: str,
     messages: list[StreamVariant],
     storage: ThreadStorage,
+    store_thread: bool = True,
 ) -> ActiveConversation:
     """
     Check if an ActiveConversation exists for thread_id and append new variants.
@@ -149,8 +150,9 @@ async def add_to_conversation(
         conv.messages.extend(messages)
         conv.last_activity = datetime.now(timezone.utc)
 
-    # Save conversation
-    await storage.save_thread(conv.thread_id, conv.user_id, conv.messages)
+    if store_thread:
+        # Save conversation
+        await storage.save_thread(conv.thread_id, conv.user_id, conv.messages)
     return conv
 
 
@@ -200,8 +202,7 @@ async def request_stop(thread_id: str) -> bool:
 
 
 async def end_and_save_conversation(
-    thread_id: str,
-    Storage: ThreadStorage,
+    thread_id: str, Storage: ThreadStorage, store_thread: bool = True
 ) -> bool:
     """
     Mark a conversation as ENDED but keep it in the registry and save to available
@@ -216,8 +217,10 @@ async def end_and_save_conversation(
         conv.state = ConversationState.ENDED
         conv.last_activity = datetime.now(timezone.utc)
         # Save conversation
+
+    if store_thread:
         await Storage.save_thread(conv.thread_id, conv.user_id, conv.messages)
-        return True
+    return True
 
 
 async def remove_conversation(thread_id: str) -> bool:
