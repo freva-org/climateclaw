@@ -64,6 +64,7 @@ async def streamresponse(
     thread_id: Optional[str] = Query(None),
     input: Optional[str] = Query(None),
     chatbot: Optional[str] = Query(None),
+    store_thread: bool = True,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -223,7 +224,7 @@ async def streamresponse(
             hint_v = SVServerHint(data={"thread_id": thread_id})
             for data in _sse_data(from_sv_to_json(hint_v)):
                 yield data
-            await add_to_conversation(thread_id, [hint_v], storage=storage)
+            await add_to_conversation(thread_id, [hint_v], storage=storage, store_thread=store_thread)
 
         last_check = time.monotonic()
         async for variant in run_stream(
@@ -232,6 +233,7 @@ async def streamresponse(
             user_input=input,
             system_prompt=system_prompt,
             storage=storage,
+            store_thread=store_thread,
             logger=logger,
         ):
             for data in _sse_data(from_sv_to_json(variant)):
@@ -247,16 +249,17 @@ async def streamresponse(
                     for data in _sse_data(from_sv_to_json(end_v)):
                         yield data
                     await cancel_tool_tasks(thread_id)
-                    await end_and_save_conversation(thread_id, storage)
+                    await end_and_save_conversation(thread_id, storage, store_thread=store_thread)
                     logger.info(
                         "Stopped streaming after client request",
                         extra={"thread_id": thread_id, "user_id": user_name},
                     )
                     return
 
-        await end_and_save_conversation(thread_id, storage)
+        await end_and_save_conversation(thread_id, storage, store_thread=store_thread)
+        msg = "Completed streaming and saved conversation" if store_thread else "Completed streaming without saving the conversation"
         logger.info(
-            "Completed streaming and saved conversation",
+            msg,
             extra={"thread_id": thread_id, "user_id": user_name},
         )
 
