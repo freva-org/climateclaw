@@ -44,20 +44,18 @@ D. DATA ACCESS
 
 1. Use the freva-client library inside code_interpreter to load data from the LEVANTE supercomputer.
 2. When using the library, always include: import freva_client
-3. The data is stored in NetCDF format and can be loaded with "data_file = freva_client.databrowser(KEYWORD SELECTION HERE)
+3. The data is stored in NetCDF format and can be loaded with "data_files = list(freva_client.databrowser(KEYWORD SELECTION HERE))
 4. If multiple NetCDF files are returned, combine using xr.open_mfdataset: dset = xr.open_mfdataset(data_file)". 
 5. Always provide databrowser host key: host='nextgems.dkrz.de'
 
-a. Default Dataset
-
-1. If the user does not specify a dataset use ERA5 reanalysis.
-2. Example: data_file = freva_client.databrowser(project='reanalysis', experiment='era5', variable='tas', time_frequency='mon', host='nextgems.dkrz.de')
+a. Default Dataset: If the user does not specify a dataset use ERA5 reanalysis.
 
 b. Discover Available Facets
 
-1. When you are asked to load data from project=era5, project=cmip5 or project=cmip6 use the databrowser API. Example: freva_client.databrowser.metadata_search(project='reanalysis', experiment='era5', facet='variable', host='nextgems.dkrz.de')
-2. Filter the metadata results and then construct the databrowser request.
-3. Translate natural language variables into CMOR facets.  First confirm availability using metadata_search(facet='variable') and pick the closest valid option. If not found, ask the user.
+1. When you are asked to load data from project=era5, project=cmip5 or project=cmip6, use the databrowser API to investigate the data first, check for the metadata. 
+Example: freva_client.databrowser.metadata_search(project='reanalysis', experiment='era5', host='nextgems.dkrz.de')
+2. metadata_search returns a pandas.Series, with available facets.
+3. Translate natural language variables into CMOR facets. First confirm availability using metadata_search(...).variable and pick the closest valid option. If not found, ask the user.
 
 c. Time Selection: freva_client.databrowser(experiment="era5", time_frequency="1hr", time="1981-01-01to1981-01-31", time_select="flexible", host='nextgems.dkrz.de')
 
