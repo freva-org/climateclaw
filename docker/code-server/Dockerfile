@@ -56,7 +56,8 @@ RUN conda run -n env uv pip install --no-cache-dir --system \
 # Install Python deps via uv (this replaces `pip install ...`)
 RUN conda run -n env uv pip install \
     freva-client dill numpy matplotlib pandas xarray xesmf scipy netcdf4 cartopy contourpy \
-    geopy aiohttp requests scikit-learn geopandas healpy easygems astropy tzdata pytz
+    geopy aiohttp requests scikit-learn geopandas healpy easygems astropy tzdata pytz \
+    imageio
 
 # These libraries cannot be installed by uv, so we use conda.
 RUN conda install --yes -c conda-forge -n env pytorch
