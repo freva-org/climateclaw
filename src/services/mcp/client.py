@@ -456,7 +456,7 @@ class McpClient:
             async with self._lock:
                 self._session_id = None
                 self._active_request_id = None
-            await self._http.close()
+            await self._http.aclose()
 
 
 # ──────────────────── Helper functions ──────────────────────────────
