@@ -48,7 +48,7 @@ def _sse_data(obj: SVDict) -> Generator[bytes]:
     if obj.get("variant") == IMAGE:
         image_b64 = obj.get("content")
         id = obj.get("id")
-        CHUNK_SIZE = 16_384  # 16 KiB per JSON line
+        CHUNK_SIZE = 8_192  # 16 KiB per JSON line
 
         # The fact that image_b64 will always be a string is implied by requiring the input to be a SVDict, which is only constructed from StreamVariants, which have strict types.
         for frag in chunks(image_b64, CHUNK_SIZE):
