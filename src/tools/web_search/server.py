@@ -28,13 +28,6 @@ ALLOWED_DOMAINS = [
 # GitLab plugin config
 GITLAB_BASE_URL = "https://gitlab.dkrz.de/api/v4"
 FREVA_PROJECT_NAMES = {"codes": "kd1418", "xces": "bm1159", "regiklim": "ch1187"}
-FREVA_PLUGINS = [
-    "cvprepare",
-    "leadtimeselektor",
-    "problems",
-    "recalibration",
-    "terciles",
-]
 ALLOWED_FILE_EXTENSIONS = (
     ".py",
     ".sh",
@@ -123,17 +116,60 @@ _gitlab_http = httpx.Client(
 )
 
 
-def _gitlab_project_id(project: str, plugin: str) -> str:
-    """URL-encoded project path usable as :id in the GitLab v4 API."""
-    return urlquote(f"{project}/plugins4freva/{plugin}", safe="")
+def _fetch_file_raw(project_id: int, file_path: str, branch: str) -> str:
+    encoded_path = urlquote(file_path, safe="")
+    resp = _gitlab_http.get(
+        f"/projects/{project_id}/repository/files/{encoded_path}/raw",
+        params={"ref": branch},
+    )
+    resp.raise_for_status()
+    return resp.text
 
 
-def fetch_repo_tree(project: str, plugin: str) -> list[str]:
+def _has_read_access(project_id: int, username: str) -> bool:
+    """Check if the given user has at least read access rights to the GitLab project."""
+    # Get project visibility: "public", "internal", or "private"
+    resp = _gitlab_http.get(f"/projects/{project_id}")
+    resp.raise_for_status()
+    visibility = resp.json().get("visibility")
+    # Public: everyone can read
+    if visibility == "public":
+        return True
+
+    # Internal: all authenticated (non-external) users can read
+    resp = _gitlab_http.get("/users", params={"username": username})
+    resp.raise_for_status()
+    users = resp.json()
+    user_id = users[0].get("id") if users else None
+    if user_id is None:
+        return False
+
+    if visibility == "internal":
+        return True
+
+    # Private: must have explicit membership
+    resp = _gitlab_http.get(f"/projects/{project_id}/members/all/{user_id}")
+    if resp.status_code == 404:
+        return False
+    resp.raise_for_status()
+    return resp.json().get("access_level") >= 10  # Guest and above can read
+
+
+def get_project_id(project: str, plugin: str) -> int | None:
+    """Fetch the GitLab project ID for the given plugin name."""
+    encoded = urlquote(f"{project}/plugins4freva/{plugin}", safe="")
+    resp = _gitlab_http.get(f"/projects/{encoded}")
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    return resp.json().get("id")
+
+
+def fetch_repo_tree(project_id: int) -> list[str]:
     """
     Return the recursive file tree for a plugin repository as a list of
     file paths (strings) that match relevant extensions.
     """
-    project_id = _gitlab_project_id(project, plugin)
     items: list[dict] = []
     page = 1
     while True:
@@ -157,22 +193,16 @@ def fetch_repo_tree(project: str, plugin: str) -> list[str]:
     return paths
 
 
-def fetch_plugin_code(project: str, plugin: str, selected_files: list[str], max_chars: int) -> str:
+def fetch_plugin_code(project_id: int, selected_files: list[str], max_chars: int) -> str:
     """
     Fetch the raw content of selected files and concatenate them into a single string,
     until the total character count reaches `max_chars`.
-    The default branch name for all files is "levante".
+    The default branch name for all files is "levante" or "master".
     """
-
-    def _fetch_file_raw(file_path: str, ref: str = "levante") -> str:
-        project_id = _gitlab_project_id(project, plugin)
-        encoded_path = urlquote(file_path, safe="")
-        resp = _gitlab_http.get(
-            f"/projects/{project_id}/repository/files/{encoded_path}/raw",
-            params={"ref": ref},
-        )
-        resp.raise_for_status()
-        return resp.text
+    # first get the repo's default path
+    resp = _gitlab_http.get(f"/projects/{project_id}")
+    resp.raise_for_status()
+    default_branch = resp.json().get("default_branch")
 
     collected: list[str] = []
     total_chars = 0
@@ -181,17 +211,16 @@ def fetch_plugin_code(project: str, plugin: str, selected_files: list[str], max_
             collected.append(f"\n--- (truncated: reached {max_chars} char limit) ---")
             break
         try:
-            content = _fetch_file_raw(file)
+            content = _fetch_file_raw(project_id, file, default_branch)
             if len(content) > MAX_FILE_SIZE_BYTES:
                 content = content[:MAX_FILE_SIZE_BYTES] + "\n... (file truncated)"
             collected.append(f"### FILE: {file} ###\n```\n{content}\n```\n")
             total_chars += len(content)
         except Exception as e:
-            logger.debug("Skipping file %s: %s", file, e)
+            logger.debug("Skipping file %s due to error in fetching content: %s", file, e)
 
     if not collected:
         return "(no source files could be retrieved)"
-
     return "\n".join(collected)
 
 
@@ -255,7 +284,7 @@ def search_relevant_files(
     return [p for p in selected_files if p in set(file_paths)][:MAX_RELEVANT_FILES]
 
 
-def collect_plugin_context(project: str, plugin: str, user_query: str) -> str:
+def collect_plugin_context(project_id: int, plugin: str, user_query: str) -> str:
     """
     Three-stage context retrieval of code base:
         1. Ask LLM which files are most relevant for the user's query.
@@ -276,7 +305,7 @@ def collect_plugin_context(project: str, plugin: str, user_query: str) -> str:
         )
 
     # ── Stage 0: fetch the repository tree with all files ────────────────────
-    file_paths = fetch_repo_tree(project, plugin)
+    file_paths = fetch_repo_tree(project_id)
     if not file_paths:
         return "(repository is empty)"
 
@@ -285,7 +314,7 @@ def collect_plugin_context(project: str, plugin: str, user_query: str) -> str:
     _log_stage("Initial", base_files)
 
     # ── Stage 2: fetch selected files ────────────────────────────────────────
-    init_code = fetch_plugin_code(project, plugin, base_files, 2 * MAX_TOTAL_CODE_CHARS // 3)
+    init_code = fetch_plugin_code(project_id, base_files, 2 * MAX_TOTAL_CODE_CHARS // 3)
 
     # ── Stage 3: resolve dependencies ────────────────────────────────────────
     tree_remaining = [p for p in file_paths if p not in set(base_files)]
@@ -294,44 +323,37 @@ def collect_plugin_context(project: str, plugin: str, user_query: str) -> str:
     if not dep_files:
         return init_code
 
-    dep_code = fetch_plugin_code(project, plugin, dep_files, MAX_TOTAL_CODE_CHARS // 3)
+    dep_code = fetch_plugin_code(project_id, dep_files, MAX_TOTAL_CODE_CHARS // 3)
     return init_code + "\n\n# ── Dependency files ──\n\n" + dep_code
 
 
-def validate_plugin_call(project: str, plugin: str) -> Optional[str]:
+def validate_plugin_call(project: str, project_id: int | None, plugin: str) -> str | None:
     """
     Validate the project and plugin names, and check if GitLab access is configured.
     Returns an error message string if validation fails, or None if valid.
     """
-    # validate project and plugin names
+    # validate project name
     if project not in FREVA_PROJECT_NAMES.values():
         return (
             f"Unknown project '{project}'. "
             f"Available projects: {', '.join(FREVA_PROJECT_NAMES.values())}"
         )
-    if plugin not in FREVA_PLUGINS:
-        return (
-            f"Unknown plugin '{plugin}'. " f"Available Freva plugins: {', '.join(FREVA_PLUGINS)}"
-        )
 
     # validate GitLab access of user
-    if not GITLAB_TOKEN:
-        return "Plugin code search is unavailable (GitLab access not configured)."
-
-    # Check user membership in the project's GitLab group
+    if project_id is None:
+        return f"Plugin '{plugin}' not found in GitLab project '{project}'."
     # TODO: replace with actual user identification from backend container
-    user = "unknown_user"
+    user_name = "unknown_user"  # (user_name = auth.username or "unknown_user")
     try:
-        encoded_group = urlquote(project, safe="")
-        resp = _gitlab_http.get(f"/groups/{encoded_group}/members", params={"per_page": 100})
-        resp.raise_for_status()
-        members = resp.json()
-        member_usernames = [m.get("username") for m in members]
-        if user not in member_usernames:
-            return f"User '{user}' is not a member of the GitLab group '{project}'. Access denied."
+        user_access = _has_read_access(project_id, user_name)
+        if not user_access:
+            return (
+                f"User access to plugin '{plugin}' denied. "
+                f"Get access by being added to GitLab project '{project}'."
+            )
     except httpx.HTTPError as e:
-        logger.error(f"Error checking GitLab group membership: {e}")
-        return "Plugin code search is unavailable (GitLab access error)."
+        logger.error("Error checking GitLab repo membership: %s", e)
+        return "Plugin code search is currently unavailable (GitLab access error)."
 
 
 @mcp.tool()
@@ -355,21 +377,24 @@ def plugin_code_search(project_name: str, plugin_name: str, query: str) -> str:
             - "regiklim" (aka Regional Climate Projections)
         plugin_name (str): Name of the repo or plugin (e.g. "leadtimeselektor").
         query (str): What the user wants to know about or do with the plugin.
+
     Returns:
-        str: Relevant code context fetched from source files of the plugin repository.
+        str: Relevant code context fetched from source files of the plugin repository;
+        or an error message if the plugin call is invalid or code retrieval fails.
     """
     project = FREVA_PROJECT_NAMES.get(project_name.strip().lower(), "")
     plugin = plugin_name.strip().lower()
+    project_id = get_project_id(project, plugin)
 
     # Validate the plugin call
-    warning = validate_plugin_call(project, plugin)
-    if warning:
-        return warning
+    result = validate_plugin_call(project, project_id, plugin)
+    if result is not None:
+        return result
 
     # Fetch the plugin code and return it with a header
     logger.info("Fetching source code for plugin '%s' with query: %s", plugin, query)
     try:
-        code_content = collect_plugin_context(project, plugin, query)
+        code_content = collect_plugin_context(project_id, plugin, query)  # type: ignore
     except Exception as e:
         logger.warning("Failed to fetch plugin code for '%s': %s", plugin, e)
         return f"Failed to retrieve source code for plugin '{plugin}': {e}"
