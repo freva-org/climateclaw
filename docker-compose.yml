@@ -109,7 +109,6 @@ services:
     volumes:
       - /container/da/freva-gpt-links/${FREVAGPT_INSTANCE_NAME}/mongo-data:/data/db:z
       - /container/da/freva-gpt-links/${FREVAGPT_INSTANCE_NAME}/mongo-logs:/data/logs:z
-    tty: true
     networks:
       - freva-gpt
     healthcheck:
