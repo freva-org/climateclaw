@@ -59,7 +59,8 @@ async def get_username_from_token(token: str, rest_url: str, logger=None) -> str
     if not (200 <= resp.status_code < 300):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token check failed, the token is likely not valid (anymore).",
+            detail="Token check failed, the token may be expired or from a guest user."
+            "Please make sure to login using a DKRZ account and try again!",
         )
 
     # parse JSON and extract username/detail
