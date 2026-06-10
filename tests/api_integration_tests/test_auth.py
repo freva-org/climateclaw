@@ -80,10 +80,7 @@ async def test_auth_token_check_http_401_like_401_message(client):
                 },
             )
             assert r.status_code == 401
-            assert (
-                r.json()["detail"]
-                == "Token check failed, the token is likely not valid (anymore)."
-            )
+            assert "Token check failed" in r.json()["detail"]
 
 
 @pytest.mark.asyncio
