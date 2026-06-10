@@ -19,28 +19,28 @@ def bearer_token_from_header(header_val: str) -> str:
     return header_val[len("Bearer ") :]
 
 
-def _normalize_userinfo_path(rest_url: str) -> str:
+def _normalize_systemuser_path(rest_url: str) -> str:
     """
-    The entire url ending is "/api/freva-nextgen/auth/v2/userinfo",
+    The entire url ending is "/api/freva-nextgen/auth/v2/systemuser",
     But it sometimes doesn't send the api and nextgen part, so we need to add it ourselves.
     """
-    if rest_url.endswith("/api/freva-nextgen/auth/v2/userinfo"):
+    if rest_url.endswith("/api/freva-nextgen/auth/v2/systemuser"):
         return ""
     if rest_url.endswith("/api/freva-nextgen/"):
-        return "auth/v2/userinfo"
+        return "auth/v2/systemuser"
     if rest_url.endswith("/api/freva-nextgen"):
-        return "/auth/v2/userinfo"
-    return "/api/freva-nextgen/auth/v2/userinfo"
+        return "/auth/v2/systemuser"
+    return "/api/freva-nextgen/auth/v2/systemuser"
 
 
 async def get_username_from_token(token: str, rest_url: str, logger=None) -> str:
     """
-    Calls the token-check endpoint at <rest_url>/api/freva-nextgen/auth/v2/userinfo
+    Calls the token-check endpoint at <rest_url>/api/freva-nextgen/auth/v2/systemuser
     and returns the username (pw_name).
     """
     log = logger or configure_logging(__name__)
 
-    path = _normalize_userinfo_path(rest_url)
+    path = _normalize_systemuser_path(rest_url)
     url = f"{rest_url}{path}"
     log.debug("Token check URL: %s", url)
 
@@ -49,13 +49,13 @@ async def get_username_from_token(token: str, rest_url: str, logger=None) -> str
             resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
     except Exception as e:
         # ServiceUnavailable on request error to rest
-        log.error("Error sending request to userinfo endpoint: %s", e)
+        log.error("Error sending request to systemuser endpoint: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Error sending token check request, is the URL correct?",
         )
 
-    # on any non-2xx from userinfo, return 401 immediately (don’t parse JSON)
+    # on any non-2xx from systemuser, return 401 immediately (don’t parse JSON)
     if not (200 <= resp.status_code < 300):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

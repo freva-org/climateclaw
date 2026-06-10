@@ -73,7 +73,7 @@ def stub_resp(respx_mock):
     Provide a default stub for the auth system call used in routes.
     Individual tests can override or add more routes to respx_mock.
     """
-    respx_mock.get("http://rest.example/api/freva-nextgen/auth/v2/userinfo").respond(
+    respx_mock.get("http://rest.example/api/freva-nextgen/auth/v2/systemuser").respond(
         200, json={"pw_name": "alice"}
     )
     return respx_mock

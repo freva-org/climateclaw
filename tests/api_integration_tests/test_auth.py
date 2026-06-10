@@ -48,7 +48,7 @@ async def test_auth_missing_rest_url_400(client):
 async def test_auth_token_check_network_error_503(client):
     with respx.mock(assert_all_called=True) as mock:
         mock.get(
-            "http://rest.example/api/freva-nextgen/auth/v2/userinfo"
+            "http://rest.example/api/freva-nextgen/auth/v2/systemuser"
         ).side_effect = httpx.ConnectError("boom")
         async with client:
             r = await client.get(
@@ -68,7 +68,7 @@ async def test_auth_token_check_network_error_503(client):
 @pytest.mark.asyncio
 async def test_auth_token_check_http_401_like_401_message(client):
     with respx.mock(assert_all_called=True) as mock:
-        mock.get("http://rest.example/api/freva-nextgen/auth/v2/userinfo").respond(
+        mock.get("http://rest.example/api/freva-nextgen/auth/v2/systemuser").respond(
             401, json={"whatever": "x"}
         )
         async with client:
@@ -89,7 +89,7 @@ async def test_auth_token_check_http_401_like_401_message(client):
 @pytest.mark.asyncio
 async def test_auth_token_check_malformed_json_502(client):
     with respx.mock(assert_all_called=True) as mock:
-        mock.get("http://rest.example/api/freva-nextgen/auth/v2/userinfo").respond(
+        mock.get("http://rest.example/api/freva-nextgen/auth/v2/systemuser").respond(
             200, content=b"not-json"
         )
         async with client:
@@ -110,7 +110,7 @@ async def test_auth_token_check_malformed_json_502(client):
 @pytest.mark.asyncio
 async def test_auth_token_check_json_missing_username_detail_502(client):
     with respx.mock(assert_all_called=True) as mock:
-        mock.get("http://rest.example/api/freva-nextgen/auth/v2/userinfo").respond(
+        mock.get("http://rest.example/api/freva-nextgen/auth/v2/systemuser").respond(
             200, json={"foo": "bar"}
         )
         async with client:
@@ -131,7 +131,7 @@ async def test_auth_token_check_json_missing_username_detail_502(client):
 @pytest.mark.asyncio
 async def test_auth_token_check_json_detail_401(client):
     with respx.mock(assert_all_called=True) as mock:
-        mock.get("http://rest.example/api/freva-nextgen/auth/v2/userinfo").respond(
+        mock.get("http://rest.example/api/freva-nextgen/auth/v2/systemuser").respond(
             200, json={"detail": "Expired token"}
         )
         async with client:
@@ -149,7 +149,7 @@ async def test_auth_token_check_json_detail_401(client):
 @pytest.mark.asyncio
 async def test_auth_success_200(client):
     with respx.mock(assert_all_called=True) as mock:
-        mock.get("http://rest.example/api/freva-nextgen/auth/v2/userinfo").respond(
+        mock.get("http://rest.example/api/freva-nextgen/auth/v2/systemuser").respond(
             200, json={"pw_name": "alice"}
         )
         async with client:
