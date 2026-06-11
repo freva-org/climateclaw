@@ -98,6 +98,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
+          platforms: linux/amd64, linux/arm64
           file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ env.TAGS }}
