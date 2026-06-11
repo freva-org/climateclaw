@@ -1,10 +1,14 @@
 services:
 
-  base:
+  freva-gpt-base:
+    # Build manually with:
+    # docker compose -f docker-compose.dev.yml --profile build-only build freva-gpt-base
     build:
       context: .
       dockerfile: docker/Dockerfile.base
     image: freva-gpt-base:latest
+    profiles:
+      - build-only
 
   freva-gpt:
     image: freva-gpt-${FREVAGPT_INSTANCE_NAME:?Instance name must be set in the .env file to differentiate between instances}
