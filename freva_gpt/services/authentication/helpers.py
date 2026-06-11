@@ -75,20 +75,13 @@ async def get_username_from_token(token: str, rest_url: str, logger=None) -> str
             detail="Token check response is malformed, not valid JSON.",
         )
 
-    username = data.get("pw_name")
-    if isinstance(username, str) and username:
-        return username
-
-    detail = data.get("detail")
-    if isinstance(detail, str) and detail:
-        # Unauthorized with "Token check failed: {detail}"
+    try:
+        username = data.get("username")
+        if isinstance(username, str) and username:
+            return username
+    except Exception:
+        # 502 when JSON has no username
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Token check failed: {detail}",
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Token check response is malformed, no username found.",
         )
-
-    # 502 when JSON has no pw_name and no detail
-    raise HTTPException(
-        status_code=status.HTTP_502_BAD_GATEWAY,
-        detail="Token check response is malformed, no username found.",
-    )
