@@ -1,4 +1,11 @@
 services:
+
+  base:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.base
+    image: freva-gpt-base:latest
+
   freva-gpt:
     image: freva-gpt-${FREVAGPT_INSTANCE_NAME:?Instance name must be set in the .env file to differentiate between instances}
     build:
@@ -26,6 +33,7 @@ services:
         condition: service_healthy
       litellm:
         condition: service_healthy
+      base:
 
   code-server:
     image: code-server-${FREVAGPT_INSTANCE_NAME}
@@ -49,6 +57,8 @@ services:
       timeout: 3s
       retries: 20
       start_period: 10s
+    depends_on:
+      base:
 
   web-search-server:
     image: web-search-server-${FREVAGPT_INSTANCE_NAME}
@@ -69,6 +79,8 @@ services:
       timeout: 3s
       retries: 20
       start_period: 10s
+    depends_on:
+      base:
 
   litellm:
     image: ghcr.io/berriai/litellm:main-stable

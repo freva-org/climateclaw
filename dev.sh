@@ -60,4 +60,5 @@ export FREVAGPT_DEBUG
 echo "[dev.sh] Using ${COMPOSE_FILE} with DEBUG=${FREVAGPT_DEBUG}"
 echo "[dev.sh] docker compose -f ${COMPOSE_FILE} ${COMPOSE_ARGS[*]}"
 
+docker compose -f "${COMPOSE_FILE}" --profile build-only build freva-gpt-base
 docker compose -f "${COMPOSE_FILE}" "${COMPOSE_ARGS[@]}"
