@@ -74,7 +74,7 @@ def stub_resp(respx_mock):
     Individual tests can override or add more routes to respx_mock.
     """
     respx_mock.get("http://rest.example/api/freva-nextgen/auth/v2/systemuser").respond(
-        200, json={"pw_name": "alice"}
+        200, json={"username": "alice"}
     )
     return respx_mock
 

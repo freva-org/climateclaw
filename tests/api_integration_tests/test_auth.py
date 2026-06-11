@@ -61,7 +61,7 @@ async def test_auth_token_check_network_error_503(client):
             assert r.status_code == 503
             assert (
                 r.json()["detail"]
-                == "Error sending token check request, is the URL correct?"
+                == "Error sending token validation request, is the URL correct?"
             )
 
 
@@ -80,7 +80,7 @@ async def test_auth_token_check_http_401_like_401_message(client):
                 },
             )
             assert r.status_code == 401
-            assert "Token check failed" in r.json()["detail"]
+            assert "Token validation failed" in r.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -100,7 +100,7 @@ async def test_auth_token_check_malformed_json_502(client):
             assert r.status_code == 502
             assert (
                 r.json()["detail"]
-                == "Token check response is malformed, not valid JSON."
+                == "Token validation response is malformed, not valid JSON."
             )
 
 
@@ -121,15 +121,15 @@ async def test_auth_token_check_json_missing_username_detail_502(client):
             assert r.status_code == 502
             assert (
                 r.json()["detail"]
-                == "Token check response is malformed, no username found."
+                == "Token validation response is malformed, no username found."
             )
 
 
 @pytest.mark.asyncio
-async def test_auth_token_check_json_detail_401(client):
+async def test_auth_token_check_json_detail_403(client):
     with respx.mock(assert_all_called=True) as mock:
         mock.get("http://rest.example/api/freva-nextgen/auth/v2/systemuser").respond(
-            200, json={"detail": "Expired token"}
+            403, json={"detail": "Token expired."}
         )
         async with client:
             r = await client.get(
@@ -140,14 +140,14 @@ async def test_auth_token_check_json_detail_401(client):
                 },
             )
             assert r.status_code == 401
-            assert r.json()["detail"] == "Token check failed: Expired token"
+            assert "token may be expired" in r.json()["detail"]
 
 
 @pytest.mark.asyncio
 async def test_auth_success_200(client):
     with respx.mock(assert_all_called=True) as mock:
         mock.get("http://rest.example/api/freva-nextgen/auth/v2/systemuser").respond(
-            200, json={"pw_name": "alice"}
+            200, json={"username": "alice"}
         )
         async with client:
             r = await client.get(

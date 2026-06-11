@@ -35,7 +35,7 @@ def _normalize_systemuser_path(rest_url: str) -> str:
 
 async def get_username_from_token(token: str, rest_url: str, logger=None) -> str:
     """
-    Calls the token-check endpoint at <rest_url>/api/freva-nextgen/auth/v2/systemuser
+    Calls the token-validation endpoint at <rest_url>/api/freva-nextgen/auth/v2/systemuser
     and returns the username (pw_name).
     """
     log = logger or configure_logging(__name__)
@@ -52,36 +52,50 @@ async def get_username_from_token(token: str, rest_url: str, logger=None) -> str
         log.error("Error sending request to systemuser endpoint: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Error sending token check request, is the URL correct?",
+            detail="Error sending token validation request, is the URL correct?",
         )
 
-    # on any non-2xx from systemuser, return 401 immediately (don’t parse JSON)
-    if not (200 <= resp.status_code < 300):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token check failed, the token may be expired or from a guest user."
-            "Please make sure to login using a DKRZ account and try again!",
-        )
-
-    # parse JSON and extract username/detail
+    # parse JSON and extract username
     text = resp.text
-    log.debug("Token check success status=%s body=%s", resp.status_code, text[:500])
+    log.debug(
+        "Token validation success status=%s body=%s", resp.status_code, text[:500]
+    )
     try:
         data = resp.json()
     except Exception as e:
-        log.error("Error parsing token check response: %s", e)
+        log.error("Error parsing token validation response: %s", e)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Token check response is malformed, not valid JSON.",
+            detail="Token validation response is malformed, not valid JSON.",
         )
 
-    try:
-        username = data.get("username")
-        if isinstance(username, str) and username:
-            return username
-    except Exception:
-        # 502 when JSON has no username
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Token check response is malformed, no username found.",
-        )
+    # systemuser returns 403 for invalid token and guest
+    if not (200 <= resp.status_code < 300):
+        # check detail
+        detail = data.get("detail")
+        if detail == "Token expired.":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token validation failed, token may be expired or invalid.",
+            )
+        elif detail == "Not a system user.":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Token validation failed, guest users don't have access to this service."
+                "Please make sure to login using a DKRZ account and try again!",
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token validation failed.",
+            )
+
+    username = data.get("username")
+    if isinstance(username, str) and username:
+        return username
+
+    # 502 when JSON has no username
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Token validation response is malformed, no username found.",
+    )
