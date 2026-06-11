@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.base
-    image: freva-gpt-base:latest
+    image: ghcr.io/freva-org/freva-gpt-base:latest
     profiles:
       - build-only
 

@@ -104,6 +104,9 @@ jobs:
           FREVAGPT_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           EOF
 
+      - name: Build production base image
+        run: docker compose --profile build-only build freva-gpt-base
+
       - name: Start production stack
         run: |
           docker compose up freva-gpt code-server web-search-server -d --wait --build --remove-orphans || {
