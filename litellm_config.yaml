@@ -20,6 +20,12 @@ model_list:
       api_base: "http://ollama:11434" 
     model_info:
       supports_function_calling: true
+  - model_name: "gemma4:26b"
+    litellm_params:
+      model: "ollama_chat/gemma4:26b"
+      api_base: "http://ollama:11434"
+    model_info:
+      supports_function_calling: true
   - model_name: "mxbai-embed-large:latest"
     litellm_params:
       model: "ollama/mxbai-embed-large:latest"
@@ -27,3 +33,7 @@ model_list:
 
 litellm_settings:
   drop_params: true # If true, drop all parameters not in the model_list from the request
+
+general_settings:
+  custom_auth: custom_auth.user_api_key_auth
+  custom_auth_run_common_checks: true # Disallow disallowed models

@@ -19,8 +19,8 @@ def _completions_url() -> str:
     return f"{s.LITE_LLM_ADDRESS.rstrip('/')}/v1/chat/completions"
 
 
-# Optional bearer to satisfy proxies that require it.
-AUTH_TOKEN = os.getenv("FREVAGPT_OPENAI_API_KEY", "")
+# Use the local litellm's backend key for authentication, to differentiate between internal backend calls and external VSCode calls.
+AUTH_TOKEN = os.getenv("FREVAGPT_LITE_LLM_BACKEND_KEY")
 
 
 def _passthrough_params(params: Dict[str, Any] | None) -> Dict[str, Any]:
@@ -30,10 +30,13 @@ def _passthrough_params(params: Dict[str, Any] | None) -> Dict[str, Any]:
 
 def _headers() -> Dict[str, str]:
     h = {"Content-Type": "application/json"}
-    # Authorization header is not required for Ollama models,
-    # but sending it (when available) doesn’t hurt and satisfies OpenAI-routed calls.
+    # The litellm proxy expects the backend key in the Authorization header for authentication.
     if AUTH_TOKEN:
         h["Authorization"] = f"Bearer {AUTH_TOKEN}"
+    else:
+        print(
+            "Warning: No backend auth token set for LiteLLM. Set FREVAGPT_LITE_LLM_BACKEND_KEY in your environment to enable authentication."
+        )
     return h
 
 
