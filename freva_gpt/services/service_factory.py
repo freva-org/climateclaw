@@ -44,14 +44,18 @@ def get_mcp_manager(authenticator: Authenticator, thread_id: str) -> McpManager 
     """
     Build and eagerly initialize a manager so tools are ready for prompting.
     """
-    MCP_SERVER_URLs = get_server_url_dict(settings.AVAILABLE_MCP_SERVERS)
-
-    # Defaults to send; per-call headers (rest) are added at call time.
-    default_headers: dict[str, str] = {}
-
     logger = configure_logging(
         __name__, thread_id=thread_id, user_id=authenticator.username
     )
+
+    try:
+        MCP_SERVER_URLs = get_server_url_dict(settings.AVAILABLE_MCP_SERVERS)
+    except ValueError as e:
+        logger.warning("MCP manager initialization failed: %s", e)
+        return None
+
+    # Defaults to send; per-call headers (rest) are added at call time.
+    default_headers: dict[str, str] = {}
 
     mgr = McpManager(
         servers=settings.AVAILABLE_MCP_SERVERS,
