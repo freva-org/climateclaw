@@ -33,7 +33,6 @@ services:
         condition: service_healthy
       litellm:
         condition: service_healthy
-      base:
 
   code-server:
     image: code-server-${FREVAGPT_INSTANCE_NAME}
@@ -57,8 +56,6 @@ services:
       timeout: 3s
       retries: 20
       start_period: 10s
-    depends_on:
-      base:
 
   web-search-server:
     image: web-search-server-${FREVAGPT_INSTANCE_NAME}
@@ -79,8 +76,6 @@ services:
       timeout: 3s
       retries: 20
       start_period: 10s
-    depends_on:
-      base:
 
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
