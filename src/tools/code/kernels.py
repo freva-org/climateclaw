@@ -1,6 +1,8 @@
 import os
+import pwd
 import sys
 import threading
+from pathlib import Path
 from queue import Empty
 
 from jupyter_client import KernelManager
@@ -8,6 +10,7 @@ from jupyter_client import KernelManager
 from src.core.logging_setup import configure_logging
 
 SERVICE_NAME = os.getenv("HOSTNAME") or "code_server"
+FREVAGPT_WORKDIR = Path(os.getenv("FREVAGPT_WORKDIR", ""))
 
 logger = configure_logging(__name__, named_log=SERVICE_NAME)
 
@@ -18,6 +21,27 @@ KERNEL_REGISTRY: dict[str, KernelManager] = {}
 KERNEL_LOCKS: dict[str, threading.Lock] = {}
 KERNEL_LOCKS_GUARD = threading.Lock()
 # TODO use sid locks not single guard
+
+
+def resolve_kernel_user(username: str) -> pwd.struct_passwd:
+    try:
+        return pwd.getpwnam(username)
+    except KeyError:
+        if os.getenv("FREVAGPT_DEV") == "1":
+            return pwd.getpwuid(os.getuid())
+        raise
+
+
+def prepare_user_kernel_dir(username: str) -> Path:
+    pw = resolve_kernel_user(username)
+
+    user_dir = FREVAGPT_WORKDIR / username
+    user_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+
+    os.chown(user_dir, pw.pw_uid, pw.pw_gid)
+    os.chmod(user_dir, 0o700)
+
+    return user_dir
 
 # ── Kernel lifecycle ─────────────────────────────────────────────────────────
 
@@ -30,11 +54,22 @@ def _kernel_ready_handshake(km: KernelManager, timeout: int = 10) -> None:
         kc.stop_channels()
 
 
-def start_kernel(cwd_str: str) -> KernelManager:
+def start_kernel_for_user(username: str, session_folder: Path) -> KernelManager:
+    user_dir = prepare_user_kernel_dir(username, )
+    session_dir = user_dir / session_folder
+    session_dir.mkdir(parents=True, exist_ok=True)
+
     env = os.environ.copy()
+
     km = KernelManager()
-    km.kernel_cmd = [sys.executable, "-m", "ipykernel", "-f", "{connection_file}"]
-    km.start_kernel(env=env, cwd=cwd_str)
+    km.kernel_cmd = [
+        sys.executable,
+        "-m",
+        "src.tools.code.launch_user_kernel",
+        username,
+        "{connection_file}",
+    ]
+    km.start_kernel(env=env, cwd=str(session_dir))
     return km
 
 
@@ -50,7 +85,11 @@ def shutdown_kernel(km: KernelManager) -> None:
         logger.exception("Failed to shutdown dead kernel cleanly")
 
 
-def get_or_start_kernel(sid: str, cwd_str: str) -> KernelManager:
+def get_or_start_kernel(
+    username: str,
+    sid: str,
+    cwd_str: str,
+) -> KernelManager:
     km = KERNEL_REGISTRY.get(sid)
 
     # Check existing kernel state
@@ -68,8 +107,9 @@ def get_or_start_kernel(sid: str, cwd_str: str) -> KernelManager:
 
     if km is None:
         logger.info("Starting new kernel for sid=%s", sid)
-        # We preserve the env variables set in Dockerfile
-        km = start_kernel(cwd_str)
+
+        km = start_kernel_for_user(username, cwd_str)
+
         KERNEL_REGISTRY[sid] = km # register
         try:
             _kernel_ready_handshake(km, timeout=10)

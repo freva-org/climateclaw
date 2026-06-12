@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+from pathlib import Path
 from queue import Empty
 from typing import Dict, Any, Optional
 
@@ -291,9 +292,10 @@ def _run_shell(
 
 
 def execute_code(
+    username: str,
     session_id: str,
     code: str,
-    working_dir,
+    working_dir: Path,
     cancel_event: threading.Event,
     active_request: ActiveRequest,
 ) -> dict:
@@ -305,7 +307,7 @@ def execute_code(
         )
         raise RequestCancelled("Execution cancelled by client")
 
-    km = get_or_start_kernel(session_id, cwd_str=working_dir)
+    km = get_or_start_kernel(username, session_id, cwd_str=working_dir)
 
     def _attempt_once() -> Dict[str, Any]:
         """

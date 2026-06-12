@@ -1,6 +1,7 @@
 import os
 import asyncio
 from contextvars import ContextVar
+from pathlib import Path
 
 from fastmcp import FastMCP
 
@@ -31,8 +32,10 @@ mcp = FastMCP("code-interpreter-server")
 
 # ── App ───────────────────────────────────────────────────────────────────
 # Per-request header context
-CODE_INTERPRETER_CWD_HDR = "working-dir"
-cwd_ctx: ContextVar[str | None] = ContextVar("cwd_ctx", default=None)
+CODE_INTERPRETER_USER_HDR = "username"
+usr_ctx: ContextVar[str | None] = ContextVar("usr_ctx", default=None)
+CODE_INTERPRETER_THID_HDR = "thread-id"
+th_ctx: ContextVar[str | None] = ContextVar("th_ctx", default=None)
 
 HOST = os.getenv("FREVAGPT_MCP_HOST", "0.0.0.0")
 PORT = int(os.getenv("FREVAGPT_MCP_PORT", "8051"))
@@ -45,8 +48,8 @@ logger.info("Starting code-interpreter MCP server on %s:%s%s", HOST, PORT, PATH)
 # Start the MCP server using Streamable HTTP transport
 app = make_header_gate(
     mcp.http_app(),
-    ctx_list=[cwd_ctx],
-    header_name_list=[CODE_INTERPRETER_CWD_HDR],
+    ctx_list=[usr_ctx, th_ctx],
+    header_name_list=[CODE_INTERPRETER_USER_HDR, CODE_INTERPRETER_THID_HDR],
     logger=logger,
     mcp_path=PATH,
     on_session_close=cleanup_mcp_session,
@@ -54,21 +57,27 @@ app = make_header_gate(
 )
 
 
-def get_cwd():
-    cwd = cwd_ctx.get()
-    if not cwd:
-        logger.warning(
-            f"Missing required header '{CODE_INTERPRETER_CWD_HDR}'! "
-            "Not setting CWD for code server, this MAY result in errors "
-            "when the code interpreter saves data."
-        )
-        return
+def get_username():
+    username = usr_ctx.get()
+    if not username:
+        raise ValueError
     else:
-        return cwd
+        return username
+    
+def get_threadid():
+    thread_id = th_ctx.get()
+    if not thread_id:
+        raise ValueError
+    else:
+        return thread_id
 
 
 def _run_code_request(
-    sid: str, code: str, working_dir: str, req: ActiveRequest
+    username: str, 
+    sid: str, 
+    code: str, 
+    working_dir: Path, 
+    req: ActiveRequest
 ) -> dict:
     lock = get_sid_lock(sid)
     with lock:
@@ -77,6 +86,7 @@ def _run_code_request(
 
         sanitized_code = sanitize_code(code)
         out = execute_code(
+            username=username,
             session_id=sid,
             code=sanitized_code,
             working_dir=working_dir,
@@ -100,14 +110,46 @@ async def code_interpreter(code: str) -> dict:
     Execute Python in a Jupyter-like IPython Kernel.
     Returns a structured dict with all outputs (stdout, stderr, result_rep, display_data, error)
     """
-    working_dir = get_cwd() or os.getcwd()
-    session_id, request_id = current_ids()
+    try:
+        username = get_username()
+    except Exception:
+        logger.exception(
+            f"Missing required header '{CODE_INTERPRETER_USER_HDR}'! "
+        )
+        return {
+            "stdout": "",
+            "stderr": "",
+            "result_repr": "",
+            "display_data": [],
+            "error": "Execution failed due to bad request: Missing header username.",
+        }
 
-    logger.debug(
-        f"Session id:{session_id}\nRequest id:{request_id}\nKernel execution timeout:{EXEC_TIMEOUT}"
-    )
+    try:
+        thread_id = get_threadid()
+    except Exception:
+        logger.exception(
+            f"Missing required header '{CODE_INTERPRETER_THID_HDR}'! "
+        )
+        return {
+            "stdout": "",
+            "stderr": "",
+            "result_repr": "",
+            "display_data": [],
+            "error": "Execution failed due to bad request: Missing header username.",
+        }
+    
+    thread_logger = configure_logging(__name__, thread_id=thread_id, user_id=username)
+
+    session_id, request_id = current_ids()
+    session_workdir = Path(thread_id)
+
+    msg = f"Session id:{session_id}\nRequest id:{request_id}\nKernel execution timeout:{EXEC_TIMEOUT}"
+    logger.debug(msg)
+    thread_logger.debug(msg)
+
     stripped_code = code.replace("\n", "; ")
     logger.debug(f"Input code: {stripped_code}")
+    thread_logger.debug(f"Input code: {stripped_code}")
 
     violation = check_code_safety(code)
 
@@ -117,6 +159,7 @@ async def code_interpreter(code: str) -> dict:
             f"{violation.description} (matched: {violation.match!r})"
         )
         logger.warning(msg)
+        thread_logger.warning(msg)
         return {
             "stdout": "",
             "stderr": "",
@@ -126,20 +169,21 @@ async def code_interpreter(code: str) -> dict:
         }
 
     logger.info("Code block is safe to execute..")
+    thread_logger.info("Code block is safe to execute..")
 
     try:
         async with tracked_request(session_id, request_id) as req:
             req.raise_if_cancelled()
             return await asyncio.to_thread(
-                _run_code_request, session_id, code, working_dir, req
+                _run_code_request, username, session_id, code, session_workdir, req
             )
     # NOTE: a future refactor to make the whole pipeline async would be good (including the kernel management).
     # But this is a good start and allows the use of existing sync code execution logic with minimal changes.
 
     except RequestCancelled:
-        logger.info(
-            f"code_interpreter: execution cancelled for sid={session_id} request_id={request_id}"
-        )
+        msg = f"code_interpreter: execution cancelled for sid={session_id} request_id={request_id}"
+        logger.info(msg)
+        thread_logger.info(msg)
         return {
             "stdout": "",
             "stderr": "",
@@ -149,9 +193,9 @@ async def code_interpreter(code: str) -> dict:
         }
 
     except InterruptedError as e:
-        logger.info(
-            f"code_interpreter: execution interrupted unexpectedly for sid={session_id} request_id={request_id}"
-        )
+        msg = f"code_interpreter: execution interrupted unexpectedly for sid={session_id} request_id={request_id}"
+        logger.info(msg)
+        thread_logger.info(msg)
         return {
             "stdout": "",
             "stderr": "",
@@ -163,6 +207,7 @@ async def code_interpreter(code: str) -> dict:
     except TimeoutError as e:
         msg = f"Execution failed: {e}"
         logger.exception(f"code_interpreter: execution timeout {msg}")
+        thread_logger.exception(f"code_interpreter: execution timeout {msg}")
         return {
             "stdout": "",
             "stderr": "",
@@ -174,6 +219,7 @@ async def code_interpreter(code: str) -> dict:
     except Exception as e:
         msg = f"Execution failed: {type(e).__name__}: {e}"
         logger.exception(f"code_interpreter: execution error {e}")
+        thread_logger.exception(f"code_interpreter: execution error {e}")
         return {
             "stdout": "",
             "stderr": "",
