@@ -66,6 +66,7 @@ async def stream_with_tools(
     acomplete_func=acomplete,
     stream_state: StreamState,
     storage: ThreadStorage,
+    store_thread: bool = True,
     logger=None,
 ) -> AsyncIterator[StreamVariant]:
     log = logger or DEFAULT_LOGGER
@@ -137,7 +138,7 @@ async def stream_with_tools(
 
     if accumulated_asst_text:
         asst_v = SVAssistant(text="".join(accumulated_asst_text))
-        await add_to_conversation(thread_id, [asst_v], storage=storage)
+        await add_to_conversation(thread_id, [asst_v], storage=storage, store_thread=store_thread)
 
     # If no tool calls, wrap up everything and return
     if not tool_calls:
@@ -162,7 +163,7 @@ async def stream_with_tools(
             # code is already streamed, we stream the other tool calls here too
             yield tool_v 
 
-        await add_to_conversation(thread_id, [tool_v], storage=storage)
+        await add_to_conversation(thread_id, [tool_v], storage=storage, store_thread=store_thread)
 
         async def run_with_heartbeat():
             """Run the tool while periodically sending heartbeats."""
@@ -238,7 +239,7 @@ async def stream_with_tools(
             else:
                 yield r  # Streaming the result to endpoint
 
-        await add_to_conversation(thread_id, tool_out_v, storage=storage)
+        await add_to_conversation(thread_id, tool_out_v, storage=storage, store_thread=store_thread)
 
         if tool_msgs:
             messages.extend(tool_msgs)
@@ -256,6 +257,7 @@ async def run_stream(
     user_input: str,
     system_prompt: List[Dict[str, Any]],
     storage: ThreadStorage,
+    store_thread: bool = True,
     logger=None,
 ) -> AsyncGenerator[StreamVariant, None]:
     """
@@ -265,7 +267,7 @@ async def run_stream(
 
     # Append user content
     user_v = SVUser(text=user_input or "")
-    await add_to_conversation(thread_id, [user_v], storage=storage)
+    await add_to_conversation(thread_id, [user_v], storage=storage, store_thread=store_thread)
 
     stream_state = StreamState()
 
@@ -282,6 +284,7 @@ async def run_stream(
                 acomplete_func=acomplete,
                 stream_state=stream_state,
                 storage=storage,
+                store_thread=store_thread,
                 logger=log,
             ):
                 yield piece
@@ -294,7 +297,7 @@ async def run_stream(
             log.exception("Stream error: %s", e)
             err_v = SVServerError(message=str(e))
             end_v = SVStreamEnd(message="Stream ended with an error.")
-            await add_to_conversation(thread_id, [err_v], storage=storage)
+            await add_to_conversation(thread_id, [err_v], storage=storage, store_thread=store_thread)
             stream_state.finished = True
             yield err_v
             yield end_v

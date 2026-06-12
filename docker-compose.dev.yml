@@ -17,6 +17,10 @@ services:
       - ./logs/:/app/logs
     networks: 
       - freva-gpt
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
   rag:
     image: rag-server-${FREVAGPT_INSTANCE_NAME}
     build:
@@ -33,6 +37,7 @@ services:
       - ./logs/:/app/logs
     networks: 
       - freva-gpt
+
   code:
     image: code-server-${FREVAGPT_INSTANCE_NAME}
     build:
@@ -52,6 +57,7 @@ services:
       - ./logs/:/app/logs
     networks: 
       - freva-gpt
+
   web-search:
     image: web-search-server-${FREVAGPT_INSTANCE_NAME}
     build:
@@ -69,6 +75,7 @@ services:
       - freva-gpt
     volumes:
       - ./logs/:/app/logs
+
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     hostname: litellm-instance-${FREVAGPT_INSTANCE_NAME}
@@ -89,19 +96,26 @@ services:
     hostname: ollama-instance-${FREVAGPT_INSTANCE_NAME}
     networks: 
       - freva-gpt
+
   mongodb:
     networks:
       - freva-gpt
-    image: mongo:latest
+    image: ghcr.io/freva-org/freva-mongo:latest
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${FREVAGPT_MONGODB_USER:?MongoDB user and password must be set in the .env file. See .env.example.}
-      MONGO_INITDB_ROOT_PASSWORD: ${FREVAGPT_MONGODB_PASSWORD}
+      - API_MONGO_USER=${FREVAGPT_MONGODB_USER:?MongoDB user and password must be set in the .env file. See .env.example.}
+      - API_MONGO_PASSWORD=${FREVAGPT_MONGODB_PASSWORD}
+      - API_MONGO_DB=${FREVAGPT_MONGODB_DATABASE_NAME}
     hostname: mongodb
     ports:
       - "27017:27017"
     volumes:
       - ./mongo-data:/data/db
-    command: --quiet --logpath /dev/null 
+    healthcheck:
+      test: ["CMD", "healthchecks", "-s", "mongo"]
+      interval: 35s
+      timeout: 2s
+      retries: 3
+      start_period: 15s
 
   freva-db:
     networks:
@@ -120,30 +134,10 @@ services:
     ports:
       - "3306:3306"
 
-  freva-vault:
-    networks:
-      - freva-gpt
-    image: ghcr.io/freva-org/freva-vault:latest
-    hostname: freva-vault
-    container_name: freva-vault
-    cap_add:
-      - IPC_LOCK
-      - SYS_NICE
-    environment:
-      - ROOT_PW=T3st
-      - KEY_FILE=/vault/file/keys
-      - VAULT_ADD_VAR_DB_DB=frevadb
-      - VAULT_ADD_VAR_DB_HOST=freva-db
-      - VAULT_ADD_VAR_DB_PASSWD=T3st
-      - VAULT_ADD_VAR_MONGO_DB=search_stats
-      - VAULT_ADD_VAR_MONGO_PASSWD=secret
-      - VAULT_ADD_VAR_MONGO_USER=mongo
-      - VAULT_ADD_VAR_MONGO_URL='mongodb://mongo:secret@freva-mongo:27017'
-
   freva-web:
     networks:
       - freva-gpt
-    image: ghcr.io/freva-org/freva-web:2604.2.0
+    image: ghcr.io/freva-org/freva-web:2605.2.2
     ports:
       - "8000:8000"
     container_name: freva-web
@@ -155,7 +149,7 @@ services:
       - SCHEDULER_HOST=localhost
       - REDIS_HOST=freva-cache
       - CSRF_TRUSTED_ORIGINS=http://127.0.0.1,http://localhost
-      - FREVA_REST_URL=http://regiklim-dev.dkrz.de:7777
+      - FREVA_REST_URL=http://restapi:7777
       - CHAT_BOT_URL=http://freva-gpt-backend:8502
       - ACTIVATE_CHAT_BOT=1
       - STAC_BROWSER=1
@@ -171,6 +165,149 @@ services:
     hostname: freva-cache
     container_name: freva-cache
 
+  volume-prep:
+    image: docker.io/python:3-alpine
+    user: 0:0
+    hostname: volume-prep
+    restart: "no"
+    command:  find /settings -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    volumes:
+      - settings-data:/settings:rw
+
+  git-prep:
+    image: docker.io/alpine/git
+    user: 0:0
+    hostname: git-prep
+    restart: "no"
+    depends_on:
+      volume-prep:
+        condition: service_completed_successfully
+    command: ["clone", "--depth", "1", "https://github.com/freva-org/freva-service-config.git", "/settings"]
+    volumes:
+      - settings-data:/settings:rw
+
+  prep:
+    image: docker.io/python:3-alpine
+    user: 0:0
+    hostname: prep
+    restart: "no"
+    depends_on:
+      git-prep:
+        condition: service_completed_successfully
+    command: >
+        sh -eu -c '
+          ls -rlt /settings &&
+          python /settings/dev-utils.py gen-certs --cert-dir /certs &&
+          cp -a /settings/keycloak/import/. /import/
+        '
+    volumes:
+      - settings-data:/settings:ro
+      - certs-data:/certs:rw
+      - import-data:/import:rw
+
+  solr:
+    networks:
+      - freva-gpt
+    image: ghcr.io/freva-org/freva-solr:latest
+    ports:
+      - "8983:8983"
+    hostname: solr
+    healthcheck:
+      test: ["CMD", "healthchecks", "-s", "solr"]
+      interval: 35s
+      timeout: 2s
+      retries: 3
+      start_period: 15s
+
+  keycloak:
+    networks:
+      freva-gpt:
+        aliases:
+          - keycloak.localhost
+    image: quay.io/keycloak/keycloak
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: keycloak
+      KC_BOOTSTRAP_ADMIN_PASSWORD: secret
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      JAVA_OPTS_APPEND: "-Djava.net.preferIPv4Stack=true"
+    depends_on:
+      prep:
+        condition: service_completed_successfully
+    hostname: keycloak
+    volumes:
+      - certs-data:/certs:ro
+      - import-data:/opt/keycloak/data/import:ro
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    command: |
+         start-dev
+         --hostname-strict=false
+         --hostname=http://keycloak.localhost:8080
+         --import-realm
+         -Dkeycloak.migration.strategy=OVERWRITE_EXISTING
+
+  keycloak-bootstrap:
+    image: docker.io/alpine
+    restart: "no"
+    depends_on:
+      - keycloak
+    environment:
+      USER: ${USER}
+      KEYCLOAK_ADMIN: keycloak
+      KEYCLOAK_ADMIN_PASSWORD: secret
+      KEYCLOAK_HOST: keycloak:8080
+    command: >
+      /bin/sh -c '
+        set -eu &&
+        apk add --no-cache curl jq ca-certificates &&
+        curl -fsSL \
+          "https://raw.githubusercontent.com/freva-org/freva-nextgen/refs/heads/main/dev-env/create-user.sh"\
+          -o create_user.sh &&
+        sh create_user.sh || true
+      '
+    networks:
+      - freva-gpt
+
+  freva-rest-server:
+    user: root
+    image: ghcr.io/freva-org/freva-rest-api:latest
+    hostname: restapi
+    networks:
+      - freva-gpt
+    environment:
+      - API_SOLR_CORE=files
+      - API_PORT=7777
+      - COLUMNS=140
+      - API_OIDC_CLIENT_ID=freva
+      - API_OIDC_DISCOVERY_URL=http://keycloak.localhost:8080/realms/freva/.well-known/openid-configuration
+      - API_OIDC_TOKEN_CLAIMS=admin
+      - API_ADMIN_CLAIMS=${USER}
+      - API_OIDC_SYSTEMUSER_CLAIM=preferred_username
+      - API_OIDC_TRUSTED_ISSUERS=https://www.freva.dkrz.de
+      - API_REDIS_USER=redis
+      - API_REDIS_PASSWORD=secret
+      - API_REDIS_HOST=redis://freva-cache:6379
+      - API_LOGDIR=/tmp/logs
+      - API_SOLR_HOST=http://solr:8983
+      - API_MONGO_USER=${FREVAGPT_MONGODB_USER}
+      - API_MONGO_HOST=mongodb:27017
+      - API_MONGO_PASSWORD=${FREVAGPT_MONGODB_PASSWORD}
+      - API_MONGO_DB=search_stats
+      - API_SERVICES=databrowser,stacapi
+    depends_on:
+      solr:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      keycloak-bootstrap:
+        condition: service_completed_successfully
+    ports:
+      - 7777:7777
+    command: ["--redis-ssl-certdir", "/certs"]
+    volumes:
+      - certs-data:/certs:ro
 
 networks:
   freva-gpt:
@@ -178,3 +315,8 @@ networks:
 
 # The subnet is not set to avoid conflicts with other potentially running networks on the same machine.
 # Note: Named networks by default aren't shared between different docker-compose projects, even if they have the same name, as long as they are in separate directories.
+
+volumes:
+  settings-data:
+  certs-data:
+  import-data:
