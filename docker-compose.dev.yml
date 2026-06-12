@@ -13,7 +13,7 @@ services:
       - "${FREVAGPT_TARGET_PORT:-8502}:${FREVAGPT_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
       - "5678:5678" # Port for debugpy
     volumes: 
-      - ./cache/:/app/cache
+      - ./cache/:${FREVAGPT_WORKDIR}
       - ./logs/:/app/logs
     networks: 
       - freva-gpt
@@ -53,7 +53,7 @@ services:
       - 8051:8051
     cpus: 4
     volumes:
-      - ./cache/:/app/cache
+      - ./cache/:${FREVAGPT_WORKDIR}      
       - ./logs/:/app/logs
     networks: 
       - freva-gpt

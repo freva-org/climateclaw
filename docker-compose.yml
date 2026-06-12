@@ -12,7 +12,7 @@ services:
     volumes:
       - /work:/work:ro
       - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
-      - ${FREVAGPT_CACHE_PATH}:/app/cache:rw
+      - ${FREVAGPT_CACHE_PATH}:${FREVAGPT_WORKDIR}:rw
     networks:
       - freva-gpt
   rag:
@@ -40,8 +40,9 @@ services:
       FREVAGPT_MCP_PORT: 8051
     volumes:
       - /work:/work:ro
+      - /home:/home:ro
+      - ${FREVAGPT_CACHE_PATH}:${FREVAGPT_WORKDIR}:rw
       - /container/da/freva-gpt-backend-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
-      - ${FREVAGPT_CACHE_PATH}:/app/cache:rw
     cpus: 4
     networks:
       - freva-gpt
