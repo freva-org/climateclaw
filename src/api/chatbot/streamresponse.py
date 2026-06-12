@@ -18,7 +18,6 @@ from src.services.service_factory import (
     get_thread_storage,
     ThreadStorage
 )
-from src.services.storage.helpers import create_dir_at_cache
 
 from src.services.streaming.stream_variants import (
     SVStreamEnd,
@@ -143,8 +142,6 @@ async def streamresponse(
 
     user_name = auth.username
     logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
-
-    create_dir_at_cache(user_name, thread_id)
 
     is_new_thread = False
 

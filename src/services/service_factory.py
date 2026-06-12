@@ -15,8 +15,6 @@ log = configure_logging(__name__)
 
 settings = get_settings()
 
-CACHE_ROOT = Path("./cache")
-
 
 async def auth_dependency(
     request: Request,
@@ -51,12 +49,14 @@ async def get_mcp_manager(
     """
     MCP_SERVER_URLs = get_server_url_dict(settings.AVAILABLE_MCP_SERVERS)
 
-    access_token = authenticator.access_token
-    auth_header = f"Bearer {access_token}" if access_token else None
+    username = authenticator.username
+    # access_token = authenticator.access_token
+    # auth_header = f"Bearer {access_token}" if access_token else None
 
     # Defaults to send; per-call headers (rest) are added at call time.
     default_headers: Dict[str, str] = {
-        "Authorization": auth_header,
+        # "Authorization": auth_header,
+        "username": username,
         "thread-id": thread_id,
         }
 
@@ -71,9 +71,7 @@ async def get_mcp_manager(
         logger=logger,
     )
 
-    cache = CACHE_ROOT / thread_id
-
-    extra_headers = get_mcp_headers(authenticator, cache, logger=logger)
+    extra_headers = get_mcp_headers(authenticator, logger=logger)
 
     try:
         await mgr.initialize(extra_headers)

@@ -225,16 +225,13 @@ class McpManager:
 
 
 def get_mcp_headers(
-    auth: Authenticator, cache: str, logger=None
+    auth: Authenticator, logger=None
 ) -> Dict[str, str]:
     mongodb_uri = get_mongodb_uri()
 
     headers = {
         "rag": {
             "mongodb-uri": mongodb_uri,
-        },
-        "code": {
-            "working-dir": str(cache),
         },
     }
     return headers

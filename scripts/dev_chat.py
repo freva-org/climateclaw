@@ -22,7 +22,6 @@ from src.core.prompting import get_entire_prompt
 from src.core.settings import get_settings
 from src.services.service_factory import DevAuthenticator
 from src.services.storage.mongodb_storage import ThreadStorage
-from src.services.storage.helpers import create_dir_at_cache
 from src.services.streaming.active_conversations import (
     end_and_save_conversation,
     new_thread_id,
@@ -148,8 +147,6 @@ async def main() -> None:
 
     Auth = await DevAuthenticator.build(None)
     Storage = await ThreadStorage.create()
-    create_dir_at_cache(USER_ID, thread_id)
-
 
     system_prompt = get_entire_prompt(USER_ID, thread_id, MODEL)
 
@@ -206,7 +203,7 @@ async def main() -> None:
             print(f"[turn stats] chunks={t_chunks} chars={t_chars}")
 
     # At this point the thread file has been incrementally written by the orchestrator.
-    # We just print where it lives. (Same path used by recursively_create_dir_at_cache)
+    # We just print where it lives.
     print("\nConversation ended.")
     print(
         f"Thread saved under the user/thread directory created for: user={USER_ID}, thread_id={thread_id}"

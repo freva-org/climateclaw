@@ -22,7 +22,6 @@ from src.core.logging_setup import configure_logging
 from src.core.prompting import get_entire_prompt
 from src.services.service_factory import DevAuthenticator
 from src.services.storage.mongodb_storage import ThreadStorage
-from src.services.storage.helpers import create_dir_at_cache
 from src.services.streaming.active_conversations import (
     new_thread_id,
     end_and_save_conversation,
@@ -79,7 +78,6 @@ async def _run_once(idx: int, sem: asyncio.Semaphore) -> RunResult:
 
         Auth = await DevAuthenticator.build(None)
         Storage = await ThreadStorage.create()
-        create_dir_at_cache(USER_ID, thread_id)
 
         await prepare_for_stream(
             thread_id=thread_id,
