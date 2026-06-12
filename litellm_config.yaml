@@ -24,6 +24,11 @@ model_list:
     litellm_params:
       model: "ollama/mxbai-embed-large:latest"
       api_base: "http://ollama:11434" # Ollama API base URL
+  - model_name: "openclaw"
+    litellm_params:
+      model: "openai/openclaw"
+      "api_base": "os.environ/FREVAGPT_OPENCLAW_API_BASE"
+      "api_key": "os.environ/FREVAGPT_OPENCLAW_API_KEY"
 
 litellm_settings:
   drop_params: true # If true, drop all parameters not in the model_list from the request

@@ -183,7 +183,11 @@ async def streamresponse(
         is_new_thread = True
         logger.info(f"Starting a new conversation with thread_id: {thread_id}...")
 
-    system_prompt = get_entire_prompt(user_name, thread_id, model_name)
+    # Because the openclaw setup already has its own prompt, we are filtering it out, as else it would get two different prompts. 
+    if model_name.lower().contains("openclaw"):
+        system_prompt = []
+    else:
+        system_prompt = get_entire_prompt(user_name, thread_id, model_name)
 
     logger.info(
         "Streaming response",
