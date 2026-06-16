@@ -1,6 +1,6 @@
 import pytest
-from freva_gpt.api.chatbot import editthread
-from freva_gpt.services.streaming.stream_variants import SVPrompt, SVServerHint
+from climateclaw.api.chatbot import editthread
+from climateclaw.services.streaming.stream_variants import SVPrompt, SVServerHint
 
 
 @pytest.mark.asyncio

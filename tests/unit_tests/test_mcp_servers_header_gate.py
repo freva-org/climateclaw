@@ -5,7 +5,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_header_gate_delete_triggers_cleanup_and_returns_204():
-    from freva_gpt.tools.header_gate import make_header_gate
+    from climateclaw.tools.header_gate import make_header_gate
 
     # Dummy inner app that should NOT be called on DELETE
     inner_called = {"called": False}

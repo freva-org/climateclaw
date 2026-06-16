@@ -1,5 +1,5 @@
 ARG VERSION=latest
-FROM ghcr.io/freva-org/freva-gpt-base:${VERSION}
+FROM ghcr.io/freva-org/climateclaw-base:${VERSION}
 
 COPY docker/rag-server/pyproject.toml /app/pyproject.toml
 
@@ -10,12 +10,12 @@ RUN conda run -n env uv pip install --no-cache-dir --system \
     --python "/opt/conda/envs/env/bin/python" \
     -r /tmp/requirements.txt
 
-EXPOSE ${FREVAGPT_MCP_PORT:-8050}
+EXPOSE ${CLIMATECLAW_MCP_PORT:-8050}
 
-COPY freva_gpt /app/freva_gpt
+COPY climateclaw /app/climateclaw
 
 # Launch CI server
-CMD uvicorn freva_gpt.tools.rag.server:app \
-    --host ${FREVAGPT_MCP_HOST:-0.0.0.0} \
-    --port ${FREVAGPT_MCP_PORT:-8050} \
+CMD uvicorn climateclaw.tools.rag.server:app \
+    --host ${CLIMATECLAW_MCP_HOST:-0.0.0.0} \
+    --port ${CLIMATECLAW_MCP_PORT:-8050} \
     --proxy-headers

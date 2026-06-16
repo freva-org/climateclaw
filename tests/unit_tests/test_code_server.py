@@ -2,7 +2,7 @@ import threading
 
 
 def test_cleanup_mcp_session_removes_kernel_and_lock(monkeypatch):
-    import freva_gpt.tools.code.server as server
+    import climateclaw.tools.code.server as server
 
     sid = "sid-1"
 

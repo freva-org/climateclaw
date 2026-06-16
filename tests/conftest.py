@@ -3,10 +3,10 @@ import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-import freva_gpt.services.streaming.active_conversations as act_conv
+import climateclaw.services.streaming.active_conversations as act_conv
 import httpx
 import pytest
-from freva_gpt.services.streaming.stream_variants import from_json_to_sv
+from climateclaw.services.streaming.stream_variants import from_json_to_sv
 
 # ──────────────────────────────────────────────────────────────────────────────
 # GLOBAL / COMMON
@@ -18,15 +18,15 @@ def app(patch_thread_storage):
     # Reload settings after environment patching
     import importlib
 
-    import freva_gpt.core.settings as settings
+    import climateclaw.core.settings as settings
 
     importlib.reload(settings)
 
-    import freva_gpt.services.service_factory as sf
+    import climateclaw.services.service_factory as sf
 
     importlib.reload(sf)
 
-    import freva_gpt.app as app_module
+    import climateclaw.app as app_module
 
     importlib.reload(app_module)
 
@@ -47,9 +47,9 @@ def client(app):
 
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
-    monkeypatch.setenv("FREVAGPT_HOST", "localhost")
-    monkeypatch.setenv("FREVAGPT_BACKEND_PORT", "8502")
-    monkeypatch.setenv("FREVAGPT_DEV", "0")  # for PROD-like auth
+    monkeypatch.setenv("CLIMATECLAW_HOST", "localhost")
+    monkeypatch.setenv("CLIMATECLAW_BACKEND_PORT", "8502")
+    monkeypatch.setenv("CLIMATECLAW_DEV", "0")  # for PROD-like auth
     yield
 
 
@@ -152,7 +152,7 @@ def dummy_db():
 
 @pytest.fixture
 def patch_mongodb(monkeypatch, dummy_db):
-    import freva_gpt.services.storage.mongodb_storage as mongodb_storage
+    import climateclaw.services.storage.mongodb_storage as mongodb_storage
 
     class DummyMongoClient:
         def __init__(self, *args, **kwargs):
@@ -178,7 +178,7 @@ def patch_mongodb(monkeypatch, dummy_db):
 
 @pytest.fixture
 async def patch_thread_storage(patch_mongodb):
-    from freva_gpt.services.storage.mongodb_storage import ThreadStorage
+    from climateclaw.services.storage.mongodb_storage import ThreadStorage
 
     return await ThreadStorage.create()
 
@@ -193,7 +193,7 @@ def patch_read_thread(monkeypatch):
             {"variant": "Assistant", "content": "also kept"},
         ]
 
-    import freva_gpt.services.storage.mongodb_storage as mongo_store
+    import climateclaw.services.storage.mongodb_storage as mongo_store
 
     monkeypatch.setattr(
         mongo_store.ThreadStorage,
@@ -235,7 +235,7 @@ def patch_save_thread(monkeypatch):
         )
         return
 
-    import freva_gpt.services.storage.mongodb_storage as mongo_store
+    import climateclaw.services.storage.mongodb_storage as mongo_store
 
     monkeypatch.setattr(
         mongo_store.ThreadStorage,
@@ -268,7 +268,7 @@ def patch_user_threads(monkeypatch):
         ]
         return threads, len(threads)
 
-    import freva_gpt.services.storage.mongodb_storage as mongo_store
+    import climateclaw.services.storage.mongodb_storage as mongo_store
 
     monkeypatch.setattr(
         mongo_store.ThreadStorage,
@@ -321,7 +321,7 @@ def patch_registry(monkeypatch):
 @pytest.fixture
 def patch_stream(monkeypatch):
     async def fake_run_stream(**kwargs):
-        from freva_gpt.services.streaming.stream_variants import (
+        from climateclaw.services.streaming.stream_variants import (
             SVAssistant,
             SVServerHint,
         )
@@ -331,7 +331,7 @@ def patch_stream(monkeypatch):
         return
 
     monkeypatch.setattr(
-        "freva_gpt.api.chatbot.streamresponse.run_stream",
+        "climateclaw.api.chatbot.streamresponse.run_stream",
         fake_run_stream,
         raising=True,
     )

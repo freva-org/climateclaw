@@ -12,7 +12,7 @@ async def test_getthread_returns_404_when_thread_missing(
         raise FileNotFoundError("missing")
 
     monkeypatch.setattr(
-        "freva_gpt.api.chatbot.getthread.get_conversation_history",
+        "climateclaw.api.chatbot.getthread.get_conversation_history",
         _raise_not_found,
         raising=True,
     )
@@ -39,7 +39,7 @@ async def test_getthread_returns_500_when_history_invalid(
     async def _raise_value_error(*args, **kwargs):
         raise ValueError("broken history")
 
-    import freva_gpt.services.storage.mongodb_storage as mongo_store
+    import climateclaw.services.storage.mongodb_storage as mongo_store
 
     monkeypatch.setattr(
         mongo_store.ThreadStorage,

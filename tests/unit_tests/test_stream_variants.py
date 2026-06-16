@@ -1,4 +1,4 @@
-from freva_gpt.services.streaming.stream_variants import (
+from climateclaw.services.streaming.stream_variants import (
     StreamVariant,
     SVAssistant,
     SVCode,

@@ -1,5 +1,5 @@
 ARG VERSION=latest
-FROM ghcr.io/freva-org/freva-gpt-base:${VERSION}
+FROM ghcr.io/freva-org/climateclaw-base:${VERSION}
 
 RUN dnf install -y gcc gcc-c++ make python3-devel \
     && dnf clean all
@@ -19,12 +19,12 @@ RUN conda run -n env uv pip install \
     geopy aiohttp requests scikit-learn geopandas healpy easygems astropy tzdata pytz \
     imageio
 
-EXPOSE ${FREVAGPT_MCP_PORT:-8051}
+EXPOSE ${CLIMATECLAW_MCP_PORT:-8051}
 
-COPY freva_gpt /app/freva_gpt
+COPY climateclaw /app/climateclaw
 
 # Launch CI server
-CMD uvicorn freva_gpt.tools.code.server:app \
-    --host ${FREVAGPT_MCP_HOST:-0.0.0.0} \
-    --port ${FREVAGPT_MCP_PORT:-8051} \
+CMD uvicorn climateclaw.tools.code.server:app \
+    --host ${CLIMATECLAW_MCP_HOST:-0.0.0.0} \
+    --port ${CLIMATECLAW_MCP_PORT:-8051} \
     --proxy-headers

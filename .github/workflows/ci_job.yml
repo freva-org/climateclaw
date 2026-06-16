@@ -50,14 +50,14 @@ jobs:
       - name: Create CI .env
         run: |
           cat > .env <<'EOF'
-          FREVAGPT_INSTANCE_NAME=ci
-          FREVAGPT_FILE_LOGGING=0
-          FREVAGPT_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          FREVAGPT_MCP_REQUEST_TIMEOUT_SEC=20
-          FREVAGPT_CACHE_PATH=/ci-path/cache
-          FREVAGPT_MONGODB_USER=ci-user
-          FREVAGPT_MONGODB_PASSWORD=ci-psswrd
-          FREVAGPT_MONGODB_DATABASE_NAME=ci-db
+          CLIMATECLAW_INSTANCE_NAME=ci
+          CLIMATECLAW_FILE_LOGGING=0
+          CLIMATECLAW_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          CLIMATECLAW_MCP_REQUEST_TIMEOUT_SEC=20
+          CLIMATECLAW_CACHE_PATH=/ci-path/cache
+          CLIMATECLAW_MONGODB_USER=ci-user
+          CLIMATECLAW_MONGODB_PASSWORD=ci-psswrd
+          CLIMATECLAW_MONGODB_DATABASE_NAME=ci-db
           EOF
 
       - name: Sync dependencies
@@ -95,23 +95,23 @@ jobs:
       - name: Create CI .env
         run: |
           cat > .env <<'EOF'
-          FREVAGPT_INSTANCE_NAME=ci
-          FREVAGPT_FILE_LOGGING=0
-          FREVAGPT_CACHE_PATH=/ci-path/cache
-          FREVAGPT_MONGODB_USER=ci-user
-          FREVAGPT_MONGODB_PASSWORD=ci-psswrd
-          FREVAGPT_MONGODB_DATABASE_NAME=ci-db
-          FREVAGPT_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          CLIMATECLAW_INSTANCE_NAME=ci
+          CLIMATECLAW_FILE_LOGGING=0
+          CLIMATECLAW_CACHE_PATH=/ci-path/cache
+          CLIMATECLAW_MONGODB_USER=ci-user
+          CLIMATECLAW_MONGODB_PASSWORD=ci-psswrd
+          CLIMATECLAW_MONGODB_DATABASE_NAME=ci-db
+          CLIMATECLAW_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           EOF
 
       - name: Build production base image
-        run: docker compose --profile build-only build freva-gpt-base
+        run: docker compose --profile build-only build climateclaw-base
 
       - name: Start production stack
         run: |
-          docker compose up freva-gpt code-server web-search-server -d --wait --build --remove-orphans || {
+          docker compose up climateclaw code-server web-search-server -d --wait --build --remove-orphans || {
             docker compose ps -a
-            docker compose logs freva-gpt
+            docker compose logs climateclaw
             docker compose logs code-server
             docker compose logs web-search-server
             docker compose logs mongodb

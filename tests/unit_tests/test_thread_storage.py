@@ -1,10 +1,10 @@
-import freva_gpt.services.storage.mongodb_storage as mongo_storage
+import climateclaw.services.storage.mongodb_storage as mongo_storage
 import pytest
-from freva_gpt.services.storage.mongodb_storage import (
+from climateclaw.services.storage.mongodb_storage import (
     MONGODB_COLLECTION_NAME,
     ThreadStorage,
 )
-from freva_gpt.services.streaming.stream_variants import (
+from climateclaw.services.streaming.stream_variants import (
     SVAssistant,
     SVPrompt,
     SVStreamEnd,

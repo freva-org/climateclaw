@@ -61,7 +61,7 @@ jobs:
           echo "add_latest=${ADD_LATEST}" >> "$GITHUB_OUTPUT"
 
   publish-base:
-    name: Publish freva-gpt-base
+    name: Publish climateclaw-base
     runs-on: ubuntu-latest
     needs: set-version
 
@@ -85,7 +85,7 @@ jobs:
       - name: Prepare docker tags
         id: tags
         run: |
-          IMAGE="ghcr.io/${{ needs.set-version.outputs.owner }}/freva-gpt-base"
+          IMAGE="ghcr.io/${{ needs.set-version.outputs.owner }}/climateclaw-base"
           VERSION="${{ needs.set-version.outputs.version }}"
 
           {
@@ -116,8 +116,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image: freva-gpt
-            dockerfile: ./docker/freva-gpt/Dockerfile
+          - image: climateclaw
+            dockerfile: ./docker/climateclaw/Dockerfile
             context: .
           - image: code-server
             dockerfile: ./docker/code-server/Dockerfile

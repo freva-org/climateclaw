@@ -12,7 +12,7 @@ async def test_streamresponse_returns_500_on_prepare_failure(
         raise RuntimeError("prep failed")
 
     monkeypatch.setattr(
-        "freva_gpt.api.chatbot.streamresponse.prepare_for_stream",
+        "climateclaw.api.chatbot.streamresponse.prepare_for_stream",
         _raise_error,
         raising=True,
     )

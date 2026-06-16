@@ -1,33 +1,33 @@
 services:
 
-  freva-gpt-base:
+  climateclaw-base:
     # Build manually with:
-    # docker compose -f docker-compose.dev.yml --profile build-only build freva-gpt-base
+    # docker compose -f docker-compose.dev.yml --profile build-only build climateclaw-base
     build:
       context: .
       dockerfile: docker/Dockerfile.base
-    image: ghcr.io/freva-org/freva-gpt-base:latest
+    image: ghcr.io/freva-org/climateclaw-base:latest
     profiles:
       - build-only
 
-  freva-gpt:
-    image: freva-gpt-${FREVAGPT_INSTANCE_NAME:?Instance name must be set in the .env file to differentiate between instances}
+  climateclaw:
+    image: climateclaw-${CLIMATECLAW_INSTANCE_NAME:?Instance name must be set in the .env file to differentiate between instances}
     build:
       context: .
-      dockerfile: docker/freva-gpt/Dockerfile
+      dockerfile: docker/climateclaw/Dockerfile
     env_file: .env
-    hostname: freva-gpt-instance-${FREVAGPT_INSTANCE_NAME}
+    hostname: climateclaw-instance-${CLIMATECLAW_INSTANCE_NAME}
     ports:
-      - "${FREVAGPT_TARGET_PORT:-8502}:${FREVAGPT_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
+      - "${CLIMATECLAW_TARGET_PORT:-8502}:${CLIMATECLAW_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
     volumes:
       - /work:/work:ro
       - /pool/data:/pool/data:ro
-      - /container/da/freva-gpt-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
-      - ${FREVAGPT_CACHE_PATH}:/app/cache:rw
+      - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
+      - ${CLIMATECLAW_CACHE_PATH}:/app/cache:rw
     networks:
-      - freva-gpt
+      - climateclaw
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${FREVAGPT_BACKEND_PORT:-8502}/healthz')\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${CLIMATECLAW_BACKEND_PORT:-8502}/healthz')\""]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -39,21 +39,21 @@ services:
         condition: service_healthy
 
   code-server:
-    image: code-server-${FREVAGPT_INSTANCE_NAME}
+    image: code-server-${CLIMATECLAW_INSTANCE_NAME}
     build:
       context: .
       dockerfile: docker/code-server/Dockerfile
     env_file: .env
     environment:
-      FREVAGPT_MCP_HOST: 0.0.0.0
-      FREVAGPT_MCP_PORT: 8051
+      CLIMATECLAW_MCP_HOST: 0.0.0.0
+      CLIMATECLAW_MCP_PORT: 8051
     volumes:
       - /work:/work:ro
       - /pool/data:/pool/data:ro
-      - /container/da/freva-gpt-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
-      - ${FREVAGPT_CACHE_PATH}:/app/cache:rw
+      - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
+      - ${CLIMATECLAW_CACHE_PATH}:/app/cache:rw
     networks:
-      - freva-gpt
+      - climateclaw
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8051/healthz')\""]
       interval: 5s
@@ -62,18 +62,18 @@ services:
       start_period: 10s
 
   web-search-server:
-    image: web-search-server-${FREVAGPT_INSTANCE_NAME}
+    image: web-search-server-${CLIMATECLAW_INSTANCE_NAME}
     build:
       context: .
       dockerfile: docker/web-search-server/Dockerfile
     env_file: .env
     environment:
-      FREVAGPT_MCP_HOST: 0.0.0.0
-      FREVAGPT_MCP_PORT: 8052
+      CLIMATECLAW_MCP_HOST: 0.0.0.0
+      CLIMATECLAW_MCP_PORT: 8052
     networks:
-      - freva-gpt
+      - climateclaw
     volumes:
-      - /container/da/freva-gpt-links/${FREVAGPT_INSTANCE_NAME}/logs:/app/logs
+      - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8052/healthz')\""]
       interval: 5s
@@ -83,13 +83,13 @@ services:
 
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
-    hostname: litellm-instance-${FREVAGPT_INSTANCE_NAME}
+    hostname: litellm-instance-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
       - ./litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
     command: "--config=/app/config.yaml"
     env_file: .env
     networks:
-      - freva-gpt
+      - climateclaw
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
       interval: 30s
@@ -99,29 +99,29 @@ services:
 
   ollama: # Ollama is only for the backend and not accessible from the outside. Port 11434 is not exposed.
     image: ollama/ollama:latest
-    hostname: ollama-instance-${FREVAGPT_INSTANCE_NAME}
+    hostname: ollama-instance-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
-      - /container/da/freva-gpt-ollama-models/.ollama:/root/.ollama
+      - /container/da/climateclaw-ollama-models/.ollama:/root/.ollama
     networks:
-      - freva-gpt
+      - climateclaw
     devices:
       - nvidia.com/gpu=all
 
   mongodb:
     user: 0:0
     image: ghcr.io/freva-org/freva-mongo:latest
-    hostname: mongodb-instance-${FREVAGPT_INSTANCE_NAME}
+    hostname: mongodb-instance-${CLIMATECLAW_INSTANCE_NAME}
     environment:
-      - API_MONGO_USER=${FREVAGPT_MONGODB_USER:?MongoDB user and password must be set in the .env file. See .env.example.}
-      - API_MONGO_PASSWORD=${FREVAGPT_MONGODB_PASSWORD}
-      - API_MONGO_DB=${FREVAGPT_MONGODB_DATABASE_NAME}
+      - API_MONGO_USER=${CLIMATECLAW_MONGODB_USER:?MongoDB user and password must be set in the .env file. See .env.example.}
+      - API_MONGO_PASSWORD=${CLIMATECLAW_MONGODB_PASSWORD}
+      - API_MONGO_DB=${CLIMATECLAW_MONGODB_DATABASE_NAME}
     ports:
       - 27017:27017
     volumes:
-      - /container/da/freva-gpt-links/${FREVAGPT_INSTANCE_NAME}/mongo-data:/data/db:z
-      - /container/da/freva-gpt-links/${FREVAGPT_INSTANCE_NAME}/mongo-logs:/data/logs:z
+      - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/mongo-data:/data/db:z
+      - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/mongo-logs:/data/logs:z
     networks:
-      - freva-gpt
+      - climateclaw
     healthcheck:
       test: ["CMD", "healthchecks", "-s", "mongo"]
       interval: 35s
@@ -131,5 +131,5 @@ services:
 
 
 networks:
-  freva-gpt:
+  climateclaw:
     driver: bridge

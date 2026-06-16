@@ -6,7 +6,7 @@ import os
 from typing import Any
 
 import pytest
-from freva_gpt.services.mcp.client import McpClient
+from climateclaw.services.mcp.client import McpClient
 
 pytestmark = pytest.mark.integration
 # Run these tests using `pytest -m integration`
@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(autouse=True)
 def _force_dev(monkeypatch):
-    monkeypatch.setenv("FREVAGPT_DEV", "1")
-    monkeypatch.setenv("FREVAGPT_CODE_SERVER_URL", "http://localhost:8051")
-    import freva_gpt.core.settings as settings
+    monkeypatch.setenv("CLIMATECLAW_DEV", "1")
+    monkeypatch.setenv("CLIMATECLAW_CODE_SERVER_URL", "http://localhost:8051")
+    import climateclaw.core.settings as settings
 
     importlib.reload(settings)
     yield
@@ -27,7 +27,7 @@ def _force_dev(monkeypatch):
 
 @pytest.fixture
 def mcp_client_CI():
-    base_url = os.getenv("FREVAGPT_CODE_SERVER_URL", "http://localhost:8051")
+    base_url = os.getenv("CLIMATECLAW_CODE_SERVER_URL", "http://localhost:8051")
     client = McpClient(
         base_url=base_url,
         default_headers={"freva-config-path": "freva_evaluation.conf"},
@@ -85,8 +85,8 @@ def _exec_and_get_richoutput_value(mcp_client_CI, code):
 
 
 @pytest.mark.skipif(
-    not os.getenv("FREVAGPT_CODE_SERVER_URL"),
-    reason="FREVAGPT_CODE_SERVER_URL not set or code-interpreter MCP server not running",
+    not os.getenv("CLIMATECLAW_CODE_SERVER_URL"),
+    reason="CLIMATECLAW_CODE_SERVER_URL not set or code-interpreter MCP server not running",
 )
 def test_two_plus_two(mcp_client_CI):
     code = {"code": "2+2"}

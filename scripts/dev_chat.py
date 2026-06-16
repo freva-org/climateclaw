@@ -6,11 +6,11 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-os.environ["FREVAGPT_DEV"] = "1"
-os.environ["FREVAGPT_LITE_LLM_ADDRESS"] = "http://localhost:4000"
-os.environ["FREVAGPT_RAG_SERVER_URL"] = "http://localhost:8050"
-os.environ["FREVAGPT_CODE_SERVER_URL"] = "http://localhost:8051"
-os.environ["FREVAGPT_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
+os.environ["CLIMATECLAW_DEV"] = "1"
+os.environ["CLIMATECLAW_LITE_LLM_ADDRESS"] = "http://localhost:4000"
+os.environ["CLIMATECLAW_RAG_SERVER_URL"] = "http://localhost:8050"
+os.environ["CLIMATECLAW_CODE_SERVER_URL"] = "http://localhost:8051"
+os.environ["CLIMATECLAW_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
 
 import asyncio
 import logging
