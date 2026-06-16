@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from fastapi import Depends, HTTPException, Request
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.settings import get_server_url_dict, get_settings
+from fastapi import Depends, HTTPException, Request
 
 from .authentication.auth import Authenticator
 from .mcp.mcp_manager import McpManager, get_mcp_headers

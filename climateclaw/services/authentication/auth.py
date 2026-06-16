@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from fastapi import HTTPException, Request, status
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.settings import Settings, get_settings
+from fastapi import HTTPException, Request, status
 from starlette.datastructures import Headers
 
 from .helpers import bearer_token_from_header, get_username_from_token

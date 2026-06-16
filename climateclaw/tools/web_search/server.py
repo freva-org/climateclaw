@@ -1,8 +1,8 @@
 import os
 
-from fastmcp import FastMCP
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.tools.header_gate import make_header_gate
+from fastmcp import FastMCP
 from openai import OpenAI
 
 logger = configure_logging(__name__, named_log="web_search_server")
