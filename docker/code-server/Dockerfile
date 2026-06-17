@@ -17,7 +17,7 @@ RUN conda run -n env uv pip install --no-cache-dir --system \
 RUN conda run -n env uv pip install \
     freva-client dill numpy matplotlib pandas xarray xesmf scipy netcdf4 cartopy contourpy \
     geopy aiohttp requests scikit-learn geopandas healpy easygems astropy tzdata pytz \
-    imageio
+    imageio fpdf2
 
 EXPOSE ${CLIMATECLAW_MCP_PORT:-8051}
 
