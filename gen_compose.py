@@ -192,10 +192,7 @@ def main():
         "depends_on": list(new_services.keys()),
     }
 
-    out = {
-        "services": new_services,
-        "networks": base["networks"]
-    }
+    out = base | {"services": new_services}
 
     input_path = Path(compose_path)
 
