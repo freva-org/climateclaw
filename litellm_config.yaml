@@ -2,34 +2,34 @@ model_list:
   - model_name: gpt-4.1 ### RECEIVED MODEL NAME ###
     litellm_params: # all params accepted by litellm.completion() - https://docs.litellm.ai/docs/completion/input
       model: openai/gpt-4.1 ### MODEL NAME sent to `litellm.completion()` ###
-      api_key: "os.environ/FREVAGPT_OPENAI_API_KEY" 
+      api_key: "os.environ/FREVAGPT_OPENAI_API_KEY"
       # temperature: 0.2
   - model_name: gpt-4.1-mini ### RECEIVED MODEL NAME ###
     litellm_params: # all params accepted by litellm.completion() - https://docs.litellm.ai/docs/completion/input
       model: openai/gpt-4.1-mini ### MODEL NAME sent to `litellm.completion()` ###
-      api_key: "os.environ/FREVAGPT_OPENAI_API_KEY" 
+      api_key: "os.environ/FREVAGPT_OPENAI_API_KEY"
   - model_name: "ministral-3:14b"
     litellm_params:
       model: "ollama_chat/ministral-3:14b"
-      api_base: "http://ollama:11434"
+      api_base: "os.environ/FREVAGPT_LITE_LLM_OLLAMA_TARGET"
     model_info:
       supports_function_calling: true
   - model_name: "qwen2.5:3b"
     litellm_params:
       model: "ollama_chat/qwen2.5:3b"
-      api_base: "http://ollama:11434" 
+      api_base: "os.environ/FREVAGPT_LITE_LLM_OLLAMA_TARGET"
     model_info:
       supports_function_calling: true
   - model_name: "gemma4:26b"
     litellm_params:
       model: "ollama_chat/gemma4:26b"
-      api_base: "http://ollama:11434"
+      api_base: "os.environ/FREVAGPT_LITE_LLM_OLLAMA_TARGET"
     model_info:
       supports_function_calling: true
   - model_name: "mxbai-embed-large:latest"
     litellm_params:
       model: "ollama/mxbai-embed-large:latest"
-      api_base: "http://ollama:11434" # Ollama API base URL
+      api_base: "os.environ/FREVAGPT_LITE_LLM_OLLAMA_TARGET" # Ollama API base URL
 
 litellm_settings:
   drop_params: true # If true, drop all parameters not in the model_list from the request
