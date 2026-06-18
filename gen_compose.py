@@ -14,6 +14,19 @@ DEFAULT_MCP_PORTS = {"rag":"8050",
                      "web_search":"8052"}
 MCP_SERVICES = {"rag", "code", "web-search"}
 
+# NOTE: freva-dev and nextgems currently share deployment instance 
+# so we mount both their preview paths together
+PREVIEW_MOUNTS = {
+    "codes": ["/work/kd1418/codes/work/share/preview"],
+    "eve": ["/work/ch1187/clint/freva-dev/share/preview"],
+    "freva-dev": ["/work/ch1187/clint/freva-dev/share/preview",
+                  "/work/ch1187/clint/nextgems/share/preview"], 
+    "nextgems": ["/work/ch1187/clint/freva-dev/share/preview",
+                  "/work/ch1187/clint/nextgems/share/preview"],
+    "regiklim-ces": ["/work/ch1187/regiklim-work/share/preview"],
+    "xces": ["/work/bm1159/XCES/xces-work/share/preview"],
+}
+
 
 def canonical_service_name(name: str) -> str:
     return name.strip().replace("_", "-")
@@ -23,7 +36,22 @@ def env_name(name: str) -> str:
     return name.replace("-", "_")
 
 
-def expand_service(name, service, replicas):
+def preview_paths_for_project(project: str | None) -> list[str] | None:
+    if not project:
+        return None
+
+    if project not in PREVIEW_MOUNTS:
+        valid_projects = ", ".join(sorted(PREVIEW_MOUNTS))
+        print(
+            f"ERROR: unknown project '{project}'. Valid projects: {valid_projects}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return PREVIEW_MOUNTS[project]
+
+
+def expand_service(name, service, replicas, preview_paths=None):
     services = {}
 
     for i in range(1, replicas + 1):
@@ -35,6 +63,13 @@ def expand_service(name, service, replicas):
             s["expose"] = [p.split("}:")[1] if "}:" in p else p.split(":")[-1] for p in ports]
 
         s["hostname"] = replica_name + "-${FREVAGPT_INSTANCE_NAME}"
+        if preview_paths and i == 1:
+            volumes = s.get("volumes", [])
+            volumes.extend(
+                f"{preview_path}:${{FREVAGPT_CACHE_PATH}}"
+                for preview_path in preview_paths
+            )
+            s["volumes"] = volumes
 
         services[replica_name] = s
 
@@ -127,15 +162,19 @@ def generate_haproxy(backend_n, backend_port, litellm_n, server_list, replica_di
 def main():
 
     if len(sys.argv) < 2:
-        print("Usage: gen_compose.py docker-compose.dev.yml")
+        print("Usage: gen_compose.py docker-compose.dev.yml [project]")
         sys.exit(1)
 
     compose_path = sys.argv[1]
+    project = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("FREVAGPT_PROJECT_NAME")
+    if project:
+        os.environ["FREVAGPT_PROJECT_NAME"] = project
 
     backend_port = os.environ.get("FREVAGPT_BACKEND_PORT", "8502")
     backend_target_port = os.environ.get("FREVAGPT_TARGET_PORT", "8502")
     backend_n = int(os.environ.get("FREVAGPT_BACKEND_REPLICAS", "1"))
     litellm_n = int(os.environ.get("FREVAGPT_LITELLM_REPLICAS", "1"))
+    preview_paths = preview_paths_for_project(project)
 
     available_mcp_servers = [
         canonical_service_name(s)
@@ -158,7 +197,7 @@ def main():
 
     for name, svc in services.items():
         if name == "freva-gpt-backend":
-            new_services.update(expand_service(name, svc, backend_n))
+            new_services.update(expand_service(name, svc, backend_n, preview_paths))
         elif name == "litellm":
             new_services.update(expand_service(name, svc, litellm_n))
         elif name in MCP_SERVICES:
