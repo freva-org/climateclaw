@@ -184,7 +184,7 @@ async def streamresponse(
         logger.info(f"Starting a new conversation with thread_id: {thread_id}...")
 
     # Because the openclaw setup already has its own prompt, we are filtering it out, as else it would get two different prompts. 
-    if model_name.lower().contains("openclaw"):
+    if "openclaw" in model_name.lower():
         system_prompt = []
     else:
         system_prompt = get_entire_prompt(user_name, thread_id, model_name)
