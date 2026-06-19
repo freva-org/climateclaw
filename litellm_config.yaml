@@ -1,4 +1,10 @@
 model_list:
+  - model_name: "mistral-small3.2:24b"
+    litellm_params:
+      model: "ollama_chat/mistral-small3.2:24b"
+      api_base: "http://ollama:11434"
+    model_info:
+      supports_function_calling: true
   - model_name: gpt-4.1 
     litellm_params: # all params accepted by litellm.completion() - https://docs.litellm.ai/docs/completion/input
       model: openai/gpt-4.1 ### MODEL NAME sent to `litellm.completion()` ###
@@ -11,12 +17,6 @@ model_list:
   - model_name: "ministral-3:8b"
     litellm_params:
       model: "ollama_chat/ministral-3:8b"
-      api_base: "http://ollama:11434"
-    model_info:
-      supports_function_calling: true
-  - model_name: "mistral-small3.2:24b"
-    litellm_params:
-      model: "ollama_chat/mistral-small3.2:24b"
       api_base: "http://ollama:11434"
     model_info:
       supports_function_calling: true
