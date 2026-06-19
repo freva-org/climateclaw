@@ -152,8 +152,7 @@ def get_entire_prompt(user_id: str, thread_id: str, model: str) -> List[Dict[str
     assets = _load_prompts(model)
     messages: List[Dict[str, Any]] = []
     messages.append(_as_system_message(assets["starting"]))
-    if not model_is_ollama(model):
-        messages.extend(_load_examples_as_messages(assets["examples_path"]))
+    messages.extend(_load_examples_as_messages(assets["examples_path"]))
     messages.append(_as_system_message(assets["summary"]))
 
     # Optional: mark placeholder when model is GPT-5 (useful for debugging)
