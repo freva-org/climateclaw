@@ -127,3 +127,11 @@ Generated artifacts that persist across runs:
 - **Missing models**: ensure `litellm_config.yaml` is readable and contains `model_name` keys. `available_chatbots()` aborts the process if it cannot find any entries.
 - **MCP issues**: backend logs warn but continue when tool discovery fails; LiteLLM will simply not emit tool calls. Use `settings.AVAILABLE_MCP_SERVERS` to enable/disable targets explicitly.
 - **File access**: Make sure `/work` is mounted read-only where expected.
+
+## License
+
+Copyright (C) 2025, freva-org
+
+This project is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, version 3 of the License.
+
+See the [LICENSE](./LICENSE) file for details.
