@@ -27,6 +27,15 @@ PREVIEW_MOUNTS = {
     "xces": ["/work/bm1159/XCES/xces-work/share/preview"],
 }
 
+WEBSITES = {
+    "codes": ["https://codes.dkrz.de"],
+    "eve": ["https://eve.dkrz.de"],
+    "freva-dev": ["https://freva.dkrz.de"], 
+    "nextgems": ["https://gems.dkrz.de"],
+    "regiklim-ces": ["https://www-regiklim.dkrz.de"],
+    "xces": ["https://www.xces.dkrz.de"],
+}
+
 
 def canonical_service_name(name: str) -> str:
     return name.strip().replace("_", "-")
@@ -49,6 +58,21 @@ def preview_paths_for_project(project: str | None) -> list[str] | None:
         sys.exit(1)
 
     return PREVIEW_MOUNTS[project]
+
+
+def website_for_project(project: str | None) -> list[str] | None:
+    if not project:
+        return None
+
+    if project not in WEBSITES:
+        valid_projects = ", ".join(sorted(WEBSITES))
+        print(
+            f"ERROR: unknown project '{project}'. Valid projects: {valid_projects}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return WEBSITES[project]
 
 
 def expand_service(name, service, replicas, preview_paths=None):
@@ -167,14 +191,16 @@ def main():
 
     compose_path = sys.argv[1]
     project = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("FREVAGPT_PROJECT_NAME")
+    
     if project:
         os.environ["FREVAGPT_PROJECT_NAME"] = project
+        os.environ["FREVAGPT_PROJECT_WEBSITE"] = website_for_project(project)
+        preview_paths = preview_paths_for_project(project)
 
     backend_port = os.environ.get("FREVAGPT_BACKEND_PORT", "8502")
     backend_target_port = os.environ.get("FREVAGPT_TARGET_PORT", "8502")
     backend_n = int(os.environ.get("FREVAGPT_BACKEND_REPLICAS", "1"))
     litellm_n = int(os.environ.get("FREVAGPT_LITELLM_REPLICAS", "1"))
-    preview_paths = preview_paths_for_project(project)
 
     available_mcp_servers = [
         canonical_service_name(s)
