@@ -178,11 +178,15 @@ def parse_code_interpreter_result(result: Dict, id: str, thread_id: str, logger=
         if isinstance(item, dict) and "image/png" in item
     )
 
+    num_saved_images = sum(
+        1 for file in created_files
+        if isinstance(file, dict) and file.get("mime_type") == "image/png"
+    )
+
     # If there are more images streamed than saved, we stream them all to client and model
-    if num_display_data_with_png > len(created_files):
+    if num_display_data_with_png > num_saved_images:
         for i, r in enumerate(result.get("display_data", []) or []):
             if "image/png" in r.keys():
-
                 base64_image = r["image/png"]
                 image_id = id + f"_{i}"
                 image_v = SVImage(b64=base64_image, id=image_id)
