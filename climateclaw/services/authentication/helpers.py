@@ -69,26 +69,24 @@ async def get_username_from_token(token: str, rest_url: str, logger=None) -> str
             detail="Token validation response is malformed, not valid JSON.",
         )
 
-    # systemuser returns 403 for invalid token and guest
-    if not (200 <= resp.status_code < 300):
-        # check detail
-        detail = data.get("detail")
-        if detail == "Token expired.":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token validation failed, token may be expired or invalid.",
-            )
-        elif detail == "Not a system user.":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Token validation failed, guest users don't have access to this service."
-                "Please make sure to login using a DKRZ account and try again!",
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token validation failed.",
-            )
+    # systemuser returns 401 for missing or invalid token
+    if resp.status_code == 401:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token validation failed, token may be expired or invalid.",
+        )
+    elif resp.status_code == 403:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Token validation failed, guest users don't have access to this service."
+            "Please make sure to login using a DKRZ account and try again!",
+        )
+    elif resp.status_code == 502:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Freva REST authentication upstream failed while validating the system user,"
+            "likely because its OIDC/Keycloak upstream is unavailable or misconfigured.",
+        )
 
     username = data.get("username")
     if isinstance(username, str) and username:

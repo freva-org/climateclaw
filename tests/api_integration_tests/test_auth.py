@@ -69,7 +69,7 @@ async def test_auth_token_check_network_error_503(client):
 async def test_auth_token_check_http_401_like_401_message(client):
     with respx.mock(assert_all_called=True) as mock:
         mock.get("http://rest.example/api/freva-nextgen/auth/v2/systemuser").respond(
-            401, json={"whatever": "x"}
+            401, json={"detail": "Token expired."}
         )
         async with client:
             r = await client.get(
@@ -129,7 +129,7 @@ async def test_auth_token_check_json_missing_username_detail_502(client):
 async def test_auth_token_check_json_detail_403(client):
     with respx.mock(assert_all_called=True) as mock:
         mock.get("http://rest.example/api/freva-nextgen/auth/v2/systemuser").respond(
-            403, json={"detail": "Token expired."}
+            403, json={"detail": "Not a system user."}
         )
         async with client:
             r = await client.get(
@@ -139,8 +139,8 @@ async def test_auth_token_check_json_detail_403(client):
                     "x-freva-rest-url": "http://rest.example",
                 },
             )
-            assert r.status_code == 401
-            assert "token may be expired" in r.json()["detail"]
+            assert r.status_code == 403
+            assert "login using a DKRZ account" in r.json()["detail"]
 
 
 @pytest.mark.asyncio
