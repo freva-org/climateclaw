@@ -8,7 +8,7 @@ from src.core.settings import get_settings
 from src.services.mcp.client import McpClient
 from src.services.storage.helpers import get_mongodb_uri
 from src.services.authentication.auth import Authenticator
-from src.services.streaming.stream_variants import mcp_tool_to_openai_function
+from src.services.streaming.openai_helpers import mcp_tool_to_openai_function
 
 settings = get_settings()
 DEFAULT_LOGGER = configure_logging(__name__)

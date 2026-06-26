@@ -7,10 +7,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal
 
 from src.core.available_chatbots import model_is_gpt_5, model_is_ollama
-from src.services.streaming.stream_variants import (
-    parse_examples_jsonl,
-    help_convert_sv_ccrm,
-)
+from src.services.streaming.stream_variants import parse_examples_jsonl
+from src.services.streaming.openai_helpers import help_convert_sv_ccrm
+
 
 """
 Prompt loading & assembly (non-streaming), single API for all models.
