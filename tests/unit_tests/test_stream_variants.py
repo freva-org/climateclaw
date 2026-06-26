@@ -8,17 +8,19 @@ from src.services.streaming.stream_variants import (
     SVServerError,
     cleanup_conversation,
     normalize_conv_for_prompt,
-    help_convert_sv_ccrm,
     from_sv_to_json,
     from_json_to_sv,
     StreamVariant,
+    empty_code_interpreter_output,
 )
+from src.services.streaming.openai_helpers import help_convert_sv_ccrm
+
 
 
 def test_cleanup_inserts_codeoutput_and_end():
     conv: list[StreamVariant] = [
-        SVUser(text="hi"),
-        SVCode(code="print(1)", id="call_1"),
+        SVUser(content="hi"),
+        SVCode(content="print(1)", id="call_1"),
     ]
     out = cleanup_conversation(
         conv, append_stream_end=True
@@ -29,15 +31,15 @@ def test_cleanup_inserts_codeoutput_and_end():
     assert kinds == ["User", "Code", "CodeOutput", "StreamEnd"]
     assert isinstance(out[2], SVCodeOutput)
     assert out[2].id == "call_1"
-    assert out[2].output == ""
+    assert isinstance(out[2].content, dict)
 
 
 def test_cleanup_no_extra_end_if_existing():
     conv: list[StreamVariant] = [
-        SVUser(text="hi"),
-        SVCode(code="print(1)", id="call_1"),
-        SVCodeOutput(output="1", id="call_1"),
-        SVStreamEnd(message="Done"),
+        SVUser(content="hi"),
+        SVCode(content="print(1)", id="call_1"),
+        SVCodeOutput(content=empty_code_interpreter_output(), id="call_1"),
+        SVStreamEnd(content="Done"),
     ]
     out = cleanup_conversation(conv, append_stream_end=True)
     kinds = [v.variant for v in out]
@@ -47,11 +49,11 @@ def test_cleanup_no_extra_end_if_existing():
 
 def test_normalize_conv_for_prompt_filters_meta():
     conv: list[StreamVariant] = [
-        SVServerHint(data={"thread_id": "abc"}),
-        SVUser(text="hi"),
-        SVAssistant(text="hello"),
-        SVServerError(message="oops"),
-        SVStreamEnd(message="Done"),
+        SVServerHint(content={"thread_id": "abc"}),
+        SVUser(content="hi"),
+        SVAssistant(content="hello"),
+        SVServerError(content="oops"),
+        SVStreamEnd(content="Done"),
     ]
     out = normalize_conv_for_prompt(conv, include_meta=False)
     # Meta variants removed
@@ -61,9 +63,9 @@ def test_normalize_conv_for_prompt_filters_meta():
 
 def test_ccrm_conversion_basic():
     conv: list[StreamVariant] = [
-        SVUser(text="hi"),
-        SVAssistant(text="hello"),
-        SVStreamEnd(message="Done"),
+        SVUser(content="hi"),
+        SVAssistant(content="hello"),
+        SVStreamEnd(content="Done"),
     ]
     msgs = help_convert_sv_ccrm(conv, include_images=False, include_meta=False)
     assert msgs[0]["role"] == "user"
@@ -72,8 +74,8 @@ def test_ccrm_conversion_basic():
 
 
 def test_wire_roundtrip():
-    original = SVCode(code="x=1", id="cid")
+    original = SVCode(content="x=1", id="cid")
     wire = from_sv_to_json(original)
-    assert wire == {"variant": "Code", "content": "x=1", "id": "cid"}
+    assert wire == {"variant": "Code", "content": "x=1", "id": "cid", "feedback": ""}
     back = from_json_to_sv(wire)
     assert back == original  # pydantic models are comparable

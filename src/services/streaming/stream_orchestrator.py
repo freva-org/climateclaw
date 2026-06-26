@@ -18,9 +18,9 @@ from src.services.streaming.stream_variants import (
     SVStreamEnd,
     SVToolCall,
     StreamVariant,
-    help_convert_sv_ccrm,
     from_json_to_sv,
 )
+from src.services.streaming.openai_helpers import help_convert_sv_ccrm
 from src.services.streaming.tool_calls import (
     run_tool_via_mcp,
     accumulate_tool_calls,
@@ -104,7 +104,7 @@ async def stream_with_tools(
             piece = delta.get("content") or ""
             if piece:
                 accumulated_asst_text.append(piece)
-                yield SVAssistant(text=piece)
+                yield SVAssistant(content=piece)
 
             # tool call: stream code chunks live and accumulate deltas
             tc_list = delta.get("tool_calls") or []
@@ -121,7 +121,7 @@ async def stream_with_tools(
                     args_chunk = fn.get("arguments", "")
                     if args_chunk and tool_name == "code_interpreter":
                         # stream arguments chunk immediately
-                        yield SVCode(code=args_chunk, id=call_id)
+                        yield SVCode(content=args_chunk, id=call_id)
 
             #  end-of-message
             if choice.get("finish_reason"):
@@ -131,18 +131,18 @@ async def stream_with_tools(
         for p in re.findall(r"\S+\s*", full_txt):
             if p:
                 accumulated_asst_text.append(full_txt)
-                yield SVAssistant(text=full_txt)
+                yield SVAssistant(content=full_txt)
 
     # 2) Any tool calls?
     tool_calls = finalize_tool_calls(tool_agg)
 
     if accumulated_asst_text:
-        asst_v = SVAssistant(text="".join(accumulated_asst_text))
+        asst_v = SVAssistant(content="".join(accumulated_asst_text))
         await add_to_conversation(thread_id, [asst_v], storage=storage, store_thread=store_thread)
 
     # If no tool calls, wrap up everything and return
     if not tool_calls:
-        end_v = SVStreamEnd(message="Stream ended.")
+        end_v = SVStreamEnd(content="Stream ended.")
         yield end_v
         stream_state.finished = True
         return
@@ -157,9 +157,9 @@ async def stream_with_tools(
 
         if name == "code_interpreter":
             # accumulated code text to be appended to thread
-            tool_v = SVCode(code=args_txt, id=id)
+            tool_v = SVCode(content=args_txt, id=id)
         else:
-            tool_v = SVToolCall(arg=args_txt, id=id, tool_name=name)
+            tool_v = SVToolCall(content=args_txt, id=id, tool_name=name)
             # code is already streamed, we stream the other tool calls here too
             yield tool_v 
 
@@ -229,7 +229,7 @@ async def stream_with_tools(
         tool_out_v: List[StreamVariant] = []
         tool_msgs: List[Dict[str, Any]] = []
         # Parsing tool call output as StreamVariants and messages to model
-        for r in parse_tool_result(result_text, tool_name=name, call_id=id):
+        for r in parse_tool_result(result_text, tool_name=name, call_id=id, thread_id=thread_id):
             if isinstance(r, FinalSummary):
                 (
                     tool_out_v,
@@ -266,7 +266,7 @@ async def run_stream(
     log = logger or DEFAULT_LOGGER
 
     # Append user content
-    user_v = SVUser(text=user_input or "")
+    user_v = SVUser(content=user_input or "")
     await add_to_conversation(thread_id, [user_v], storage=storage, store_thread=store_thread)
 
     stream_state = StreamState()
@@ -290,13 +290,13 @@ async def run_stream(
                 yield piece
 
         except asyncio.CancelledError:
-            end_v = SVStreamEnd(message="Cancelled.")
+            end_v = SVStreamEnd(content="Cancelled.")
             log.error("Stream is cancelled.")
             stream_state.finished = True
         except Exception as e:
             log.exception("Stream error: %s", e)
-            err_v = SVServerError(message=str(e))
-            end_v = SVStreamEnd(message="Stream ended with an error.")
+            err_v = SVServerError(content=str(e))
+            end_v = SVStreamEnd(content="Stream ended with an error.")
             await add_to_conversation(thread_id, [err_v], storage=storage, store_thread=store_thread)
             stream_state.finished = True
             yield err_v

@@ -53,7 +53,7 @@ def _extract_first_meaningful_user_text(content: List[StreamVariant]) -> str:
     """Return the first non-empty user text that is not exact-match filler."""
     for sv in content:
         if isinstance(sv, SVUser):
-            text = _normalize_text(getattr(sv, "text", ""))
+            text = _normalize_text(sv.content)
             if text and not _is_low_information(text):
                 return text
     return ""

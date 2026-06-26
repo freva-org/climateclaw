@@ -332,8 +332,8 @@ def patch_stream(monkeypatch):
     async def fake_run_stream(**kwargs):
         from src.services.streaming.stream_variants import SVAssistant, SVServerHint
 
-        yield SVServerHint(data={"thread_id": "t-abc"})
-        yield SVAssistant(text="hello")
+        yield SVServerHint(content={"thread_id": "t-abc"})
+        yield SVAssistant(content="hello")
         return
 
     # IMPORTANT: patch where the route resolves it
