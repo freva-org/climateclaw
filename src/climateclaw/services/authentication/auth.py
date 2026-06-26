@@ -23,11 +23,11 @@ class Authenticator:
       - 422/400/401/502/503
     """
 
-    request: Request
+    request: Request | None
     settings: Settings
     username: str
-    rest_url: str
-    access_token: str
+    rest_url: str | None
+    access_token: str | None
 
     @classmethod
     async def build(cls, request: Request) -> "Authenticator":
@@ -74,4 +74,20 @@ class Authenticator:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Some necessary field weren't found, check whether the nginx proxy and sets the right headers.",
+        )
+
+    @classmethod
+    def local(
+        cls,
+        *,
+        username: str = "dev_user",
+        rest_url: str | None = None,
+        access_token: str | None = None,
+    ) -> "Authenticator":
+        return cls(
+            request=None,
+            settings=get_settings(),
+            username=username,
+            rest_url=rest_url,
+            access_token=access_token,
         )

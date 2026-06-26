@@ -20,7 +20,7 @@ from climateclaw.api.chatbot.streamresponse import _sse_data
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.prompting import get_entire_prompt
 from climateclaw.core.settings import get_settings
-from climateclaw.services.service_factory import auth_dependency
+from climateclaw.services.authentication.auth import Authenticator
 from climateclaw.services.storage.helpers import create_dir_at_cache
 from climateclaw.services.storage.mongodb_storage import ThreadStorage
 from climateclaw.services.streaming.active_conversations import (
@@ -85,6 +85,7 @@ async def _run_turn(
     user_id: str,
     user_input: str,
     system_prompt: list[dict[str, Any]],
+    storage: ThreadStorage,
 ) -> tuple[int, int]:
     """
     Runs a single turn through run_stream and prints Assistant output as it streams.
@@ -103,6 +104,7 @@ async def _run_turn(
             thread_id=thread_id,  # ← fixed per conversation
             user_input=user_input,
             system_prompt=system_prompt,
+            storage=storage,
         ):
             if isinstance(variant, SVAssistant):
                 txt = getattr(variant, "text", "") or ""
@@ -146,7 +148,7 @@ async def main() -> None:
         thread_id = THREAD_ID
         read_history = True
 
-    Auth = await auth_dependency()
+    Auth = Authenticator.local(username=USER_ID)
     Storage = await ThreadStorage.create()
     create_dir_at_cache(USER_ID, thread_id)
 
@@ -199,6 +201,7 @@ async def main() -> None:
             user_id=USER_ID,
             user_input=user_input,
             system_prompt=system_prompt,
+            storage=Storage,
         )
         await end_and_save_conversation(thread_id, Storage)
         if SHOW_STATS:

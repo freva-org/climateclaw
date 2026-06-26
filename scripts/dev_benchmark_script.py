@@ -20,7 +20,7 @@ from dataclasses import dataclass
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.prompting import get_entire_prompt
-from climateclaw.services.service_factory import DevAuthenticator
+from climateclaw.services.authentication.auth import Authenticator
 from climateclaw.services.storage.helpers import create_dir_at_cache
 from climateclaw.services.storage.mongodb_storage import ThreadStorage
 from climateclaw.services.streaming.active_conversations import (
@@ -77,7 +77,7 @@ async def _run_once(idx: int, sem: asyncio.Semaphore) -> RunResult:
         thread_id = await new_thread_id()
         read_history = False
 
-        Auth = await DevAuthenticator.build(None)
+        Auth = Authenticator.local(username="dev_user")
         Storage = await ThreadStorage.create()
         create_dir_at_cache(USER_ID, thread_id)
 
@@ -101,7 +101,8 @@ async def _run_once(idx: int, sem: asyncio.Semaphore) -> RunResult:
                 model=MODEL,
                 thread_id=thread_id,
                 user_input=PROMPT,
-                system_prompt=system_prompt,  # ← reuse single McpManager
+                system_prompt=system_prompt,
+                storage=Storage,
             ):
                 if getattr(variant, "variant", None) == "Assistant":
                     txt = getattr(variant, "text", "") or ""
