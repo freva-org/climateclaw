@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio
+import os
 import json
 
 from typing import Any, Dict, List
@@ -15,12 +15,16 @@ from src.services.streaming.stream_variants import (
     SVImage,
     SVToolOutput,
     StreamVariant,
+    normalize_code_output
+)
+from src.services.streaming.openai_helpers import (
     help_convert_sv_ccrm,
     OpenAIMessage,
 )
 
 
 DEFAULT_LOGGER = configure_logging(__name__)
+PROJECT_WEBSITE = os.environ.get("FREVAGPT_PROJECT_WEBSITE", "http://localhost:8000")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # MCP tool runner
@@ -110,7 +114,7 @@ class FinalSummary:
     is_error: bool
 
 
-def parse_tool_result(resp_txt: str, tool_name: str, call_id: str, logger=None):
+def parse_tool_result(resp_txt: str, tool_name: str, call_id: str, thread_id: str, logger=None):
     log = logger or DEFAULT_LOGGER
     result_json = json.loads(resp_txt)
 
@@ -118,7 +122,7 @@ def parse_tool_result(resp_txt: str, tool_name: str, call_id: str, logger=None):
     if structured_content is not None:
         if tool_name == "code_interpreter":
             yield from parse_code_interpreter_result(
-                structured_content, call_id, logger=log
+                structured_content, call_id, thread_id, logger=log
             )
         else:
             yield from parse_generic_tool_result(
@@ -134,9 +138,9 @@ def parse_tool_result(resp_txt: str, tool_name: str, call_id: str, logger=None):
         out_msg = f"{tool_name} error: {out}"
 
         if tool_name == "code_interpreter":
-            toolout_v = SVCodeOutput(output=out_msg, id=call_id)
+            toolout_v = SVCodeOutput(content=out_msg, id=call_id)
         else:
-            toolout_v = SVToolOutput(output=out_msg, tool_name=tool_name, id=call_id)
+            toolout_v = SVToolOutput(content=out_msg, tool_name=tool_name, id=call_id)
         yield toolout_v
         tool_msg = help_convert_sv_ccrm([toolout_v])
         isError = True
@@ -145,56 +149,58 @@ def parse_tool_result(resp_txt: str, tool_name: str, call_id: str, logger=None):
         )
 
 
-def parse_code_interpreter_result(result: Dict, id: str, logger=None):
+def parse_code_interpreter_result(result: Dict, id: str, thread_id: str, logger=None):
     code_block: List[StreamVariant] = []
     code_msgs: List[OpenAIMessage] = []
 
     # Code output: structured dict of displayed data, image or error
 
-    # Printed/displayed output + error message if exists
-    out = (
-        ""
-        + (("\n" + result["stdout"]) if result["stdout"] else "")
-        + (("\n" + result["result_repr"]) if result["result_repr"] else "")
-    )
-    out_error = (("\n" + result["stderr"]) if result["stderr"] else "") + (
-        ("\n" + result["error"]) if result["error"] else ""
-    )
-    if out or out_error:
-        codeout = out + out_error
-    else:
-        codeout = ""  # We must send something here, the model expects it.
-    codeout_v = SVCodeOutput(output=codeout, id=id)
+    # Check if any file was created
+    created_files = result.get("created_files", [])
+    for file in created_files:
+        f_name = file.get("path")
+
+        if not f_name:
+            continue
+
+        file["preview_url"] = f"{PROJECT_WEBSITE}/static/preview/{thread_id}/{f_name}"
+
+    result["created_files"] = created_files
+
+    codeout_v = SVCodeOutput(content=normalize_code_output(result), id=id)
     yield codeout_v
     code_block.append(codeout_v)
     code_msgs.extend(help_convert_sv_ccrm([codeout_v]))
 
-    # Image/html/json etc., rich output
-    for i, r in enumerate(result.get("display_data", []) or []):
-        if "image/png" in r.keys():
-            base64_image = r["image/png"]
-            image_id = id + f"_{i}"
-            image_v = SVImage(b64=base64_image, id=image_id)
-            yield image_v
-            code_block.append(image_v)
-            code_msgs.extend(
-                help_convert_sv_ccrm(
-                    [
-                        SVUser(
-                            text="Here is the image returned by the Code Interpreter."
-                        ),
-                        image_v,
-                    ],
-                    include_images=True,
-                )
-            )
+    # Get number of images in "display_data" - contains rich output, image/html/json
+    num_display_data_with_png = sum(
+        1 for item in result.get("display_data", [])
+        if isinstance(item, dict) and "image/png" in item
+    )
 
-        if "application/json" in r.keys():
-            json_v = SVCodeOutput(output=r["application/json"], id=f"{id}:json")
-            yield json_v
-            code_block.append(json_v)
-            code_msgs.extend(help_convert_sv_ccrm([json_v]))
-    isError = True if out_error else False
+    # If there are more images streamed than saved, we stream them all to client and model
+    if num_display_data_with_png > len(created_files):
+        for i, r in enumerate(result.get("display_data", []) or []):
+            if "image/png" in r.keys():
+
+                base64_image = r["image/png"]
+                image_id = id + f"_{i}"
+                image_v = SVImage(b64=base64_image, id=image_id)
+                yield image_v
+                code_block.append(image_v)
+                code_msgs.extend(
+                    help_convert_sv_ccrm(
+                        [
+                            SVUser(
+                                text="Here is the image returned by the Code Interpreter."
+                            ),
+                            image_v,
+                        ],
+                        include_images=True,
+                    )
+                )
+
+    isError = True if result.get("error", "") or result.get("stderr", "") else False
     yield FinalSummary(var_block=code_block, tool_messages=code_msgs, is_error=isError)
 
 
@@ -205,6 +211,6 @@ def parse_generic_tool_result(result: Dict, tool_name: str, id: str, logger=None
         out = result.get("error")
     else:
         out = "Unknown response."
-    web_sv = SVToolOutput(output=out, tool_name=tool_name, id=id)
+    web_sv = SVToolOutput(content=out, tool_name=tool_name, id=id)
     web_msg = help_convert_sv_ccrm([web_sv])
     yield FinalSummary(var_block=[web_sv], tool_messages=web_msg, is_error=False)
