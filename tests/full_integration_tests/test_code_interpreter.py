@@ -125,10 +125,8 @@ def test_imports(mcp_client_CI):
 
     for lib in [
         "xarray",
-        "tzdata",
         "six",
         "shapely",
-        "pytz",
         "shapefile",
         "pyproj",
         "pyparsing",

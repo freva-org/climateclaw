@@ -31,9 +31,8 @@ i. code_interpreter (Primary Tool)
 - File saving
 - Calculations
 3. Always import required libraries explicitly.
-4. Installed libraries are: 
+4. Installed libraries are:
 - freva-client
-- dill
 - numpy
 - matplotlib
 - pandas
@@ -44,16 +43,13 @@ i. code_interpreter (Primary Tool)
 - cartopy
 - contourpy
 - geopy
-- aiohttp
-- requests
 - scikit-learn
 - geopandas
 - healpy
 - easygems
 - astropy
-- tzdata
-- pytz
 - imageio
+- pypdf
 - fpdf2
 
 ii. web_search (Documentation Only)
