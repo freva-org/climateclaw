@@ -12,7 +12,7 @@ RUN conda run -n env uv pip install --no-cache-dir --system \
 
 EXPOSE ${CLIMATECLAW_MCP_PORT:-8050}
 
-COPY climateclaw /app/climateclaw
+COPY src /app/src
 
 # Launch CI server
 CMD uvicorn climateclaw.tools.rag.server:app \

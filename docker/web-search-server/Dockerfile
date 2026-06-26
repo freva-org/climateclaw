@@ -12,7 +12,7 @@ RUN conda run -n env uv pip install --no-cache-dir --system \
 
 EXPOSE ${CLIMATECLAW_MCP_PORT:-8052}
 
-COPY climateclaw /app/climateclaw
+COPY src /app/src
 
 # Launch server
 CMD uvicorn climateclaw.tools.web_search.server:app \

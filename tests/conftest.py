@@ -3,9 +3,10 @@ import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-import climateclaw.services.streaming.active_conversations as act_conv
 import httpx
 import pytest
+
+import climateclaw.services.streaming.active_conversations as act_conv
 from climateclaw.services.streaming.stream_variants import from_json_to_sv
 
 # ──────────────────────────────────────────────────────────────────────────────

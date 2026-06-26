@@ -1,6 +1,7 @@
 import httpx
-from climateclaw.core.logging_setup import configure_logging
 from fastapi import HTTPException, status
+
+from climateclaw.core.logging_setup import configure_logging
 
 
 def bearer_token_from_header(header_val: str) -> str:

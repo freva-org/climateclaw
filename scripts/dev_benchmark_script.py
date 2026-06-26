@@ -18,20 +18,20 @@ import json
 import time
 from dataclasses import dataclass
 
-from src.core.logging_setup import configure_logging
-from src.core.prompting import get_entire_prompt
-from src.services.service_factory import DevAuthenticator
-from src.services.storage.helpers import create_dir_at_cache
-from src.services.storage.mongodb_storage import ThreadStorage
-from src.services.streaming.active_conversations import (
+from climateclaw.core.logging_setup import configure_logging
+from climateclaw.core.prompting import get_entire_prompt
+from climateclaw.services.service_factory import DevAuthenticator
+from climateclaw.services.storage.helpers import create_dir_at_cache
+from climateclaw.services.storage.mongodb_storage import ThreadStorage
+from climateclaw.services.streaming.active_conversations import (
     end_and_save_conversation,
     new_thread_id,
 )
-from src.services.streaming.stream_orchestrator import (
+from climateclaw.services.streaming.stream_orchestrator import (
     prepare_for_stream,
     run_stream,
 )
-from src.services.streaming.stream_variants import from_sv_to_json
+from climateclaw.services.streaming.stream_variants import from_sv_to_json
 
 """
 Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour.

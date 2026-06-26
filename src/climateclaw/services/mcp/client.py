@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
+
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.settings import get_settings
 

@@ -18,7 +18,7 @@ RUN conda run -n env uv pip install --no-cache-dir --system \
 COPY litellm_config.yaml /app/litellm_config.yaml
 
 # Copy source code
-COPY climateclaw /app/climateclaw
+COPY src /app/src
 COPY tests /app/tests
 
 # -------------------------

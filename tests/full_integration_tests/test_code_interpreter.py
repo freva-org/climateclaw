@@ -6,6 +6,7 @@ import os
 from typing import Any
 
 import pytest
+
 from climateclaw.services.mcp.client import McpClient
 
 pytestmark = pytest.mark.integration

@@ -3,6 +3,9 @@ from contextvars import ContextVar
 from functools import lru_cache
 
 import requests
+from fastmcp import FastMCP
+from pymongo import MongoClient
+
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.tools.header_gate import make_header_gate
 from climateclaw.tools.rag.document_loaders import CustomDirectoryLoader
@@ -13,8 +16,6 @@ from climateclaw.tools.rag.helpers import (
     postprocessing_query_result,
 )
 from climateclaw.tools.rag.text_splitters import CustomDocumentSplitter
-from fastmcp import FastMCP
-from pymongo import MongoClient
 
 logger = configure_logging(__name__, named_log="rag_server")
 

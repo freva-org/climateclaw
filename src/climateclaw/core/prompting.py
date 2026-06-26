@@ -38,17 +38,19 @@ STARTING_TXT = "starting_prompt.txt"
 SUMMARY_TXT = "summary_prompt.txt"
 EXAMPLES_JL = "examples.jsonl"
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 # Where we’ll look for prompts
 BASELINE_DIRS = [
-    Path("climateclaw/prompt_library/baseline"),
+    PACKAGE_DIR / "prompt_library" / "baseline",
 ]
 
 GPT5_DIRS = [
-    Path("climateclaw/prompt_library/gpt_5"),
+    PACKAGE_DIR / "prompt_library" / "gpt_5",
 ]
 
 OLLAMA_DIRS = [
-    Path("climateclaw/prompt_library/ollama"),
+    PACKAGE_DIR / "prompt_library" / "ollama",
 ]
 
 

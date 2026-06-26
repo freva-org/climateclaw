@@ -5,6 +5,10 @@ from contextvars import ContextVar
 from queue import Empty
 from typing import Any
 
+from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_context
+from jupyter_client import KernelManager
+
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.tools.code.helpers import (
     sanitize_code,
@@ -15,9 +19,6 @@ from climateclaw.tools.code.helpers import (
 )
 from climateclaw.tools.code.safety_check import check_code_safety
 from climateclaw.tools.header_gate import make_header_gate
-from fastmcp import FastMCP
-from fastmcp.server.dependencies import get_context
-from jupyter_client import KernelManager
 
 logger = configure_logging(__name__, named_log="code_server")
 

@@ -16,22 +16,22 @@ import asyncio
 import logging
 from typing import Any
 
-from src.api.chatbot.streamresponse import _sse_data
-from src.core.logging_setup import configure_logging
-from src.core.prompting import get_entire_prompt
-from src.core.settings import get_settings
-from src.services.service_factory import DevAuthenticator
-from src.services.storage.helpers import create_dir_at_cache
-from src.services.storage.mongodb_storage import ThreadStorage
-from src.services.streaming.active_conversations import (
+from climateclaw.api.chatbot.streamresponse import _sse_data
+from climateclaw.core.logging_setup import configure_logging
+from climateclaw.core.prompting import get_entire_prompt
+from climateclaw.core.settings import get_settings
+from climateclaw.services.service_factory import auth_dependency
+from climateclaw.services.storage.helpers import create_dir_at_cache
+from climateclaw.services.storage.mongodb_storage import ThreadStorage
+from climateclaw.services.streaming.active_conversations import (
     end_and_save_conversation,
     new_thread_id,
 )
-from src.services.streaming.stream_orchestrator import (
+from climateclaw.services.streaming.stream_orchestrator import (
     prepare_for_stream,
     run_stream,
 )
-from src.services.streaming.stream_variants import (
+from climateclaw.services.streaming.stream_variants import (
     SVAssistant,
     SVCode,
     from_sv_to_json,
@@ -146,7 +146,7 @@ async def main() -> None:
         thread_id = THREAD_ID
         read_history = True
 
-    Auth = await DevAuthenticator.build(None)
+    Auth = await auth_dependency()
     Storage = await ThreadStorage.create()
     create_dir_at_cache(USER_ID, thread_id)
 

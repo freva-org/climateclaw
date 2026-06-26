@@ -1,5 +1,6 @@
-import climateclaw.services.storage.mongodb_storage as mongo_storage
 import pytest
+
+import climateclaw.services.storage.mongodb_storage as mongo_storage
 from climateclaw.services.storage.mongodb_storage import (
     MONGODB_COLLECTION_NAME,
     ThreadStorage,

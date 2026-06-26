@@ -1,4 +1,5 @@
 import pytest
+
 from climateclaw.api.chatbot import editthread
 from climateclaw.services.streaming.stream_variants import SVPrompt, SVServerHint
 

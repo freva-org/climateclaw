@@ -38,3 +38,4 @@ RUN conda create --name env "python>=3.13" pip uv \
 ENV PATH="/opt/conda/envs/env/bin/:$PATH"
 ENV LD_LIBRARY_PATH="/opt/conda/envs/env/lib/:${LD_LIBRARY_PATH}"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ENV PYTHONPATH="/app/src:${PYTHONPATH}"

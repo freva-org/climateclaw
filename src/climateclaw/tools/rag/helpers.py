@@ -3,8 +3,9 @@ import json
 import time
 from operator import itemgetter
 
-from climateclaw.core.logging_setup import configure_logging
 from pymongo.operations import SearchIndexModel
+
+from climateclaw.core.logging_setup import configure_logging
 
 logger = configure_logging(__name__, named_log="rag_server")
 

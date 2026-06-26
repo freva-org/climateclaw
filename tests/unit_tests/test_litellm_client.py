@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 import requests
+
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
 
 

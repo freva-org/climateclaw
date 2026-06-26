@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Iterable
 from typing import Any
 
 import httpx
+
 from climateclaw.core.settings import get_settings
 
 # ---------------------------------------------------------------------------

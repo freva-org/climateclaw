@@ -1,7 +1,6 @@
 import ast
 from pathlib import Path
 
-from climateclaw.core.logging_setup import configure_logging
 from langchain_community.document_loaders import (
     DirectoryLoader,
     JSONLoader,
@@ -9,6 +8,8 @@ from langchain_community.document_loaders import (
     TextLoader,
 )
 from langchain_core.documents import Document
+
+from climateclaw.core.logging_setup import configure_logging
 
 logger = configure_logging(__name__, named_log="rag_server")
 

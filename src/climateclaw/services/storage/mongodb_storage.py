@@ -3,6 +3,9 @@ from datetime import UTC, datetime, timezone
 from typing import Dict, List, Optional
 
 import pymongo
+from pymongo import AsyncMongoClient
+from pymongo.asynchronous.database import AsyncDatabase
+
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.settings import get_settings
 from climateclaw.services.streaming.stream_variants import (
@@ -12,8 +15,6 @@ from climateclaw.services.streaming.stream_variants import (
     from_json_to_sv,
     from_sv_to_json,
 )
-from pymongo import AsyncMongoClient
-from pymongo.asynchronous.database import AsyncDatabase
 
 from .helpers import Thread, get_mongodb_uri
 from .summarize_topic import summarize_topic

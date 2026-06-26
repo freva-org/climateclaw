@@ -2,8 +2,9 @@ import os
 import re
 import sys
 
-from climateclaw.core.logging_setup import configure_logging
 from jupyter_client import KernelManager
+
+from climateclaw.core.logging_setup import configure_logging
 
 logger = configure_logging(__name__, named_log="code_server")
 

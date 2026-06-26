@@ -13,7 +13,7 @@ _NAMED_HANDLERS: dict[str, RotatingFileHandler] = {}
 settings = get_settings()
 ENABLE_FILE_LOGGING = os.getenv("CLIMATECLAW_FILE_LOGGING", "1") == "1"
 
-LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
+LOG_DIR = Path(__file__).resolve().parents[3] / "logs"
 MAIN_LOG = LOG_DIR / "app.log"
 MAIN_MAX_BYTES = 5_000_000
 MAIN_BACKUP_COUNT = 5
