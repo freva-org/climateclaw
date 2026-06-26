@@ -1,10 +1,11 @@
 import os
+from pathlib import Path
 import threading
 import time
 from queue import Empty
 from typing import Dict, Any, Optional
 
-from .helpers import strip_ansi
+from .helpers import strip_ansi, detect_created_or_modified_files, snapshot_files
 from .kernels import (
     get_or_start_kernel,
     shutdown_kernel,
@@ -179,10 +180,11 @@ def _run_shell(
             # Jupyter also returns rich outputs (image/png, text/html, etc.)
             display_id = content.get("transient", {}).get("display_id", "")
             data = content.get("data") or {}
-            if display_id:
-                display_data_by_id[display_id] = data
-            else:
-                display_data.append(data)
+            if "image/png" not in data.keys():
+                if display_id:
+                    display_data_by_id[display_id] = data
+                else:
+                    display_data.append(data)
             return
 
         if msg_type == "execute_result":
@@ -305,6 +307,9 @@ def execute_code(
         )
         raise RequestCancelled("Execution cancelled by client")
 
+    workdir = Path(working_dir).resolve()
+    before_files = snapshot_files(workdir)
+
     km = get_or_start_kernel(session_id, cwd_str=working_dir)
 
     def _attempt_once() -> Dict[str, Any]:
@@ -326,6 +331,14 @@ def execute_code(
     for attempt in range(MAX_RECOVERY_RETRIES + 1):
         try:
             out = _attempt_once()
+
+            after_files = snapshot_files(workdir)
+            out["created_files"] = detect_created_or_modified_files(
+                workdir,
+                before_files,
+                after_files,
+            )
+
             return out
 
         except RequestCancelled:
