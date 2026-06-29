@@ -24,12 +24,8 @@ async def test_routes_succeed_with_auth_and_username_injection(
     stub_resp,
     client,
     GOOD_HEADERS,
-    patch_db,
     patch_read_thread,
-    patch_save_thread,
     patch_user_threads,
-    patch_mongo_uri,
-    patch_stream,
     patch_mcp_manager,
 ):
     # Mock the REST call the auth layer uses to resolve a username
