@@ -1,3 +1,4 @@
+from contextvars import ContextVar
 import json
 import os
 from typing import Optional
@@ -5,18 +6,19 @@ from urllib.parse import quote as urlquote
 
 import httpx
 from fastmcp import FastMCP
+from openai import OpenAI
 
 from src.tools.header_gate import make_header_gate
-
 from src.core.logging_setup import configure_logging
-from openai import OpenAI
 
 logger = configure_logging(__name__, named_log="web_search_server")
 
 OPENAI_API_KEY: Optional[str] = os.getenv("FREVAGPT_OPENAI_API_KEY")
 GITLAB_TOKEN: Optional[str] = os.getenv("FREVAGPT_GITLAB_TOKEN")
 
-mcp = FastMCP("web-search-server")
+HOST = os.getenv("FREVAGPT_MCP_HOST", "0.0.0.0")
+PORT = int(os.getenv("FREVAGPT_MCP_PORT", "8052"))
+PATH = os.getenv("FREVAGPT_MCP_PATH", "/mcp")  # standard path
 
 # ── Config ───────────────────────────────────────────────────────────────────
 WEB_SEARCH_MODEL = "gpt-5.4-mini"
@@ -27,7 +29,14 @@ ALLOWED_DOMAINS = [
 
 # GitLab plugin config
 GITLAB_BASE_URL = "https://gitlab.dkrz.de/api/v4"
-FREVA_PROJECT_NAMES = {"codes": "kd1418", "xces": "bm1159", "regiklim": "ch1187"}
+FREVA_PROJECT_NAMES = {
+    "codes": "kd1418",
+    "coming decade": "kd1418",
+    "comdec": "kd1418",
+    "xces": "bm1159",
+    "climxtreme": "bm1159",
+    "regiklim": "ch1187"
+}
 ALLOWED_FILE_EXTENSIONS = (
     ".py",
     ".sh",
@@ -38,23 +47,34 @@ ALLOWED_FILE_EXTENSIONS = (
 MAX_FILE_SIZE_BYTES = 50_000  # skip files larger than this
 MAX_TOTAL_CODE_CHARS = 50_000  # truncate total fetched code after this limit
 MAX_RELEVANT_FILES = 3  # max files to fetch for relevance filtering
+PLUGIN_TOOL_USERNAME = "username"
 
-HOST = os.getenv("FREVAGPT_MCP_HOST", "0.0.0.0")
-PORT = int(os.getenv("FREVAGPT_MCP_PORT", "8052"))
-PATH = os.getenv("FREVAGPT_MCP_PATH", "/mcp")  # standard path
 
 # ─── App ────────────────────────────────────────────────────────────────────
+# Per-request header context
+user_ctx: ContextVar[str | None] = ContextVar("user_ctx", default=None)
 
+mcp = FastMCP("web-search-server")
 logger.info("Starting Web-Search MCP server on %s:%s%s", HOST, PORT, PATH)
 
 # Start the MCP server using Streamable HTTP transport
 app = make_header_gate(
     mcp.http_app(),
-    ctx_list=[],
-    header_name_list=[],
+    ctx_list=[user_ctx],
+    header_name_list=[PLUGIN_TOOL_USERNAME],
     logger=logger,
     mcp_path=PATH,
 )
+
+def _get_user():
+    user = user_ctx.get()
+    if not user:
+        logger.warning(
+            f"Missing required header '{PLUGIN_TOOL_USERNAME}'! "
+        )
+        return "unknown_user"
+    else:
+        return user
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -127,7 +147,10 @@ def _fetch_file_raw(project_id: int, file_path: str, branch: str) -> str:
 
 
 def _has_read_access(project_id: int, username: str) -> bool:
-    """Check if the given user has at least read access rights to the GitLab project."""
+    """
+    Check if the given user has at least read access rights to the GitLab project,
+    based on the project's visibility, the user's ID as well as membership status.
+    """
     # Get project visibility: "public", "internal", or "private"
     resp = _gitlab_http.get(f"/projects/{project_id}")
     resp.raise_for_status()
@@ -155,7 +178,7 @@ def _has_read_access(project_id: int, username: str) -> bool:
     return resp.json().get("access_level") >= 10  # Guest and above can read
 
 
-def get_project_id(project: str, plugin: str) -> int | None:
+def get_project_id(plugin: str, project: str) -> int | None:
     """Fetch the GitLab project ID for the given plugin name."""
     encoded = urlquote(f"{project}/plugins4freva/{plugin}", safe="")
     resp = _gitlab_http.get(f"/projects/{encoded}")
@@ -188,7 +211,7 @@ def fetch_repo_tree(project_id: int) -> list[str]:
     paths = [
         entry["path"]
         for entry in items
-        if entry["type"] == "blob" and entry["path"].lower().endswith(ALLOWED_FILE_EXTENSIONS)
+        if entry["type"] == "blob" and entry["path"].endswith(ALLOWED_FILE_EXTENSIONS)
     ]
     return paths
 
@@ -227,7 +250,7 @@ def fetch_plugin_code(project_id: int, selected_files: list[str], max_chars: int
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def search_relevant_files(
+def select_relevant_files(
     plugin: str, query: str, file_paths: list[str], dep: bool = False
 ) -> list[str]:
     """
@@ -235,26 +258,25 @@ def search_relevant_files(
     ones for the user's query (dep=False) or for searching code dependencies (dep=True).
     If the LLM-based selection fails, fall back to a heuristic of picking all files.
     """
+    filetree_listing = "\n".join(file_paths)
     if not dep:
-        tree_listing = "\n".join(file_paths)
         selection_prompt = (
             f"You are analyzing the '{plugin}' Freva plugin repository, "
-            f"which contains the following files:\n{tree_listing}\n\n"
+            f"which contains the following files:\n{filetree_listing}\n\n"
             f'The user\'s query now is:\n"{query}"\n\n'
             "Return ONLY a JSON array of file paths (strings) that seem most relevant to "
             "answering the user's query, but do not include test files. "
-            "For high-level questions about documentation, focus more on README / documentation"
-            "files; whereas for implementation details, focus more on source code files. "
+            "For high-level questions about documentation, focus more on README / docs folder; "
+            "whereas for implementation details, focus more on source code files. "
             f"Return at most {MAX_RELEVANT_FILES} paths. Output nothing but the JSON array."
         )
     else:
-        remain_listing = "\n".join(file_paths)
         selection_prompt = (
             "You are analyzing Python source code from a repository. "
             "The code below contains import statements. Identify which of the REMAINING "
             "repository files are imported or referenced as dependencies by the code.\n\n"
             f"=== FETCHED CODE ===\n{query}\n=== END ===\n\n"
-            f"Remaining files in the repository:\n{remain_listing}\n\n"
+            f"Remaining files in the repository:\n{filetree_listing}\n\n"
             "Return ONLY a JSON array of file paths (strings) from the remaining list "
             "that are imported or depend upon the fetched code. "
             "If none are needed, return an empty array []."
@@ -284,7 +306,7 @@ def search_relevant_files(
     return [p for p in selected_files if p in set(file_paths)][:MAX_RELEVANT_FILES]
 
 
-def collect_plugin_context(project_id: int, plugin: str, user_query: str) -> str:
+def collect_plugin_context(plugin: str, project_id: int, user_query: str) -> str:
     """
     Three-stage context retrieval of code base:
         1. Ask LLM which files are most relevant for the user's query.
@@ -309,8 +331,8 @@ def collect_plugin_context(project_id: int, plugin: str, user_query: str) -> str
     if not file_paths:
         return "(repository is empty)"
 
-    # ── Stage 1: ask the LLM to pick relevant files ─────────────────────────
-    base_files = search_relevant_files(plugin, user_query, file_paths)
+    # ── Stage 1: ask the LLM to select relevant files ─────────────────────────
+    base_files = select_relevant_files(plugin, user_query, file_paths)
     _log_stage("Initial", base_files)
 
     # ── Stage 2: fetch selected files ────────────────────────────────────────
@@ -318,7 +340,7 @@ def collect_plugin_context(project_id: int, plugin: str, user_query: str) -> str
 
     # ── Stage 3: resolve dependencies ────────────────────────────────────────
     tree_remaining = [p for p in file_paths if p not in set(base_files)]
-    dep_files = search_relevant_files(plugin, init_code, tree_remaining, dep=True)
+    dep_files = select_relevant_files(plugin, init_code, tree_remaining, dep=True)
     _log_stage("Dependency", dep_files)
     if not dep_files:
         return init_code
@@ -327,9 +349,10 @@ def collect_plugin_context(project_id: int, plugin: str, user_query: str) -> str
     return init_code + "\n\n# ── Dependency files ──\n\n" + dep_code
 
 
-def validate_plugin_call(project: str, project_id: int | None, plugin: str) -> str | None:
+def validate_plugin_call(plugin: str, project: str, project_id: int | None) -> str | None:
     """
-    Validate the project and plugin names, and check if GitLab access is configured.
+    Validate the project and plugin names, and check if GitLab repo access for the current
+    user is configured for reading rights.
     Returns an error message string if validation fails, or None if valid.
     """
     # validate project name
@@ -342,22 +365,28 @@ def validate_plugin_call(project: str, project_id: int | None, plugin: str) -> s
     # validate GitLab access of user
     if project_id is None:
         return f"Plugin '{plugin}' not found in GitLab project '{project}'."
-    # TODO: replace with actual user identification from backend container
-    user_name = "unknown_user"  # (user_name = auth.username or "unknown_user")
+
+    # Username hardcoded for now; replace with _get_user() for production
+    user_name = "k202218"
+    # user_name = _get_user()
     try:
         user_access = _has_read_access(project_id, user_name)
         if not user_access:
+            logger.warning(
+                "User '%s' does NOT have read access to plugin '%s' in project '%s'.", user_name, plugin, project
+            )
             return (
-                f"User access to plugin '{plugin}' denied. "
+                f"User access for {user_name} to plugin '{plugin}' denied! "
                 f"Get access by being added to GitLab project '{project}'."
             )
+        logger.info("User '%s' has read access to plugin '%s' in project '%s'.", user_name, plugin, project)
     except httpx.HTTPError as e:
         logger.error("Error checking GitLab repo membership: %s", e)
         return "Plugin code search is currently unavailable (GitLab access error)."
 
 
 @mcp.tool()
-def plugin_code_search(project_name: str, plugin_name: str, query: str) -> str:
+def plugin_code_search(plugin_name: str, project_name: str, user_query: str) -> str:
     """
     Search and analyze the source code of a Freva data analysis plugin for decadal climate
     predictions. Use this when the user asks about how a plugin works, how to use it,
@@ -365,18 +394,18 @@ def plugin_code_search(project_name: str, plugin_name: str, query: str) -> str:
 
     Available plugins:
         - cvprepare: prepares cross-validation datasets for decadal prediction skill assessment
-        - leadtimeselektor / leadtimeSelect: extracts and aggregates lead times from decadal prediction ensembles
+        - leadtimeselektor: extracts and aggregates lead times from decadal prediction ensembles
         - problems: decadal prediction skill assessment of simulation vs reanalysis or observations
         - recalibration: calibrates decadal datasets to observation for model drift and bias correction
         - terciles: computes tercile-based statistics for prediction skill assessment
 
     Args:
+        plugin_name (str): Name of the repo or plugin (e.g. "leadtimeselektor").
         project_name (str): Name of the Freva instance/project. Available options:
             - "codes" (aka Coming Decade)
             - "xces" (aka ClimXtreme)
-            - "regiklim" (aka Regional Climate Projections)
-        plugin_name (str): Name of the repo or plugin (e.g. "leadtimeselektor").
-        query (str): What the user wants to know about or do with the plugin.
+            - "regiklim" (aka Regionale Informationen zum Klimahandeln)
+        user_query (str): What the user wants to know about or do with the plugin.
 
     Returns:
         str: Relevant code context fetched from source files of the plugin repository;
@@ -384,17 +413,17 @@ def plugin_code_search(project_name: str, plugin_name: str, query: str) -> str:
     """
     project = FREVA_PROJECT_NAMES.get(project_name.strip().lower(), "")
     plugin = plugin_name.strip().lower()
-    project_id = get_project_id(project, plugin)
+    project_id = get_project_id(plugin, project)
 
     # Validate the plugin call
-    result = validate_plugin_call(project, project_id, plugin)
+    result = validate_plugin_call(plugin, project, project_id)
     if result is not None:
         return result
 
     # Fetch the plugin code and return it with a header
-    logger.info("Fetching source code for plugin '%s' with query: %s", plugin, query)
+    logger.info("Fetching source code for plugin '%s' with query: %s", plugin, user_query)
     try:
-        code_content = collect_plugin_context(project_id, plugin, query)  # type: ignore
+        code_content = collect_plugin_context(plugin, project_id, user_query)  # type: ignore
     except Exception as e:
         logger.warning("Failed to fetch plugin code for '%s': %s", plugin, e)
         return f"Failed to retrieve source code for plugin '{plugin}': {e}"

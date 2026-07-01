@@ -235,6 +235,7 @@ def get_mcp_headers(
         },
         "web_search": {
             "Authorization": auth_header,
+            "username": auth.username or "unknown_user",
         },
     }
     return headers
