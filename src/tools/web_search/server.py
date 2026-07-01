@@ -30,13 +30,18 @@ ALLOWED_DOMAINS = [
 # GitLab plugin config
 GITLAB_BASE_URL = "https://gitlab.dkrz.de/api/v4"
 FREVA_PROJECT_NAMES = {
-    "codes": "kd1418",
     "coming decade": "kd1418",
+    "codes": "kd1418",
     "comdec": "kd1418",
     "xces": "bm1159",
     "climxtreme": "bm1159",
     "regiklim": "ch1187"
 }
+FREVA_PROJECTS = [
+    "Coming Decade (ComDec/codes)",
+    "ClimXtreme (xces)",
+    "RegiKlim (regiklim)",
+]
 ALLOWED_FILE_EXTENSIONS = (
     ".py",
     ".sh",
@@ -318,7 +323,7 @@ def collect_plugin_context(plugin: str, project_id: int, user_query: str) -> str
 
     def _log_stage(stage: str, files: list[str]):
         logger.info(
-            "%s retrieval selected %d/%d files for plugin '%s': %s",
+            "%s retrieval stage selected %d/%d files for plugin '%s': %s",
             stage,
             len(files),
             len(file_paths),
@@ -359,7 +364,7 @@ def validate_plugin_call(plugin: str, project: str, project_id: int | None) -> s
     if project not in FREVA_PROJECT_NAMES.values():
         return (
             f"Unknown project '{project}'. "
-            f"Available projects: {', '.join(FREVA_PROJECT_NAMES.values())}"
+            f"Available projects: {', '.join(FREVA_PROJECTS)}"
         )
 
     # validate GitLab access of user
@@ -379,7 +384,9 @@ def validate_plugin_call(plugin: str, project: str, project_id: int | None) -> s
                 f"User access for {user_name} to plugin '{plugin}' denied! "
                 f"Get access by being added to GitLab project '{project}'."
             )
-        logger.info("User '%s' has read access to plugin '%s' in project '%s'.", user_name, plugin, project)
+        logger.info(
+            "Authorization layer passed: User '%s' has read access to plugin '%s' in project '%s'.", user_name, plugin, project
+        )
     except httpx.HTTPError as e:
         logger.error("Error checking GitLab repo membership: %s", e)
         return "Plugin code search is currently unavailable (GitLab access error)."
@@ -392,24 +399,14 @@ def plugin_code_search(plugin_name: str, project_name: str, user_query: str) -> 
     predictions. Use this when the user asks about how a plugin works, how to use it,
     or wants parts of the plugin code base to be transformed into Python code.
 
-    Available plugins:
-        - cvprepare: prepares cross-validation datasets for decadal prediction skill assessment
-        - leadtimeselektor: extracts and aggregates lead times from decadal prediction ensembles
-        - problems: decadal prediction skill assessment of simulation vs reanalysis or observations
-        - recalibration: calibrates decadal datasets to observation for model drift and bias correction
-        - terciles: computes tercile-based statistics for prediction skill assessment
-
     Args:
-        plugin_name (str): Name of the repo or plugin (e.g. "leadtimeselektor").
-        project_name (str): Name of the Freva instance/project. Available options:
-            - "codes" (aka Coming Decade)
-            - "xces" (aka ClimXtreme)
-            - "regiklim" (aka Regionale Informationen zum Klimahandeln)
-        user_query (str): What the user wants to know about or do with the plugin.
+        plugin_name (str): Name of the repo or plugin (e.g. "leadtimeselektor")
+        project_name (str): Name of the Freva instance/project
+        user_query (str): What the user wants to know about or do with the plugin
 
     Returns:
         str: Relevant code context fetched from source files of the plugin repository;
-        or an error message if the plugin call is invalid or code retrieval fails.
+        or an error message if the plugin call is not authorized / code retrieval fails.
     """
     project = FREVA_PROJECT_NAMES.get(project_name.strip().lower(), "")
     plugin = plugin_name.strip().lower()
