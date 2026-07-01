@@ -7,11 +7,11 @@ import logging
 import os
 import random
 import string
-from typing import Dict, Any
+from typing import Any, Dict
 
 import pytest
 
-from src.services.mcp.client import McpClient
+from climateclaw.services.mcp.client import McpClient
 
 pytestmark = pytest.mark.integration
 # Run with: pytest -m integration
@@ -21,16 +21,17 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(autouse=True)
 def _force_dev(monkeypatch):
-    monkeypatch.setenv("FREVAGPT_DEV", "1")
-    monkeypatch.setenv("FREVAGPT_WEB_SEARCH_SERVER_URL", "http://localhost:8052")
-    import src.core.settings as settings
+    monkeypatch.setenv("CLIMATECLAW_DEV", "1")
+    monkeypatch.setenv("CLIMATECLAW_WEB_SEARCH_SERVER_URL", "http://localhost:8052")
+    import climateclaw.core.settings as settings
+
     importlib.reload(settings)
     yield
 
 
 @pytest.fixture
 def mcp_client_web_search():
-    base_url = os.getenv("FREVAGPT_WEB_SEARCH_SERVER_URL", "http://localhost:8052")
+    base_url = os.getenv("CLIMATECLAW_WEB_SEARCH_SERVER_URL", "http://localhost:8052")
     thread_id = "".join(random.choices(string.ascii_letters + string.digits, k=32))
     client = McpClient(
         base_url=base_url,
@@ -57,8 +58,8 @@ async def _execute_web_search_via_mcp(
 
 
 @pytest.mark.skipif(
-    not os.getenv("FREVAGPT_WEB_SEARCH_SERVER_URL"),
-    reason="FREVAGPT_WEB_SEARCH_SERVER_URL not set or web-search MCP server not running",
+    not os.getenv("CLIMATECLAW_WEB_SEARCH_SERVER_URL"),
+    reason="CLIMATECLAW_WEB_SEARCH_SERVER_URL not set or web-search MCP server not running",
 )
 @pytest.mark.asyncio
 async def test_cancel_running_web_search_request(mcp_client_web_search):
@@ -107,7 +108,9 @@ async def test_cancel_running_web_search_request(mcp_client_web_search):
         assert followup.get("error", "") == ""
 
         # Depending on your MCP tool return shape, adjust one of these:
-        assert isinstance(followup.get("result", "") or followup.get("content", "") or "", str)
+        assert isinstance(
+            followup.get("result", "") or followup.get("content", "") or "", str
+        )
 
     finally:
         if not call_task.done():

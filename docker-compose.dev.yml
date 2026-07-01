@@ -1,110 +1,146 @@
 services:
-  freva-gpt-backend:
-    image: freva-gpt-backend-${FREVAGPT_INSTANCE_NAME:?Instance name must be set in the .env file to differentiate between instances}
+  climateclaw-base:
     build:
       context: .
-      dockerfile: docker/freva-gpt-backend/Dockerfile
+      dockerfile: docker/Dockerfile.base
+    image: ghcr.io/freva-org/climateclaw-base:latest
+    profiles:
+      - build-only
+
+  climateclaw:
+    image: climateclaw-${CLIMATECLAW_INSTANCE_NAME:?Instance name must be set in the .env file to differentiate between instances}
+    build:
+      context: .
+      dockerfile: docker/climateclaw/Dockerfile
     env_file: .env
     environment:
-      FREVAGPT_DEV: ${FREVAGPT_DEV}
-      FREVAGPT_DEBUG: ${FREVAGPT_DEBUG:-0}
-    hostname: freva-gpt-backend-instance-${FREVAGPT_INSTANCE_NAME}
+      CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
+      CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
+    hostname: climateclaw-instance-${CLIMATECLAW_INSTANCE_NAME}
     ports:
-      - "${FREVAGPT_TARGET_PORT:-8502}:${FREVAGPT_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
-      - "5678:5678" # Port for debugpy
-    volumes: 
+      - "${CLIMATECLAW_TARGET_PORT:-8502}:${CLIMATECLAW_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
+      - "8600:${CLIMATECLAW_BACKEND_PORT:-8502}" # localhost:8600/docs give FastAPI docs
+      - "${CLIMATECLAW_DEBUG_PORT:-5678}:${CLIMATECLAW_DEBUG_PORT:-5678}" # Port for debugpy
+    volumes:
       - ./cache/:/app/cache
       - ./logs/:/app/logs
-    networks: 
-      - freva-gpt
+    networks:
+      - climateclaw
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${CLIMATECLAW_BACKEND_PORT:-8502}/healthz')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
       mongodb:
         condition: service_healthy
+      litellm:
+        condition: service_healthy
 
-  rag:
-    image: rag-server-${FREVAGPT_INSTANCE_NAME}
+  rag-server:
+    image: rag-server-${CLIMATECLAW_INSTANCE_NAME}
     build:
       context: .
       dockerfile: docker/rag-server/Dockerfile
     env_file: .env
     environment:
-      FREVAGPT_DEV: ${FREVAGPT_DEV}
-      FREVAGPT_DEBUG: ${FREVAGPT_DEBUG:-0}
-      FREVAGPT_MCP_HOST: 0.0.0.0
-      FREVAGPT_MCP_PORT: ${FREVAGPT_RAG_PORT:-8050}
-    volumes: 
+      CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
+      CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
+      CLIMATECLAW_MCP_HOST: 0.0.0.0
+      CLIMATECLAW_MCP_PORT: ${CLIMATECLAW_RAG_PORT:-8050}
+    volumes:
       - ./resources:/app/resources:ro
       - ./logs/:/app/logs
-    networks: 
-      - freva-gpt
+    networks:
+      - climateclaw
 
-  code:
-    image: code-server-${FREVAGPT_INSTANCE_NAME}
+  code-server:
+    image: code-server-${CLIMATECLAW_INSTANCE_NAME}
     build:
       context: .
       dockerfile: docker/code-server/Dockerfile
     env_file: .env
     environment:
-      FREVAGPT_DEV: ${FREVAGPT_DEV}
-      FREVAGPT_DEBUG: ${FREVAGPT_DEBUG:-0}
-      FREVAGPT_MCP_HOST: 0.0.0.0
-      FREVAGPT_MCP_PORT: ${FREVAGPT_CODE_PORT:-8051}
-    ports: 
+      CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
+      CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
+      CLIMATECLAW_MCP_HOST: 0.0.0.0
+      CLIMATECLAW_MCP_PORT: ${CLIMATECLAW_CODE_PORT:-8051}
+    ports:
       - 8051:8051
     cpus: 4
     volumes:
       - ./cache/:/app/cache
       - ./logs/:/app/logs
-    networks: 
-      - freva-gpt
+    networks:
+      - climateclaw
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8051/healthz')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
-  web-search:
-    image: web-search-server-${FREVAGPT_INSTANCE_NAME}
+  web-search-server:
+    image: web-search-server-${CLIMATECLAW_INSTANCE_NAME}
     build:
       context: .
       dockerfile: docker/web-search-server/Dockerfile
     env_file: .env
     environment:
-      FREVAGPT_DEV: ${FREVAGPT_DEV}
-      FREVAGPT_DEBUG: ${FREVAGPT_DEBUG:-0}
-      FREVAGPT_MCP_HOST: 0.0.0.0
-      FREVAGPT_MCP_PORT: 8052
-    ports: 
+      CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
+      CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
+      CLIMATECLAW_MCP_HOST: 0.0.0.0
+      CLIMATECLAW_MCP_PORT: 8052
+    ports:
       - 8052:8052
-    networks: 
-      - freva-gpt
+    networks:
+      - climateclaw
     volumes:
       - ./logs/:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8052/healthz')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
-    hostname: litellm-instance-${FREVAGPT_INSTANCE_NAME}
-    volumes: 
+    hostname: litellm-instance-${CLIMATECLAW_INSTANCE_NAME}
+    volumes:
       - ./litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
     command: >
       --config=/app/config.yaml
       --port=4000
       --num_workers=1
       --run_gunicorn
-    env_file: .env 
-    ports: 
+    env_file: .env
+    ports:
       - "4000:4000" # Expose LiteLLM port to the host machine for direct access if needed, e.g. local dev
-    networks: 
-      - freva-gpt
+    networks:
+      - climateclaw
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   ollama:
     image: ollama/ollama:latest
-    hostname: ollama-instance-${FREVAGPT_INSTANCE_NAME}
-    networks: 
-      - freva-gpt
+    hostname: ollama-instance-${CLIMATECLAW_INSTANCE_NAME}
+    networks:
+      - climateclaw
 
   mongodb:
     networks:
-      - freva-gpt
+      - climateclaw
     image: ghcr.io/freva-org/freva-mongo:latest
     environment:
-      - API_MONGO_USER=${FREVAGPT_MONGODB_USER:?MongoDB user and password must be set in the .env file. See .env.example.}
-      - API_MONGO_PASSWORD=${FREVAGPT_MONGODB_PASSWORD}
-      - API_MONGO_DB=${FREVAGPT_MONGODB_DATABASE_NAME}
+      - API_MONGO_USER=${CLIMATECLAW_MONGODB_USER:?MongoDB user and password must be set in the .env file. See .env.example.}
+      - API_MONGO_PASSWORD=${CLIMATECLAW_MONGODB_PASSWORD}
+      - API_MONGO_DB=${CLIMATECLAW_MONGODB_DATABASE_NAME}
     hostname: mongodb
     ports:
       - "27017:27017"
@@ -119,7 +155,7 @@ services:
 
   freva-db:
     networks:
-      - freva-gpt
+      - climateclaw
     hostname: freva-db
     container_name: freva-db
     image: ghcr.io/freva-org/freva-mysql:9.3.0
@@ -136,8 +172,8 @@ services:
 
   freva-web:
     networks:
-      - freva-gpt
-    image: ghcr.io/freva-org/freva-web:2605.2.2
+      - climateclaw
+    image: ghcr.io/freva-org/freva-web:latest
     ports:
       - "8000:8000"
     container_name: freva-web
@@ -150,7 +186,7 @@ services:
       - REDIS_HOST=freva-cache
       - CSRF_TRUSTED_ORIGINS=http://127.0.0.1,http://localhost
       - FREVA_REST_URL=http://restapi:7777
-      - CHAT_BOT_URL=http://freva-gpt-backend:8502
+      - CHAT_BOT_URL=http://climateclaw:8502
       - ACTIVATE_CHAT_BOT=1
       - STAC_BROWSER=1
       - DEV_MODE=1
@@ -160,7 +196,7 @@ services:
 
   freva-cache:
     networks:
-      - freva-gpt
+      - climateclaw
     image: ghcr.io/freva-org/freva-redis:latest
     hostname: freva-cache
     container_name: freva-cache
@@ -207,7 +243,7 @@ services:
 
   solr:
     networks:
-      - freva-gpt
+      - climateclaw
     image: ghcr.io/freva-org/freva-solr:latest
     ports:
       - "8983:8983"
@@ -221,7 +257,7 @@ services:
 
   keycloak:
     networks:
-      freva-gpt:
+      climateclaw:
         aliases:
           - keycloak.localhost
     image: quay.io/keycloak/keycloak
@@ -268,14 +304,14 @@ services:
         sh create_user.sh || true
       '
     networks:
-      - freva-gpt
+      - climateclaw
 
   freva-rest-server:
     user: root
     image: ghcr.io/freva-org/freva-rest-api:latest
     hostname: restapi
     networks:
-      - freva-gpt
+      - climateclaw
     environment:
       - API_SOLR_CORE=files
       - API_PORT=7777
@@ -291,9 +327,9 @@ services:
       - API_REDIS_HOST=redis://freva-cache:6379
       - API_LOGDIR=/tmp/logs
       - API_SOLR_HOST=http://solr:8983
-      - API_MONGO_USER=${FREVAGPT_MONGODB_USER}
+      - API_MONGO_USER=${CLIMATECLAW_MONGODB_USER}
       - API_MONGO_HOST=mongodb:27017
-      - API_MONGO_PASSWORD=${FREVAGPT_MONGODB_PASSWORD}
+      - API_MONGO_PASSWORD=${CLIMATECLAW_MONGODB_PASSWORD}
       - API_MONGO_DB=search_stats
       - API_SERVICES=databrowser,stacapi
     depends_on:
@@ -309,12 +345,11 @@ services:
     volumes:
       - certs-data:/certs:ro
 
+
 networks:
-  freva-gpt:
+  climateclaw:
     driver: bridge
 
-# The subnet is not set to avoid conflicts with other potentially running networks on the same machine.
-# Note: Named networks by default aren't shared between different docker-compose projects, even if they have the same name, as long as they are in separate directories.
 
 volumes:
   settings-data:

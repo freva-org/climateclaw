@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
 
-import yaml
 import os
 import sys
 from copy import deepcopy
 from pathlib import Path
 
+import yaml
 from dotenv import load_dotenv
+
 load_dotenv()
 
-DEFAULT_MCP_PORTS = {"rag":"8050",
-                     "code":"8051",
-                     "web_search":"8052"}
-MCP_SERVICES = {"rag", "code", "web-search"}
-
-
-def canonical_service_name(name: str) -> str:
-    return name.strip().replace("_", "-")
+DEFAULT_MCP_PORTS = {
+    "rag-server": "8050",
+    "code-server": "8051",
+    "web-search-server": "8052",
+}
+MCP_SERVICES = {"rag-server", "code-server", "web-search-server"}
 
 
 def env_name(name: str) -> str:
@@ -28,33 +27,103 @@ def expand_service(name, service, replicas):
 
     for i in range(1, replicas + 1):
         s = deepcopy(service)
-        replica_name = f"{name}-{i}"
+        replica_name = name if replicas == 1 else f"{name}-{i}"
 
         if "ports" in s:
             ports = s.pop("ports")
-            s["expose"] = [p.split("}:")[1] if "}:" in p else p.split(":")[-1] for p in ports]
+            s["expose"] = [
+                p.split("}:")[1] if "}:" in p else p.split(":")[-1] for p in ports
+            ]
 
-        s["hostname"] = replica_name + "-${FREVAGPT_INSTANCE_NAME}"
+        s["hostname"] = replica_name + "-${CLIMATECLAW_INSTANCE_NAME}"
 
         services[replica_name] = s
 
     return services
 
 
-def haproxy_backend(name, port, replicas, sticky_mode=None):
+def expand_depends_on(depends_on, replica_counts):
+    if isinstance(depends_on, dict):
+        expanded = {}
+        for dependency, config in depends_on.items():
+            replicas = replica_counts.get(dependency, 1)
+            if replicas > 1:
+                for i in range(1, replicas + 1):
+                    expanded[f"{dependency}-{i}"] = deepcopy(config)
+            else:
+                expanded[dependency] = config
+        return expanded
+
+    if isinstance(depends_on, list):
+        expanded = []
+        for dependency in depends_on:
+            replicas = replica_counts.get(dependency, 1)
+            if replicas > 1:
+                expanded.extend(f"{dependency}-{i}" for i in range(1, replicas + 1))
+            else:
+                expanded.append(dependency)
+        return expanded
+
+    return depends_on
+
+
+def update_service_dependencies(services, replica_counts):
+    for service in services.values():
+        if "depends_on" in service:
+            service["depends_on"] = expand_depends_on(
+                service["depends_on"],
+                replica_counts,
+            )
+
+
+def service_instance_names(name, replicas, services):
+    if replicas == 1 and name in services:
+        return [name]
+
+    return [
+        replica_name
+        for replica_name in (f"{name}-{i}" for i in range(1, replicas + 1))
+        if replica_name in services
+    ]
+
+
+def haproxy_dependencies(
+    services,
+    backend_n,
+    litellm_n,
+    available_mcp_servers,
+    mcp_replica_n,
+):
+    dependencies = []
+    dependencies.extend(service_instance_names("climateclaw", backend_n, services))
+
+    for server in available_mcp_servers:
+        dependencies.extend(
+            service_instance_names(server, mcp_replica_n[server], services)
+        )
+
+    dependencies.extend(service_instance_names("litellm", litellm_n, services))
+    dependencies.extend(["mongodb", "ollama"])
+
+    return [dependency for dependency in dependencies if dependency in services]
+
+
+def haproxy_backend(name, port, service_names, sticky_mode=None):
     lines = []
     lines.append(f"backend be_{name}")
     if sticky_mode:
         lines.append(f"    balance {sticky_mode}")
 
-    for i in range(1, replicas + 1):
-        lines.append(f"    server {name}{i} {name}-{i}:{port} check")
+    for i, service_name in enumerate(service_names, start=1):
+        lines.append(f"    server {name}{i} {service_name}:{port} check")
 
     lines.append("")
     return "\n".join(lines)
 
 
-def generate_haproxy(backend_n, backend_port, litellm_n, server_list, replica_dict, port_dict):
+def generate_haproxy(
+    services, backend_n, backend_port, litellm_n, server_list, replica_dict, port_dict
+):
     conf = []
 
     conf.append(
@@ -74,31 +143,27 @@ def generate_haproxy(backend_n, backend_port, litellm_n, server_list, replica_di
     conf.append(
         "frontend fe_backend\n"
         f"    bind *:{backend_port}\n"
-        "    default_backend be_freva-gpt-backend\n"
+        "    default_backend be_climateclaw\n"
         "\n"
     )
 
     conf.append(
-        "frontend fe_litellm\n"
-        "    bind *:4000\n"
-        "    default_backend be_litellm\n"
-        "\n"
+        "frontend fe_litellm\n    bind *:4000\n    default_backend be_litellm\n\n"
     )
 
     for s in server_list:
-        service_name = canonical_service_name(s)
         conf.append(
-            f"frontend fe_{service_name}\n"
+            f"frontend fe_{s}\n"
             f"    bind *:{port_dict[s]}\n"
-            f"    default_backend be_{service_name}\n"
+            f"    default_backend be_{s}\n"
             "\n"
         )
 
     conf.append(
         haproxy_backend(
-            "freva-gpt-backend",
+            "climateclaw",
             backend_port,
-            backend_n,
+            service_instance_names("climateclaw", backend_n, services),
             "url_param thread_id",
         )
     )
@@ -107,16 +172,16 @@ def generate_haproxy(backend_n, backend_port, litellm_n, server_list, replica_di
         haproxy_backend(
             "litellm",
             4000,
-            litellm_n,
+            service_instance_names("litellm", litellm_n, services),
         )
     )
 
     for s in server_list:
         conf.append(
             haproxy_backend(
-                canonical_service_name(s),
+                s,
                 port_dict[s],
-                replica_dict[s],
+                service_instance_names(s, replica_dict[s], services),
                 "hdr(thread-id)",
             )
         )
@@ -132,22 +197,25 @@ def main():
 
     compose_path = sys.argv[1]
 
-    backend_port = os.environ.get("FREVAGPT_BACKEND_PORT", "8502")
-    backend_target_port = os.environ.get("FREVAGPT_TARGET_PORT", "8502")
-    backend_n = int(os.environ.get("FREVAGPT_BACKEND_REPLICAS", "1"))
-    litellm_n = int(os.environ.get("FREVAGPT_LITELLM_REPLICAS", "1"))
+    backend_port = os.environ.get("CLIMATECLAW_BACKEND_PORT", "8502")
+    backend_target_port = os.environ.get("CLIMATECLAW_TARGET_PORT", "8502")
+    backend_n = int(os.environ.get("CLIMATECLAW_BACKEND_REPLICAS", "1"))
+    litellm_n = int(os.environ.get("CLIMATECLAW_LITELLM_REPLICAS", "1"))
 
     available_mcp_servers = [
-        canonical_service_name(s)
-        for s in os.environ.get("FREVAGPT_AVAILABLE_MCP_SERVERS", "").split(",")
+        s
+        for s in os.environ.get("CLIMATECLAW_AVAILABLE_MCP_SERVERS", "").split(",")
         if s.strip()
     ]
     mcp_replica_n = {
-        s: int(os.environ.get(f"FREVAGPT_{env_name(s).upper()}_REPLICAS", "1"))
+        s: int(os.environ.get(f"CLIMATECLAW_{env_name(s).upper()}_REPLICAS", "1"))
         for s in available_mcp_servers
     }
     port_dict = {
-        s: os.environ.get(f"FREVAGPT_{env_name(s).upper()}_PORT", DEFAULT_MCP_PORTS.get(env_name(s)))
+        s: os.environ.get(
+            f"CLIMATECLAW_{env_name(s).upper()}_PORT",
+            DEFAULT_MCP_PORTS.get(env_name(s)),
+        )
         for s in available_mcp_servers
     }
 
@@ -155,9 +223,14 @@ def main():
 
     services = base["services"]
     new_services = {}
+    replica_counts = {
+        "climateclaw": backend_n,
+        "litellm": litellm_n,
+        **mcp_replica_n,
+    }
 
     for name, svc in services.items():
-        if name == "freva-gpt-backend":
+        if name == "climateclaw":
             new_services.update(expand_service(name, svc, backend_n))
         elif name == "litellm":
             new_services.update(expand_service(name, svc, litellm_n))
@@ -165,46 +238,50 @@ def main():
             if name in available_mcp_servers:
                 new_services.update(expand_service(name, svc, mcp_replica_n[name]))
         elif name == "freva-web":
-            svc.get("environment").remove("CHAT_BOT_URL=http://freva-gpt-backend:8502")
+            svc.get("environment").remove("CHAT_BOT_URL=http://climateclaw:8502")
             svc.get("environment").append("CHAT_BOT_URL=http://haproxy:8502")
             new_services[name] = svc
         else:
             new_services[name] = svc
 
+    update_service_dependencies(new_services, replica_counts)
+
     dev_ports = [
-            f"{backend_target_port}:{backend_port}",
-            f"{port_dict.get('code')}:{port_dict.get('code')}"
-        ]
+        f"{backend_target_port}:{backend_port}",
+    ]
+    if port_dict.get("code-server"):
+        dev_ports.append(f"{port_dict['code-server']}:{port_dict['code-server']}")
     prod_ports = [
-            f"{backend_target_port}:{backend_port}",
-        ]
-    
+        f"{backend_target_port}:{backend_port}",
+    ]
+
     network_name = list(base["networks"].keys())[0]
 
     new_services["haproxy"] = {
         "image": "haproxy:3.0-alpine",
         "user": "0:0",
         "ports": dev_ports if "dev" in compose_path else prod_ports,
-        "volumes": [
-            "./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro"
-        ],
+        "volumes": ["./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro"],
         "networks": [network_name],
-        "depends_on": list(new_services.keys()),
+        "depends_on": haproxy_dependencies(
+            new_services,
+            backend_n,
+            litellm_n,
+            available_mcp_servers,
+            mcp_replica_n,
+        ),
     }
 
     out = base | {"services": new_services}
 
     input_path = Path(compose_path)
 
-    output_path = input_path.with_name(
-        f"{input_path.stem}.scaled{input_path.suffix}"
-    )
+    output_path = input_path.with_name(f"{input_path.stem}.scaled{input_path.suffix}")
 
-    output_path.write_text(
-        yaml.dump(out, sort_keys=False)
-    )
+    output_path.write_text(yaml.dump(out, sort_keys=False))
 
     haproxy_cfg = generate_haproxy(
+        new_services,
         backend_n,
         backend_port,
         litellm_n,

@@ -1,8 +1,4 @@
-import os, sys, importlib
-from pathlib import Path
 import pytest
-
-import respx
 
 
 @pytest.mark.asyncio
@@ -19,7 +15,7 @@ async def test_getthread_requires_thread_id(stub_resp, client, GOOD_HEADERS):
 
 @pytest.mark.asyncio
 async def test_getthread_ok_with_thread_id(
-    stub_resp, client, patch_db, patch_read_thread, GOOD_HEADERS
+    stub_resp, client, patch_read_thread, GOOD_HEADERS
 ):
     with stub_resp:
         async with client:
@@ -41,11 +37,8 @@ async def test_getthread_ok_with_thread_id(
 async def test_streamresponse_accepts_params_and_headers(
     stub_resp,
     client,
-    patch_db,
-    patch_mongo_uri,
     patch_stream,
     patch_read_thread,
-    patch_save_thread,
     patch_mcp_manager,
     GOOD_HEADERS,
 ):

@@ -5,7 +5,7 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS] [COMPOSE_ARGS...]
 
-Deploy the freva-gpt stack via podman compose.
+Deploy the climateclaw stack via podman compose.
 
 Generates a scaled compose file from docker-compose.yml, tears down any
 previous deployment, optionally rebuilds images, and starts the services.

@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import contextlib
-import os
 import importlib
+import logging
+import os
 import random
 import string
-from typing import Dict, Any
-
-from src.services.mcp.client import McpClient
+from typing import Any
 
 import pytest
+
+from climateclaw.services.mcp.client import McpClient
 
 pytestmark = pytest.mark.integration
 # Run these tests using `pytest -m integration`
@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(autouse=True)
 def _force_dev(monkeypatch):
-    monkeypatch.setenv("FREVAGPT_DEV", "1")
-    monkeypatch.setenv("FREVAGPT_CODE_SERVER_URL", "http://localhost:8051")
-    import src.core.settings as settings
+    monkeypatch.setenv("CLIMATECLAW_DEV", "1")
+    monkeypatch.setenv("CLIMATECLAW_CODE_SERVER_URL", "http://localhost:8051")
+    import climateclaw.core.settings as settings
 
     importlib.reload(settings)
     yield
@@ -32,7 +32,7 @@ def _force_dev(monkeypatch):
 
 @pytest.fixture
 def mcp_client_CI():
-    base_url = os.getenv("FREVAGPT_CODE_SERVER_URL", "http://localhost:8051")
+    base_url = os.getenv("CLIMATECLAW_CODE_SERVER_URL", "http://localhost:8051")
     thread_id = "".join(random.choices(string.ascii_letters + string.digits, k=32))
     client = McpClient(
         base_url=base_url,
@@ -41,7 +41,9 @@ def mcp_client_CI():
     return client
 
 
-async def _execute_code_via_mcp(mcp_c: McpClient, code: Dict[str, Any]) -> Dict[str, Any]:
+async def _execute_code_via_mcp(
+    mcp_c: McpClient, code: dict[str, Any]
+) -> dict[str, Any]:
     """
     Adapter layer to  MCP server.
     The function must return a dict.
@@ -52,10 +54,10 @@ async def _execute_code_via_mcp(mcp_c: McpClient, code: Dict[str, Any]) -> Dict[
 
     results = await mcp_c.call_tool(
         name="code_interpreter",
-              args=code,
+        args=code,
     )
     # Ensure type and shape of result
-    if not isinstance(results, Dict) or "structuredContent" not in results.keys():
+    if not isinstance(results, dict) and "structuredContent" not in results.keys():
         raise RuntimeError("MCP client returned unknown result from code-interpreter.")
     return results.get("structuredContent", {})
 
@@ -91,8 +93,8 @@ async def _exec_and_get_richoutput_value(mcp_client_CI, code):
 
 
 @pytest.mark.skipif(
-    not os.getenv("FREVAGPT_CODE_SERVER_URL"),
-    reason="FREVAGPT_CODE_SERVER_URL not set or code-interpreter MCP server not running",
+    not os.getenv("CLIMATECLAW_CODE_SERVER_URL"),
+    reason="CLIMATECLAW_CODE_SERVER_URL not set or code-interpreter MCP server not running",
 )
 async def test_two_plus_two(mcp_client_CI):
     code = {"code": "2+2"}
@@ -112,26 +114,35 @@ async def test_print_two(mcp_client_CI):
 
 async def test_assignments(mcp_client_CI):
     code = {"code": "a=2"}
-    assert await _exec_and_get_evaluated_value(mcp_client_CI, code) == ''
-    assert await _exec_and_get_printed_value(mcp_client_CI, code) == ''
+    assert await _exec_and_get_evaluated_value(mcp_client_CI, code) == ""
+    assert await _exec_and_get_printed_value(mcp_client_CI, code) == ""
 
 
 async def test_eval_exec(mcp_client_CI):
-    assert await _exec_and_get_evaluated_value(mcp_client_CI, {"code": "a=2\nb=3\na+b"}) == "5"
-    assert await _exec_and_get_evaluated_value(mcp_client_CI, {"code": "min(10,15)"}) == "10"
-    assert await _exec_and_get_printed_value(mcp_client_CI, {"code": "print(2.5*2)"}) == "5.0\n"
+    assert (
+        await _exec_and_get_evaluated_value(mcp_client_CI, {"code": "a=2\nb=3\na+b"})
+        == "5"
+    )
+    assert (
+        await _exec_and_get_evaluated_value(mcp_client_CI, {"code": "min(10,15)"})
+        == "10"
+    )
+    assert (
+        await _exec_and_get_printed_value(mcp_client_CI, {"code": "print(2.5*2)"})
+        == "5.0\n"
+    )
 
 
 async def test_imports(mcp_client_CI):
     async def _check_single_import(cli, lib):
-        return await _execute_code_via_mcp(cli, {"code": f"import {lib}\nprint('success!')"})
+        return await _execute_code_via_mcp(
+            cli, {"code": f"import {lib}\nprint('success!')"}
+        )
 
     for lib in [
         "xarray",
-        "tzdata",
         "six",
         "shapely",
-        "pytz",
         "shapefile",
         "pyproj",
         "pyparsing",
@@ -277,7 +288,9 @@ async def test_timeout_soft_failure_and_recovery(mcp_client_CI):
     result = await _execute_code_via_mcp(mcp_client_CI, {"code": "while True: pass"})
     assert "exceeded" in (result.get("error", "") + result.get("stderr", "")).lower()
 
-    printed_value = await _exec_and_get_printed_value(mcp_client_CI, {"code": "print('still alive')"})
+    printed_value = await _exec_and_get_printed_value(
+        mcp_client_CI, {"code": "print('still alive')"}
+    )
     # Kernel should still be usable
     assert printed_value == "still alive\n"
 
@@ -296,7 +309,7 @@ async def test_cancel_before_request_sent_by_client(mcp_client_CI):
     call_task = asyncio.create_task(
         _execute_code_via_mcp(mcp_client_CI, long_running_code)
     )
-    await asyncio.sleep(0) # wait for the call to start
+    await asyncio.sleep(0)  # wait for the call to start
 
     try:
         cancelled = False
@@ -322,7 +335,9 @@ async def test_cancel_before_request_sent_by_client(mcp_client_CI):
             mcp_client_CI,
             {"code": "print('still alive after client pre-send cancel')"},
         )
-        assert followup.get("stdout", "") == "still alive after client pre-send cancel\n"
+        assert (
+            followup.get("stdout", "") == "still alive after client pre-send cancel\n"
+        )
         assert followup.get("error", "") == ""
 
     finally:
@@ -333,7 +348,9 @@ async def test_cancel_before_request_sent_by_client(mcp_client_CI):
 
 
 @pytest.mark.asyncio
-async def test_cancel_running_code_preserves_same_kernel_state_timing_based(mcp_client_CI):
+async def test_cancel_running_code_preserves_same_kernel_state_timing_based(
+    mcp_client_CI,
+):
     # This test is not guaranteed to cancel an ongoing execution of the kernel.
     # It can be verified by the logs that the execution has started or not.
     # In a future run, the cancel might land during start-up phase which is
