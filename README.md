@@ -76,7 +76,7 @@ Generated artifacts that persist across runs:
 2. **LiteLLM proxy** (`CLIMATECLAW_LITE_LLM_ADDRESS`) provides OpenAI-compatible chat + embeddings endpoints; completions stream into `StreamVariant` classes that normalize assistant text, code blocks, tool hints, images, and server hints.
 3. **Persistence** uses MongoDB for storing threads and user feedback.
 4. **MCP Manager** (`src/climateclaw/services/mcp/mcp_manager.py`) connects to tool servers listed in `CLIMATECLAW_AVAILABLE_MCP_SERVERS`, discovers tools, exposes OpenAI function schemas to LiteLLM, and routes tool invocations with per-thread session ids.
-5. **Code + Web-search MCP servers** run as separate ASGI apps (dockerized). Requests flow through `header_gate` so required headers (`mongodb-uri`, `working-dir`) become ContextVars before code executes.
+5. **MCP servers** run as separate ASGI apps (dockerized). Requests flow through `header_gate` so required headers (`mongodb-uri`, `working-dir`) become ContextVars before code executes.
 6. **Prompting** loads baseline templates + few-shot examples per model and replays thread history (minus prompts, meta) to LiteLLM, matching the Rust semantics.
 
 ## API Surface
