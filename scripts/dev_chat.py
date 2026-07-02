@@ -70,7 +70,7 @@ settings = get_settings()
 # ──────────────────────────────────────────────────────────────────────────────
 
 MODEL = "gpt-4.1"
-USER_ID = "dev_user"
+USER_ID = "janedoe"
 
 PRINT_DEBUG = False  # Print non-Assistant stream variants (ServerHint, etc.)
 SHOW_STATS = True  # Show per-turn simple stats
