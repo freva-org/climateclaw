@@ -1,20 +1,19 @@
-from src.services.streaming.stream_variants import (
-    SVUser,
+from climateclaw.services.streaming.openai_helpers import help_convert_sv_ccrm
+from climateclaw.services.streaming.stream_variants import (
+    StreamVariant,
     SVAssistant,
     SVCode,
     SVCodeOutput,
-    SVStreamEnd,
-    SVServerHint,
     SVServerError,
+    SVServerHint,
+    SVStreamEnd,
+    SVUser,
     cleanup_conversation,
-    normalize_conv_for_prompt,
-    from_sv_to_json,
-    from_json_to_sv,
-    StreamVariant,
     empty_code_interpreter_output,
+    from_json_to_sv,
+    from_sv_to_json,
+    normalize_conv_for_prompt,
 )
-from src.services.streaming.openai_helpers import help_convert_sv_ccrm
-
 
 
 def test_cleanup_inserts_codeoutput_and_end():
@@ -31,7 +30,7 @@ def test_cleanup_inserts_codeoutput_and_end():
     assert kinds == ["User", "Code", "CodeOutput", "StreamEnd"]
     assert isinstance(out[2], SVCodeOutput)
     assert out[2].id == "call_1"
-    assert isinstance(out[2].content, dict)
+    assert isinstance(out[2].content, str)
 
 
 def test_cleanup_no_extra_end_if_existing():

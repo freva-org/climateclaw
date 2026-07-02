@@ -2,7 +2,7 @@ import threading
 
 
 def test_cleanup_mcp_session_removes_kernel_and_lock(monkeypatch):
-    import src.tools.code.code_execution as code_exec
+    import climateclaw.tools.code.code_execution as code_exec
 
     sid = "sid-1"
 

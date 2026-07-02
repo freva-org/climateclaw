@@ -1,0 +1,168 @@
+name: Build and publish the images
+run-name: ${{ github.actor }} is creating a new release
+
+permissions:
+  contents: write
+  packages: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      rc:
+        description: "Release candidate number for this release."
+        required: true
+        type: number
+
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  ci:
+    name: Run CI first
+    uses: ./.github/workflows/ci_job.yml
+    secrets: inherit
+
+  set-version:
+    name: Set image version
+    runs-on: ubuntu-latest
+    needs: ci
+    outputs:
+      owner: ${{ steps.version.outputs.owner }}
+      version: ${{ steps.version.outputs.version }}
+      add_latest: ${{ steps.version.outputs.add_latest }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set version outputs
+        id: version
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+            ADD_LATEST="true"
+          else
+            LATEST_TAG=$(git tag --list 'v*.*.*' --sort=-version:refname | head -n 1)
+            if [[ -z "${LATEST_TAG}" ]]; then
+              echo "No final release tag found matching v*.*.*"
+              exit 1
+            fi
+            VERSION="${LATEST_TAG}-rc${{ inputs.rc }}"
+            ADD_LATEST="false"
+          fi
+
+          echo "owner=${OWNER}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "add_latest=${ADD_LATEST}" >> "$GITHUB_OUTPUT"
+
+  publish-base:
+    name: Publish climateclaw-base
+    runs-on: ubuntu-latest
+    needs: set-version
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Prepare docker tags
+        id: tags
+        run: |
+          IMAGE="ghcr.io/${{ needs.set-version.outputs.owner }}/climateclaw-base"
+          VERSION="${{ needs.set-version.outputs.version }}"
+
+          {
+            echo 'tags<<EOF'
+            echo "${IMAGE}:${VERSION}"
+            if [[ "${{ needs.set-version.outputs.add_latest }}" == "true" ]]; then
+              echo "${IMAGE}:latest"
+            fi
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push base image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          file: ./docker/Dockerfile.base
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+
+  publish:
+    name: Publish ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    needs:
+      - set-version
+      - publish-base
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: climateclaw
+            dockerfile: ./docker/climateclaw/Dockerfile
+            context: .
+          - image: code-server
+            dockerfile: ./docker/code-server/Dockerfile
+            context: .
+          - image: web-search-server
+            dockerfile: ./docker/web-search-server/Dockerfile
+            context: .
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Prepare docker tags
+        id: tags
+        run: |
+          IMAGE="ghcr.io/${{ needs.set-version.outputs.owner }}/${{ matrix.image }}"
+          VERSION="${{ needs.set-version.outputs.version }}"
+
+          {
+            echo 'tags<<EOF'
+            echo "${IMAGE}:${VERSION}"
+            if [[ "${{ needs.set-version.outputs.add_latest }}" == "true" ]]; then
+              echo "${IMAGE}:latest"
+            fi
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64, linux/arm64
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}

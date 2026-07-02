@@ -1,17 +1,20 @@
 import pytest
 
-import src.services.storage.mongodb_storage as mongo_storage
-from src.services.storage.mongodb_storage import ThreadStorage, MONGODB_COLLECTION_NAME
-from src.services.streaming.stream_variants import (
-    SVPrompt,
-    SVUser,
+import climateclaw.services.storage.mongodb_storage as mongo_storage
+from climateclaw.services.storage.mongodb_storage import (
+    MONGODB_COLLECTION_NAME,
+    ThreadStorage,
+)
+from climateclaw.services.streaming.stream_variants import (
     SVAssistant,
+    SVPrompt,
     SVStreamEnd,
+    SVUser,
 )
 
 
 @pytest.mark.asyncio
-async def test_save_and_read_thread(monkeypatch, patch_db, GOOD_HEADERS):
+async def test_save_and_read_thread(monkeypatch, patch_mongodb, GOOD_HEADERS):
     async def fake_topic(content):
         return "topic"
 
@@ -43,7 +46,7 @@ async def test_save_and_read_thread(monkeypatch, patch_db, GOOD_HEADERS):
         append_to_existing=True,
     )
 
-    coll = patch_db[MONGODB_COLLECTION_NAME]
+    coll = patch_mongodb[MONGODB_COLLECTION_NAME]
     assert tid in coll.storage
 
     # Read back as wire variants (dicts)
