@@ -58,5 +58,9 @@ def get_mongodb_uri() -> str:
         raise ValueError(
             "Please set the MongoDB user and password in environment variables!"
         )
-    uri = f"mongodb://{user}:{password}@mongodb:27017"
+
+    host = os.getenv("CLIMATECLAW_MONGODB_HOST", "mongodb")
+    port = os.getenv("CLIMATECLAW_MONGODB_PORT", "27017")
+
+    uri = f"mongodb://{user}:{password}@{host}:{port}"
     return uri
