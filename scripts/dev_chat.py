@@ -11,6 +11,8 @@ os.environ["CLIMATECLAW_LITE_LLM_ADDRESS"] = "http://localhost:4000"
 os.environ["CLIMATECLAW_RAG_SERVER_URL"] = "http://localhost:8050"
 os.environ["CLIMATECLAW_CODE_SERVER_URL"] = "http://localhost:8051"
 os.environ["CLIMATECLAW_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
+os.environ["CLIMATECLAW_MONGODB_HOST"] = "localhost"
+
 
 import asyncio
 import logging
@@ -68,7 +70,7 @@ settings = get_settings()
 # ──────────────────────────────────────────────────────────────────────────────
 
 MODEL = "gpt-4.1"
-USER_ID = "dev_user"
+USER_ID = "janedoe"
 
 PRINT_DEBUG = False  # Print non-Assistant stream variants (ServerHint, etc.)
 SHOW_STATS = True  # Show per-turn simple stats
