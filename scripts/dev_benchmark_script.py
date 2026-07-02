@@ -11,6 +11,7 @@ os.environ["CLIMATECLAW_LITE_LLM_ADDRESS"] = "http://localhost:4000"
 os.environ["CLIMATECLAW_RAG_SERVER_URL"] = "http://localhost:8050"
 os.environ["CLIMATECLAW_CODE_SERVER_URL"] = "http://localhost:8051"
 os.environ["CLIMATECLAW_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
+os.environ["CLIMATECLAW_MONGODB_HOST"] = "localhost"
 
 
 import asyncio
@@ -47,8 +48,8 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour.
 # ──────────────────────────────────────────────────────────────────────────────
 
 MODEL = "gpt-4.1"
-USER_ID = "dev_user"
-PROMPT = "Make an annual mean temperature global map plot for the year 2023"
+USER_ID = "janedoe"
+PROMPT = "plot x=y"
 
 RUNS = 3
 CONCURRENCY = 3  # ← set to 1 for clean mode
