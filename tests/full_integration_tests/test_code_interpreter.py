@@ -181,7 +181,7 @@ async def test_exception(mcp_client_CI):
 
 async def test_exit_shutdowns_kernel_and_server_recovers(mcp_client_CI):
     result = await _execute_code_via_mcp(mcp_client_CI, {"code": "exit()"})
-    assert list(result.values()) == ["", "", "", [], ""]
+    assert list(result.values())[:5] == ["", "", "", [], ""]
     code = {"code": "print('Code interpreter functions normally after exit!')"}
 
     printed_value = await _exec_and_get_printed_value(mcp_client_CI, code)

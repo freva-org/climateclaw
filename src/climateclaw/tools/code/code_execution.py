@@ -185,11 +185,10 @@ def _run_shell(
             # Jupyter also returns rich outputs (image/png, text/html, etc.)
             display_id = content.get("transient", {}).get("display_id", "")
             data = content.get("data") or {}
-            if "image/png" not in data.keys():
-                if display_id:
-                    display_data_by_id[display_id] = data
-                else:
-                    display_data.append(data)
+            if display_id:
+                display_data_by_id[display_id] = data
+            else:
+                display_data.append(data)
             return
 
         if msg_type == "execute_result":
