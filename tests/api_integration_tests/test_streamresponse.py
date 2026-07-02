@@ -5,8 +5,6 @@ import pytest
 async def test_streamresponse_returns_500_on_prepare_failure(
     stub_resp,
     client,
-    patch_db,
-    patch_mongo_uri,
     GOOD_HEADERS,
     monkeypatch,
 ):
@@ -14,7 +12,7 @@ async def test_streamresponse_returns_500_on_prepare_failure(
         raise RuntimeError("prep failed")
 
     monkeypatch.setattr(
-        "src.api.chatbot.streamresponse.prepare_for_stream",
+        "climateclaw.api.chatbot.streamresponse.prepare_for_stream",
         _raise_error,
         raising=True,
     )

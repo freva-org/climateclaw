@@ -6,32 +6,34 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-os.environ["FREVAGPT_DEV"] = "1"
-os.environ["FREVAGPT_LITE_LLM_ADDRESS"] = "http://localhost:4000"
-os.environ["FREVAGPT_RAG_SERVER_URL"] = "http://localhost:8050"
-os.environ["FREVAGPT_CODE_SERVER_URL"] = "http://localhost:8051"
-os.environ["FREVAGPT_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
+os.environ["CLIMATECLAW_DEV"] = "1"
+os.environ["CLIMATECLAW_LITE_LLM_ADDRESS"] = "http://localhost:4000"
+os.environ["CLIMATECLAW_RAG_SERVER_URL"] = "http://localhost:8050"
+os.environ["CLIMATECLAW_CODE_SERVER_URL"] = "http://localhost:8051"
+os.environ["CLIMATECLAW_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
+os.environ["CLIMATECLAW_MONGODB_HOST"] = "localhost"
+
 
 import asyncio
 import logging
 from typing import Any
 
-from src.api.chatbot.streamresponse import _sse_data
-from src.core.logging_setup import configure_logging
-from src.core.prompting import get_entire_prompt
-from src.core.settings import get_settings
-from src.services.service_factory import DevAuthenticator
-from src.services.storage.mongodb_storage import ThreadStorage
-from src.services.storage.helpers import create_dir_at_cache
-from src.services.streaming.active_conversations import (
+from climateclaw.api.chatbot.streamresponse import _sse_data
+from climateclaw.core.logging_setup import configure_logging
+from climateclaw.core.prompting import get_entire_prompt
+from climateclaw.core.settings import get_settings
+from climateclaw.services.authentication.auth import Authenticator
+from climateclaw.services.storage.helpers import create_dir_at_cache
+from climateclaw.services.storage.mongodb_storage import ThreadStorage
+from climateclaw.services.streaming.active_conversations import (
     end_and_save_conversation,
     new_thread_id,
 )
-from src.services.streaming.stream_orchestrator import (
+from climateclaw.services.streaming.stream_orchestrator import (
     prepare_for_stream,
     run_stream,
 )
-from src.services.streaming.stream_variants import (
+from climateclaw.services.streaming.stream_variants import (
     SVAssistant,
     SVCode,
     from_sv_to_json,
@@ -68,7 +70,7 @@ settings = get_settings()
 # ──────────────────────────────────────────────────────────────────────────────
 
 MODEL = "gpt-4.1"
-USER_ID = "dev_user"
+USER_ID = "janedoe"
 
 PRINT_DEBUG = False  # Print non-Assistant stream variants (ServerHint, etc.)
 SHOW_STATS = True  # Show per-turn simple stats
@@ -85,6 +87,7 @@ async def _run_turn(
     user_id: str,
     user_input: str,
     system_prompt: list[dict[str, Any]],
+    storage: ThreadStorage,
 ) -> tuple[int, int]:
     """
     Runs a single turn through run_stream and prints Assistant output as it streams.
@@ -103,6 +106,7 @@ async def _run_turn(
             thread_id=thread_id,  # ← fixed per conversation
             user_input=user_input,
             system_prompt=system_prompt,
+            storage=storage,
         ):
             if isinstance(variant, SVAssistant):
                 txt = getattr(variant, "text", "") or ""
@@ -146,10 +150,9 @@ async def main() -> None:
         thread_id = THREAD_ID
         read_history = True
 
-    Auth = await DevAuthenticator.build(None)
+    Auth = Authenticator.local(username=USER_ID)
     Storage = await ThreadStorage.create()
     create_dir_at_cache(USER_ID, thread_id)
-
 
     system_prompt = get_entire_prompt(USER_ID, thread_id, MODEL)
 
@@ -200,6 +203,7 @@ async def main() -> None:
             user_id=USER_ID,
             user_input=user_input,
             system_prompt=system_prompt,
+            storage=Storage,
         )
         await end_and_save_conversation(thread_id, Storage)
         if SHOW_STATS:

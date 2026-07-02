@@ -1,7 +1,7 @@
 import pytest
 
-from src.api.chatbot import editthread
-from src.services.streaming.stream_variants import SVPrompt, SVServerHint
+from climateclaw.api.chatbot import editthread
+from climateclaw.services.streaming.stream_variants import SVPrompt, SVServerHint
 
 
 @pytest.mark.asyncio
@@ -9,7 +9,6 @@ async def test_editthread_success_path_trims_and_saves(
     stub_resp,
     client,
     GOOD_HEADERS,
-    patch_db,
     patch_read_thread,
     patch_mcp_manager,
     patch_save_thread,
@@ -54,7 +53,6 @@ async def test_editthread_rejects_out_of_range_index(
     stub_resp,
     client,
     GOOD_HEADERS,
-    patch_db,
     patch_read_thread,
     patch_mcp_manager,
 ):

@@ -1,9 +1,8 @@
-import pytest
 import threading
 
 
 def test_cleanup_mcp_session_removes_kernel_and_lock(monkeypatch):
-    import src.tools.code.server as server
+    import climateclaw.tools.code.server as server
 
     sid = "sid-1"
 
