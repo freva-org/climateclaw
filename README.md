@@ -1,9 +1,11 @@
 # ClimateClaw
+
 ClimateClaw is a Python service for building AI-assisted climate-data workflows. It provides the API, conversation handling, model prompting, persistent thread storage, and tool orchestration needed to support interactive work with climate data.
 
 The project integrates LiteLLM-native prompting, MongoDB-backed conversation state, and MCP-based tool execution for retrieval, code execution, and domain-specific automation.
 
 ## Highlights
+
 - FastAPI app with strict auth parity to the production Rust service (`/api/chatbot/*`)
 - Streaming responses via LiteLLM/OpenAI-compatible SSE (`application/x-ndjson`) with code + image variants
 - Persistent conversation threads in MongoDB and JSONL files (`threads/`), plus per-user scratch space (`cache/`)
@@ -14,17 +16,22 @@ The project integrates LiteLLM-native prompting, MongoDB-backed conversation sta
 ## Quick Start (deployment)
 
 ### Requirements
+
 - `podman` or `docker`
 - Credentials & headers for the Freva auth services
 
 ### Configure environment
+
 Create `.env` (used by FastAPI, Docker, and MCP servers). See `.env.example` for guidance.
 
 ### Full stack via Docker Compose
+
 ```bash
 podman compose up --build
 ```
+
 Services that start:
+
 - `climateclaw`: FastAPI app (debugpy toggle via `DEBUG=true` for remote debugging session)
 - `code-server`: MCP server running the sandboxed Jupyter kernel and exposing `code_interpreter`
 - `web-search-server`: MCP server doing web search via OpenAI API and exposing `web_search`
@@ -36,6 +43,7 @@ Bind mounts expose `/work`, logs, threads, and shared `cache` to other Freva ser
 ## Quick Start (local dev)
 
 ### Requirements
+
 - `podman` or `docker`
 
 <!-- ### Install dependencies (uv)
@@ -47,14 +55,17 @@ uv sync                  # install lockfile deps
 ``` -->
 
 ### Configure environment
+
 Create `.env` (used by FastAPI, Docker, and MCP servers). See `.env.example` for guidance.
 
 ### Start docker containers in DEV mode
+
 ```bash
 ./dev.sh up -d --build
 ```
 
 ## Repository Layout
+
 | Path | Purpose |
 | --- | --- |
 | `src/climateclaw/app.py` | FastAPI entrypoint, CORS policy, router registration, app lifespan hooks |
@@ -73,11 +84,13 @@ Create `.env` (used by FastAPI, Docker, and MCP servers). See `.env.example` for
 | `litellm_config.yaml` | Source of truth for model catalog (consumed by `available_chatbots()`) |
 
 Generated artifacts that persist across runs:
+
 - `threads/` (JSONL transcript per thread id)
 - `cache/{user_id}/{thread_id}` (LLM-created files, plots, etc.)
 - `logs/` (when mounted in Docker)
 
 ## Architecture at a Glance
+
 1. **FastAPI layer** enforces auth via `AuthRequired` (Bearer tokens validated against `x-freva-rest-url`), injects usernames, and validates per-request headers.
 2. **LiteLLM proxy** (`CLIMATECLAW_LITE_LLM_ADDRESS`) provides OpenAI-compatible chat + embeddings endpoints; completions stream into `StreamVariant` classes that normalize assistant text, code blocks, tool hints, images, and server hints.
 3. **Persistence** uses MongoDB for storing threads and user feedback.
@@ -99,12 +112,14 @@ Generated artifacts that persist across runs:
 | `GET/POST` | `/api/chatbot/stop` | Initiates stopping of an active conversation | Requires auth |
 
 ### Streaming contract
+
 - Response type: `application/x-ndjson`
 - Each `data:` line is a JSON object with `variant` discriminators (`Assistant`, `Code`, `CodeOutput`, `CodeError`, `Image`, `ServerHint`, `StreamEnd`, etc.).
 - Code tool calls stream incremental chunks while LiteLLM emits `tool_calls`. When the MCP tool resolves, results are converted back into JSON events and appended to Mongo/disk storage.
 - Server automatically injects `thread_id` hints and records the conversation before returning the SSE chunk, ensuring replay safety.
 
 ## Persistence, Prompts, and Assets
+
 - **MongoDB (`mongodb_storage.py`)**: canonical record for threads. Each document stores `user_id`, `thread_id`, ISO timestamp, topic (summarized via LiteLLM), and serialized `StreamVariant` list.
 - **Disk mirrors (`thread_storage.py`)**: keep JSONL copies under `threads/{thread_id}.txt`, enabling offline replay and dev tooling. Topic of a thread is saved in `threads/{thread_id}.meta.json`.
 - **`cache/` scratch**: `create_dir_at_cache()` ensures each user/thread has a writable directory for generated files (plots, CSVs). Entries are sanitized if user IDs contain unsupported characters.
@@ -112,6 +127,7 @@ Generated artifacts that persist across runs:
 - **Resources**: `resources/stableclimgen` seeds the RAG MCP server. Drop additional corpora per library folder and list them in `CLIMATECLAW_AVAILABLE_LIBRARIES` inside `src/climateclaw/tools/rag/server.py`.
 
 ## MCP Tooling
+
 - **RAG server** (`src/climateclaw/tools/rag/server.py`): indexes documentation with custom loaders + splitters, stores embeddings in MongoDB (`embeddings`), and surfaces a single tool `get_context_from_resources`. LiteLLM requests embed queries through the same proxy (`CLIMATECLAW_LITE_LLM_ADDRESS`).
 - **Code interpreter** (`src/climateclaw/tools/code_interpreter/server.py`): spins up per-session Jupyter kernels, sanitizes input, enforces configurable timeouts, and injects Freva config via environment variables. Outputs include stdout/stderr, display data, and structured errors.
 - **Web search server** (`src/climateclaw/tools/web_search/server.py`): performs OpenAI tool-based web search (Responses API `web_search`) against a small allowlist of documentation domains (DKRZ/HPC + ICON), returning answer text with inline URL citations.
@@ -119,10 +135,12 @@ Generated artifacts that persist across runs:
 - **Manager** (`src/climateclaw/services/mcp/mcp_manager.py`): caches clients, discovers tool schemas, exports OpenAI function definitions, and pins MCP session ids to thread ids for deterministic tool contexts.
 
 ## Development Workflow
+
 - **Run tests**: `uv run pytest` (or `uv run pytest tests/test_auth.py -k bearer` for focused cases). Tests cover auth flows, prompt assembly, storage, stream variant conversions, and route parameter validation.
 - **Interactive chat**: `uv run python scripts/dev_chat.py` starts a REPL that exercises the same orchestrator logic, persisting outputs to disk and optionally pointing at local MCP servers.
 
 ## Troubleshooting
+
 - **Auth failures**: verify headers include both `Authorization` and `x-freva-rest-url`. Inspect FastAPI logs for the exact HTTP status.
 - **Missing models**: ensure `litellm_config.yaml` is readable and contains `model_name` keys. `available_chatbots()` aborts the process if it cannot find any entries.
 - **MCP issues**: backend logs warn but continue when tool discovery fails; LiteLLM will simply not emit tool calls. Use `settings.AVAILABLE_MCP_SERVERS` to enable/disable targets explicitly.
