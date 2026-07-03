@@ -1,6 +1,6 @@
-from contextvars import ContextVar
 import json
 import os
+from contextvars import ContextVar
 from typing import Optional
 from urllib.parse import quote as urlquote
 
@@ -35,7 +35,7 @@ FREVA_PROJECT_NAMES = {
     "comdec": "kd1418",
     "xces": "bm1159",
     "climxtreme": "bm1159",
-    "regiklim": "ch1187"
+    "regiklim": "ch1187",
 }
 FREVA_PROJECTS = [
     "Coming Decade (ComDec/codes)",
@@ -71,15 +71,15 @@ app = make_header_gate(
     mcp_path=PATH,
 )
 
+
 def _get_user():
     user = user_ctx.get()
     if not user:
-        logger.warning(
-            f"Missing required header '{PLUGIN_TOOL_USERNAME}'! "
-        )
+        logger.warning(f"Missing required header '{PLUGIN_TOOL_USERNAME}'! ")
         return "unknown_user"
     else:
         return user
+
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -96,7 +96,8 @@ def web_search(query: str) -> str:
         str: Relevant context extracted from web-page.
     """
     logger.info(
-        "Searching for DKRZ/HPC- or ICON-related context in documentation " f"for query: {query}"
+        "Searching for DKRZ/HPC- or ICON-related context in documentation "
+        f"for query: {query}"
     )
     system_prompt = (
         "You are a web-search agent that can search documentations for ICON model "
@@ -118,7 +119,9 @@ def web_search(query: str) -> str:
         ],
         "stream": False,
         "tool_choice": "auto",
-        "tools": [{"type": "web_search", "filters": {"allowed_domains": ALLOWED_DOMAINS}}],
+        "tools": [
+            {"type": "web_search", "filters": {"allowed_domains": ALLOWED_DOMAINS}}
+        ],
         "include": ["web_search_call.action.sources"],
     }
 
@@ -221,7 +224,9 @@ def fetch_repo_tree(project_id: int) -> list[str]:
     return paths
 
 
-def fetch_plugin_code(project_id: int, selected_files: list[str], max_chars: int) -> str:
+def fetch_plugin_code(
+    project_id: int, selected_files: list[str], max_chars: int
+) -> str:
     """
     Fetch the raw content of selected files and concatenate them into a single string,
     until the total character count reaches `max_chars`.
@@ -245,7 +250,9 @@ def fetch_plugin_code(project_id: int, selected_files: list[str], max_chars: int
             collected.append(f"### FILE: {file} ###\n```\n{content}\n```\n")
             total_chars += len(content)
         except Exception as e:
-            logger.debug("Skipping file %s due to error in fetching content: %s", file, e)
+            logger.debug(
+                "Skipping file %s due to error in fetching content: %s", file, e
+            )
 
     if not collected:
         return "(no source files could be retrieved)"
@@ -294,7 +301,9 @@ def select_relevant_files(
             stream=False,
         )
         raw_text = selection_resp.output_text.strip()
-        logger.debug("LLM file selection response for plugin '%s': %s", plugin, raw_text)
+        logger.debug(
+            "LLM file selection response for plugin '%s': %s", plugin, raw_text
+        )
         # Strip markdown code fences if present
         if raw_text.startswith("```"):
             raw_text = "\n".join(raw_text.split("\n")[1:])
@@ -354,7 +363,9 @@ def collect_plugin_context(plugin: str, project_id: int, user_query: str) -> str
     return init_code + "\n\n# ── Dependency files ──\n\n" + dep_code
 
 
-def validate_plugin_call(plugin: str, project: str, project_id: int | None) -> str | None:
+def validate_plugin_call(
+    plugin: str, project: str, project_id: int | None
+) -> str | None:
     """
     Validate the project and plugin names, and check if GitLab repo access for the current
     user is configured for reading rights.
@@ -378,14 +389,20 @@ def validate_plugin_call(plugin: str, project: str, project_id: int | None) -> s
         user_access = _has_read_access(project_id, user_name)
         if not user_access:
             logger.warning(
-                "User '%s' does NOT have read access to plugin '%s' in project '%s'.", user_name, plugin, project
+                "User '%s' does NOT have read access to plugin '%s' in project '%s'.",
+                user_name,
+                plugin,
+                project,
             )
             return (
                 f"User access for {user_name} to plugin '{plugin}' denied! "
                 f"Get access by being added to GitLab project '{project}'."
             )
         logger.info(
-            "Authorization layer passed: User '%s' has read access to plugin '%s' in project '%s'.", user_name, plugin, project
+            "Authorization layer passed: User '%s' has read access to plugin '%s' in project '%s'.",
+            user_name,
+            plugin,
+            project,
         )
     except httpx.HTTPError as e:
         logger.error("Error checking GitLab repo membership: %s", e)
@@ -418,7 +435,9 @@ def plugin_code_search(plugin_name: str, project_name: str, user_query: str) -> 
         return result
 
     # Fetch the plugin code and return it with a header
-    logger.info("Fetching source code for plugin '%s' with query: %s", plugin, user_query)
+    logger.info(
+        "Fetching source code for plugin '%s' with query: %s", plugin, user_query
+    )
     try:
         code_content = collect_plugin_context(plugin, project_id, user_query)  # type: ignore
     except Exception as e:

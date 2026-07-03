@@ -21,7 +21,7 @@ services:
       - "${CLIMATECLAW_TARGET_PORT:-8502}:${CLIMATECLAW_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
       - "8600:${CLIMATECLAW_BACKEND_PORT:-8502}" # localhost:8600/docs give FastAPI docs
       - "${CLIMATECLAW_DEBUG_PORT:-5678}:${CLIMATECLAW_DEBUG_PORT:-5678}" # Port for debugpy
-    volumes: 
+    volumes:
       - /Users/fischer/DKRZ/Coding/ClimateClaw/decadal_data:/app/decadal_data:ro # mounts local ClimateClaw directory for easy access to code and resources from code-server
       - ./cache/:/app/cache
       - ./logs/:/app/logs
