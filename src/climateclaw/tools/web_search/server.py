@@ -1,6 +1,7 @@
 import json
 import os
 from contextvars import ContextVar
+from pathlib import Path
 from typing import Optional
 from urllib.parse import quote as urlquote
 
@@ -31,16 +32,13 @@ ALLOWED_DOMAINS = [
 GITLAB_BASE_URL = "https://gitlab.dkrz.de/api/v4"
 FREVA_PROJECT_NAMES = {
     "coming decade": "kd1418",
-    "codes": "kd1418",
-    "comdec": "kd1418",
-    "xces": "bm1159",
     "climxtreme": "bm1159",
     "regiklim": "ch1187",
 }
 FREVA_PROJECTS = [
-    "Coming Decade (ComDec/codes)",
-    "ClimXtreme (xces)",
-    "RegiKlim (regiklim)",
+    "Coming Decade",
+    "ClimXtreme",
+    "RegiKlim",
 ]
 ALLOWED_FILE_EXTENSIONS = (
     ".py",
@@ -275,11 +273,12 @@ def select_relevant_files(
         selection_prompt = (
             f"You are analyzing the '{plugin}' Freva plugin repository, "
             f"which contains the following files:\n{filetree_listing}\n\n"
-            f'The user\'s query now is:\n"{query}"\n\n'
+            f"The user's query now is:\n'{query}'\n\n"
             "Return ONLY a JSON array of file paths (strings) that seem most relevant to "
             "answering the user's query, but do not include test files. "
             "For high-level questions about documentation, focus more on README / docs folder; "
-            "whereas for implementation details, focus more on source code files. "
+            "how to run or configure the plugin, concentrate on the wrapper file as config; "
+            "whereas for implementation logic, focus more on source code files. "
             f"Return at most {MAX_RELEVANT_FILES} paths. Output nothing but the JSON array."
         )
     else:
@@ -372,7 +371,7 @@ def validate_plugin_call(
     Returns an error message string if validation fails, or None if valid.
     """
     # validate project name
-    if project not in FREVA_PROJECT_NAMES.values():
+    if not project:
         return (
             f"Unknown project '{project}'. "
             f"Available projects: {', '.join(FREVA_PROJECTS)}"
@@ -409,27 +408,66 @@ def validate_plugin_call(
         return "Plugin code search is currently unavailable (GitLab access error)."
 
 
+def auto_detect_plugin_project(user_query: str) -> tuple[str, str]:
+    """
+    Attempt to automatically detect the plugin and project names from the user's query
+    by making a call to the LLM.
+
+    Returns a tuple of (plugin_name, project_name):
+    - plugin_name (str): Name of the repo or plugin (e.g. "leadtimeselektor")
+    - project_name (str): Name of the Freva instance/project
+    """
+    file_path = Path(__file__).parent / "available_plugins.md"
+    plugin_descriptions = file_path.read_text(encoding="utf-8", newline="\n")
+
+    selection_prompt = (
+        "Task: Select the single best matching Freva plugin & project name for the user query from the provided plugin summaries.\n"
+        "Rules:\n"
+        "- Use only plugin/project names that appear in the summaries.\n"
+        "- Return exactly one plugin and its corresponding project.\n"
+        "- If unsure, choose the closest semantic match.\n"
+        "- Output must be exactly this format with no extra text: <plugin_name>,<project_name>\n\n"
+        f"User query:\n{user_query}\n\n"
+        f"Available plugin summaries:\n{plugin_descriptions}"
+    )
+    selection_resp = client.responses.create(
+        model=WEB_SEARCH_MODEL,
+        input=[{"role": "user", "content": selection_prompt}],
+        stream=False,
+    )
+
+    plugin_name, project_name = selection_resp.output_text.strip().split(",")
+    logger.info(
+        "Auto-detected plugin '%s' and project '%s' for user query.",
+        plugin_name,
+        project_name,
+    )
+    return plugin_name, project_name
+
+
 @mcp.tool()
-def plugin_code_search(plugin_name: str, project_name: str, user_query: str) -> str:
+def plugin_code_search(user_query: str) -> str:
     """
     Search and analyze the source code of a Freva data analysis plugin for decadal climate
-    predictions. Use this when the user asks about how a plugin works, how to use it,
-    or wants parts of the plugin code base to be transformed into Python code.
+    predictions. Use this when the user
+    - explicitly asks how a plugin's internal logic works, how to run or
+    configure it, or when code snippets from the plugin should be translated or
+    adapted into Python examples;
+    - asks general questions about decadal climate prediction analysis, where repository-grounded code context could be used to answer the question.
 
     Args:
-        plugin_name (str): Name of the repo or plugin (e.g. "leadtimeselektor")
-        project_name (str): Name of the Freva instance/project
         user_query (str): What the user wants to know about or do with the plugin
 
     Returns:
         str: Relevant code context fetched from source files of the plugin repository;
         or an error message if the plugin call is not authorized / code retrieval fails.
     """
+    plugin_name, project_name = auto_detect_plugin_project(user_query)
     project = FREVA_PROJECT_NAMES.get(project_name.strip().lower(), "")
     plugin = plugin_name.strip().lower()
-    project_id = get_project_id(plugin, project)
 
     # Validate the plugin call
+    project_id = get_project_id(plugin, project)
     result = validate_plugin_call(plugin, project, project_id)
     if result is not None:
         return result

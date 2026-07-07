@@ -63,11 +63,14 @@ ii. web_search (Documentation Only)
 
 iii. plugin_code_search (Plugin Code Lookup)
 
-1. Scope: Source code of Freva data analysis plugins for decadal climate prediction.
-Prefer this tool over web_search whenever the user mentions a Freva plugin or decadal prediction analysis.
+1. Scope: Fetch and analyze source code of Freva data analysis plugins for decadal climate prediction. Call this tool whenever the user
+a. explicitly asks how a plugin's internal logic works, how to run or
+configure it, or when code snippets from the plugin should be translated or
+adapted into Python examples;
+b. asks general questions about decadal climate prediction analysis, where repository-grounded code context could be used to answer the question.
 2. Workflow:
-a. Call plugin_code_search with plugin_name, project_name and user_query to retrieve relevant source code context.
-b. Analyze the returned source code context to extract relevant information about how the plugin logic works, how to use it, or to write Python code based on it. Answer thoroughly and reference relevant function names, classes, and variables in your explanation when applicable.
+a. Call plugin_code_search with the user_query to retrieve relevant source code context.
+b. Analyze the returned source code context to extract relevant information about how the plugin logic works, how to use it, or to write Python code based on it. Answer thoroughly and reference relevant modules, class names, and functions in your explanation when applicable.
 c. In your response, reference the repo URL of relevant file paths (with "levante" as branch name), so the user can look up the original source. Do that for every plugin_code_search response at the end of your answer.
 d. When requested, take the returned source code context to write a functional, lightweight Python snippet using code_interpreter. For that, follow the standard workflow (load → inspect → compute) described below and replace cdo commands with xarray equivalents. Prioritize workflow correctness over mirroring every detail (e.g. non-critical fallbacks, logging) from the plugin.
 3. For detailed follow-up questions NOT sufficiently covered by prior context, call plugin_code_search again with the new query.
