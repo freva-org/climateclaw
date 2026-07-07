@@ -268,29 +268,32 @@ def select_relevant_files(
     ones for the user's query (dep=False) or for searching code dependencies (dep=True).
     If the LLM-based selection fails, fall back to a heuristic of picking all files.
     """
-    filetree_listing = "\n".join(file_paths)
+    file_tree = "\n".join(file_paths)
     if not dep:
         selection_prompt = (
-            f"You are analyzing the '{plugin}' Freva plugin repository, "
-            f"which contains the following files:\n{filetree_listing}\n\n"
-            f"The user's query now is:\n'{query}'\n\n"
-            "Return ONLY a JSON array of file paths (strings) that seem most relevant to "
-            "answering the user's query, but do not include test files. "
-            "For high-level questions about documentation, focus more on README / docs folder; "
-            "how to run or configure the plugin, concentrate on the wrapper file as config; "
-            "whereas for implementation logic, focus more on source code files. "
-            f"Return at most {MAX_RELEVANT_FILES} paths. Output nothing but the JSON array."
+            f"Task: You are selecting the most relevant files from the '{plugin}' Freva plugin repository.\n\n"
+            "Selection rules:\n"
+            "- Prioritize files that seem most relevant to answer the query intent.\n"
+            "- For high level usage/configuration questions, prioritize wrapper/config files and README/docs.\n"
+            "- For questions about implementation logic, prioritize core source code modules.\n"
+            "- Exclude tests, examples, generated files, and any '__init__.py'.\n"
+            f"- Return ONLY a valid JSON array of file path strings from the provided list, with at most {MAX_RELEVANT_FILES} items. Output nothing but the JSON array."
+            f"Repository file list:\n{file_tree}\n\n"
+            f"User query:\n{query}\n\n"
         )
     else:
         selection_prompt = (
-            "You are analyzing Python source code from a repository. "
-            "The code below contains import statements. Identify which of the REMAINING "
-            "repository files are imported or referenced as dependencies by the code.\n\n"
-            f"=== FETCHED CODE ===\n{query}\n=== END ===\n\n"
-            f"Remaining files in the repository:\n{filetree_listing}\n\n"
-            "Return ONLY a JSON array of file paths (strings) from the remaining list "
-            "that are imported or depend upon the fetched code. "
-            "If none are needed, return an empty array []."
+            "Task: You are analyzing Python source code from a repository. "
+            " Your job is to find which repository files are directly imported by the given source code.\n\n"
+            "Selection rules:\n"
+            "- Scan the code for all import statements (import X, from X import Y).\n"
+            "- Match each import to a file in the repository list using Python module path conventions (e.g. 'from foo.bar import baz' maps to 'foo/bar.py').\n"
+            "- Only include files that are directly imported — do NOT infer transitive dependencies.\n"
+            f"- Return ONLY a valid JSON array of at most {MAX_RELEVANT_FILES} file path strings "
+            "from that list that are imported or depend upon the fetched code. "
+            "If none match, return []."
+            f"=== Fetched Code ===\n{query}\n=== END ===\n\n"
+            f"=== Remaining Repository Files ===\n{file_tree}\n=== END ===\n\n"
         )
 
     try:
@@ -456,7 +459,7 @@ def plugin_code_search(user_query: str) -> str:
     - asks general questions about decadal climate prediction analysis, where repository-grounded code context could be used to answer the question.
 
     Args:
-        user_query (str): What the user wants to know about or do with the plugin
+        user_query (str): What the user wants to know about or do w.r.t. decadal climate prediction plugins.
 
     Returns:
         str: Relevant code context fetched from source files of the plugin repository;
