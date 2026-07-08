@@ -34,11 +34,13 @@ FREVA_PROJECT_NAMES = {
     "coming decade": "kd1418",
     "climxtreme": "bm1159",
     "regiklim": "ch1187",
+    "freva": "freva",
 }
 FREVA_PROJECTS = [
     "Coming Decade",
     "ClimXtreme",
     "RegiKlim",
+    "Freva",
 ]
 ALLOWED_FILE_EXTENSIONS = (
     ".py",
@@ -289,6 +291,7 @@ def select_relevant_files(
             "- Scan the code for all import statements (import X, from X import Y).\n"
             "- Match each import to a file in the repository list using Python module path conventions (e.g. 'from foo.bar import baz' maps to 'foo/bar.py').\n"
             "- Only include files that are directly imported — do NOT infer transitive dependencies.\n"
+            "- Exclude tests, examples, generated files, and any '__init__.py'.\n"
             f"- Return ONLY a valid JSON array of at most {MAX_RELEVANT_FILES} file path strings "
             "from that list that are imported or depend upon the fetched code. "
             "If none match, return []."

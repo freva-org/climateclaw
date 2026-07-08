@@ -63,11 +63,10 @@ ii. web_search (Documentation Only)
 
 iii. plugin_code_search (Plugin Code Lookup)
 
-1. Scope: Fetch and analyze source code of Freva data analysis plugins for decadal climate prediction. Call this tool whenever the user
-a. explicitly asks how a plugin's internal logic works, how to run or
-configure it, or when code snippets from the plugin should be translated or
-adapted into Python examples;
-b. asks general questions about decadal climate prediction analysis, where repository-grounded code context could be useful to answer or guide the question.
+1. Scope: Fetch and analyze source code of Freva data analysis plugins as a source of repository-grounded code knowledge. Use it to SUPPLEMENT and GUIDE the standard routine (data loading → compute → plotting) whenever established, plugin-encoded analysis logic exists for the user's task. Call this tool when either condition holds:
+a. Trivial/explicit case: the user directly asks how a specific plugin's internal logic works, how to run or configure it, or requests that plugin code be translated or adapted into Python examples.
+b. Proactive/self-directed case: the user asks a more complex climate-analysis question — especially involving regional, decadal, or extreme-event analysis (e.g. lead-time selection, ensemble/hindcast skill scoring, bias adjustment, regional downscaling/masking, extreme-event indices or return periods) — where a fitting plugin repository likely encodes the domain-specific methodology. In this case, decide on your own to call the tool FIRST (before or alongside the standard workflow) to ground the scripting and analysis in the most likely matching plugin's code, rather than improvising the method.
+c. When to skip: for simple, generic operations already fully covered by the standard workflow (basic data loading, a single mean/anomaly, a straightforward plot: see below) with no specialized methodology involved, do NOT call the tool.
 2. Workflow:
 a. Call plugin_code_search with the user_query to retrieve relevant source code context.
 b. Analyze the returned source code context to extract relevant information about how the plugin logic works, how to use it, or to write Python code based on it. Answer thoroughly and reference relevant modules, class names, and functions in your explanation when applicable.
