@@ -66,22 +66,23 @@ def web_search(query: str) -> str:
     )
     user_query = query or ""
 
-    kwargs = {
-        "model": WEB_SEARCH_MODEL,
-        "input": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_query},
-        ],
-        "stream": False,
-        "tool_choice": "auto",
-        "tools": [
-            {"type": "web_search", "filters": {"allowed_domains": ALLOWED_DOMAINS}}
-        ],
-        "include": ["web_search_call.action.sources"],
-    }
-
     try:
-        resp = client.responses.create(**kwargs)
+        resp = client.responses.create(
+            model=WEB_SEARCH_MODEL,
+            input=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_query},
+            ],
+            stream=False,
+            tool_choice="auto",
+            tools=[
+                {
+                    "type": "web_search",
+                    "filters": {"allowed_domains": ALLOWED_DOMAINS},
+                }
+            ],
+            include=["web_search_call.action.sources"],
+        )
 
         logger.info(f"Succesfully completed web search with query {query}.\n")
         return resp.output_text

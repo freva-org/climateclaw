@@ -2,7 +2,7 @@ import json
 import os
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 from urllib.parse import quote as urlquote
 
 import httpx
@@ -15,7 +15,7 @@ from climateclaw.tools.header_gate import make_header_gate
 logger = configure_logging(__name__, named_log="freva_plugin_server")
 
 OPENAI_API_KEY: Optional[str] = os.getenv("CLIMATECLAW_OPENAI_API_KEY")
-GITLAB_TOKEN: Optional[str] = os.getenv("CLIMATECLAW_GITLAB_TOKEN")
+GITLAB_ACCESS_TOKEN: Optional[str] = os.getenv("CLIMATECLAW_GITLAB_ACCESS_TOKEN")
 
 HOST = os.getenv("CLIMATECLAW_MCP_HOST", "0.0.0.0")
 PORT = int(os.getenv("CLIMATECLAW_MCP_PORT", "8053"))
@@ -79,7 +79,7 @@ def _get_user():
 # ── GitLab helpers ────────────────────────────────────────────────
 _gitlab_http = httpx.Client(
     base_url=GITLAB_BASE_URL,
-    headers={"PRIVATE-TOKEN": GITLAB_TOKEN or ""},
+    headers={"PRIVATE-TOKEN": GITLAB_ACCESS_TOKEN or ""},
     timeout=30.0,
 )
 
@@ -310,22 +310,26 @@ def collect_plugin_context(plugin: str, project_id: int, user_query: str) -> str
 
 def validate_plugin_call(
     plugin: str, project: str, project_id: int | None
-) -> str | None:
+) -> Tuple[bool, str]:
     """
     Validate the project and plugin names, and check if GitLab repo access for the current
     user is configured for reading rights.
-    Returns an error message string if validation fails, or None if valid.
+    Returns a tuple (bool, str):
+    - False and an error message string if validation fails; or
+    - True and a success message if valid.
     """
     # validate project name
     if not project:
-        return (
+        error_msg = (
             f"Unknown project '{project}'. "
             f"Available projects: {', '.join(FREVA_PROJECTS)}"
         )
+        return False, error_msg
 
     # validate GitLab access of user
     if project_id is None:
-        return f"Plugin '{plugin}' not found in GitLab project '{project}'."
+        error_msg = f"Plugin '{plugin}' not found in GitLab project '{project}'."
+        return False, error_msg
 
     # Username hardcoded for now; replace with _get_user() for production
     user_name = "k202218"
@@ -339,19 +343,22 @@ def validate_plugin_call(
                 plugin,
                 project,
             )
-            return (
+            error_msg = (
                 f"User access for {user_name} to plugin '{plugin}' denied! "
                 f"Get access by being added to GitLab project '{project}'."
             )
+            return False, error_msg
         logger.info(
-            "Authorization layer passed: User '%s' has read access to plugin '%s' in project '%s'.",
-            user_name,
+            "Authorization layer passed: User has read access to plugin '%s' in project '%s'.",
             plugin,
             project,
         )
     except httpx.HTTPError as e:
         logger.error("Error checking GitLab repo membership: %s", e)
-        return "Plugin code search is currently unavailable (GitLab access error)."
+        error_msg = "Plugin code search is currently unavailable (GitLab access error)."
+        return False, error_msg
+
+    return True, "Validation successful"
 
 
 def auto_detect_plugin_project(user_query: str) -> tuple[str, str]:
@@ -414,9 +421,9 @@ def plugin_code_search(user_query: str) -> str:
 
     # Validate the plugin call
     project_id = get_project_id(plugin, project)
-    result = validate_plugin_call(plugin, project, project_id)
-    if result is not None:
-        return result
+    result, message = validate_plugin_call(plugin, project, project_id)
+    if not result:
+        return message
 
     # Fetch the plugin code and return it with a header
     logger.info(
