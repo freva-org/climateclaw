@@ -234,7 +234,10 @@ def get_mcp_headers(
             "Authorization": auth_header,
             "working-dir": str(cache),
         },
-        "web_search-server": {
+        "web-search-server": {
+            "Authorization": auth_header,
+        },
+        "plugin-code-search-server": {
             "Authorization": auth_header,
             "username": auth.username or "unknown_user",
         },
