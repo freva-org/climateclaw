@@ -14,18 +14,21 @@ model_list:
       api_base: "os.environ/FREVAGPT_LITE_LLM_OLLAMA_TARGET"
     model_info:
       supports_function_calling: true
+      access_groups: ["vscode"]
   - model_name: "qwen2.5:3b"
     litellm_params:
       model: "ollama_chat/qwen2.5:3b"
       api_base: "os.environ/FREVAGPT_LITE_LLM_OLLAMA_TARGET"
     model_info:
       supports_function_calling: true
+      access_groups: ["vscode"]
   - model_name: "gemma4:26b"
     litellm_params:
       model: "ollama_chat/gemma4:26b"
       api_base: "os.environ/FREVAGPT_LITE_LLM_OLLAMA_TARGET"
     model_info:
       supports_function_calling: true
+      access_groups: ["vscode"]
   - model_name: "mxbai-embed-large:latest"
     litellm_params:
       model: "ollama/mxbai-embed-large:latest"
@@ -35,5 +38,5 @@ litellm_settings:
   drop_params: true # If true, drop all parameters not in the model_list from the request
 
 general_settings:
-  custom_auth: custom_auth.user_api_key_auth
-  custom_auth_run_common_checks: true # Disallow disallowed models
+  database_url: "os.environ/FREVAGPT_LITE_LLM_DATABASE_URL"
+  master_key: "os.environ/FREVAGPT_LITE_LLM_MASTER_KEY"
