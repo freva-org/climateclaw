@@ -34,8 +34,8 @@ Differences from Rust (documented for future parity)
 logger = logging.getLogger(__name__)
 
 # Filenames we expect in a prompt set
-STARTING_TXT = "starting_prompt.txt"
-SUMMARY_TXT = "summary_prompt.txt"
+STARTING_TXT = "starting_prompt.md"
+SUMMARY_TXT = "summary_prompt.md"
 EXAMPLES_JL = "examples.jsonl"
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
