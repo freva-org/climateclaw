@@ -152,6 +152,13 @@ def default_chatbot() -> str:
     return models[0]
 
 
+def default_chatbot_local() -> str:
+    """
+    Default local chatbot.
+    """
+    return "mistral-small3.2:24b"
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Helper predicates
 # ──────────────────────────────────────────────────────────────────────────────
