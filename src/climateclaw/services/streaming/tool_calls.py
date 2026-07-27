@@ -113,13 +113,17 @@ class FinalSummary:
     is_error: bool
 
 
-def parse_tool_result(resp_txt: str, tool_name: str, call_id: str):
+def parse_tool_result(
+    resp_txt: str, tool_name: str, call_id: str, include_images: bool
+):
     result_json = json.loads(resp_txt)
 
     structured_content = result_json.get("structuredContent")
     if structured_content is not None:
         if tool_name == "code_interpreter":
-            yield from parse_code_interpreter_result(structured_content, call_id)
+            yield from parse_code_interpreter_result(
+                structured_content, call_id, include_images
+            )
         else:
             yield from parse_generic_tool_result(structured_content, tool_name, call_id)
     else:
@@ -143,7 +147,7 @@ def parse_tool_result(resp_txt: str, tool_name: str, call_id: str):
         )
 
 
-def parse_code_interpreter_result(result: dict, id: str):
+def parse_code_interpreter_result(result: dict, id: str, include_images: bool):
     code_block: list[StreamVariant] = []
     code_msgs: list[OpenAIMessage] = []
 
@@ -161,7 +165,7 @@ def parse_code_interpreter_result(result: dict, id: str):
     if out or out_error:
         codeout = out + out_error
     else:
-        codeout = ""  # We must send something here, the model expects it.
+        codeout = "Execution completed successfully."  # We must send something here, the model expects it.
     codeout_v = SVCodeOutput(output=codeout, id=id)
     yield codeout_v
     code_block.append(codeout_v)
@@ -169,7 +173,7 @@ def parse_code_interpreter_result(result: dict, id: str):
 
     # Image/html/json etc., rich output
     for i, r in enumerate(result.get("display_data", []) or []):
-        if "image/png" in r.keys():
+        if "image/png" in r.keys() and include_images:
             base64_image = r["image/png"]
             image_id = id + f"_{i}"
             image_v = SVImage(b64=base64_image, id=image_id)

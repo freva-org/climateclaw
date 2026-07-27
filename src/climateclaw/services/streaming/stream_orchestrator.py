@@ -225,7 +225,12 @@ async def stream_with_tools(
         tool_out_v: list[StreamVariant] = []
         tool_msgs: list[OpenAIMessage] = []
         # Parsing tool call output as StreamVariants and messages to model
-        for r in parse_tool_result(result_text, tool_name=name, call_id=id):  # type: ignore[arg-type]
+        for r in parse_tool_result(
+            result_text,
+            tool_name=name,
+            call_id=id,
+            include_images=model_supports_images(model),
+        ):  # type: ignore[arg-type]
             if isinstance(r, FinalSummary):
                 (
                     tool_out_v,
