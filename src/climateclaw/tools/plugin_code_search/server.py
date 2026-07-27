@@ -391,7 +391,7 @@ def auto_detect_plugin_project(user_query: str) -> tuple[str, str]:
 
     plugin_name, project_name = selection_resp.output_text.strip().split(",")
     logger.info(
-        "Auto-detected plugin '%s' and project '%s' for user query.",
+        "Auto-detected plugin '%s' and project '%s' for examining code base.",
         plugin_name,
         project_name,
     )
@@ -402,11 +402,11 @@ def auto_detect_plugin_project(user_query: str) -> tuple[str, str]:
 def plugin_code_search(user_query: str) -> str:
     """
     Search and analyze the source code of a Freva data analysis plugin for decadal climate
-    predictions. Use this when the user
+    predictions. Use this where repository-grounded code context could be used to answer the question, i.e, when the user
     - explicitly asks how a plugin's internal logic works, how to run or
     configure it, or when code snippets from the plugin should be translated or
     adapted into Python examples;
-    - asks general questions about decadal climate prediction analysis, where repository-grounded code context could be used to answer the question.
+    - asks asks a specific or complex climate-analysis question involving regional, decadal, or extreme-event analysis (e.g. lead time selection, hindcast skill scoring, bias adjustment, downscaling, extreme-event indices).
 
     Args:
         user_query (str): What the user wants to know about or do w.r.t. decadal climate prediction plugins.
