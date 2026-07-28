@@ -146,10 +146,12 @@ def normalize_tool_arguments(
 
     validator = Draft202012Validator(dict(input_schema))
 
+    # First prefer the arguments exactly as generated.
     direct_error = _first_validation_error(validator, arguments)
     if direct_error is None:
         return NormalizedToolArguments(arguments=arguments)
 
+    # The direct object is invalid. Test every immediate child object.
     valid_wrapped_arguments: list[tuple[str, dict[str, Any]]] = []
 
     for wrapper_key, wrapped_value in arguments.items():
@@ -164,6 +166,7 @@ def normalize_tool_arguments(
         if wrapped_error is None:
             valid_wrapped_arguments.append((wrapper_key, wrapped_value))
 
+    # If exactly one child matches, normalization is unambiguous.
     if len(valid_wrapped_arguments) == 1:
         wrapper_key, wrapped_value = valid_wrapped_arguments[0]
 
@@ -173,14 +176,15 @@ def normalize_tool_arguments(
             wrapper_key=wrapper_key,
         )
 
+    # More than one matching child would make choosing one unsafe, so reject
     if len(valid_wrapped_arguments) > 1:
         wrapper_keys = [wrapper_key for wrapper_key, _ in valid_wrapped_arguments]
 
-    raise InvalidToolArguments(
-        "Tool arguments contain multiple one-level objects that match "
-        f"the declared input schema: {wrapper_keys!r}. "
-        "The intended arguments are ambiguous."
-    )
+        raise InvalidToolArguments(
+            "Tool arguments contain multiple one-level objects that match "
+            f"the declared input schema: {wrapper_keys!r}. "
+            "The intended arguments are ambiguous."
+        )
 
     raise InvalidToolArguments(
         "Tool arguments do not match the declared input schema. "
