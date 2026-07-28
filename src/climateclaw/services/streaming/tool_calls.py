@@ -257,6 +257,36 @@ def get_tool_input_schema(
     return None
 
 
+def code_variant_content(
+    raw_arguments: str,
+    normalized_arguments: str | None = None,
+) -> str:
+    if normalized_arguments is not None:
+        return normalized_arguments
+
+    try:
+        parsed = json.loads(raw_arguments)
+    except json.JSONDecodeError:
+        return json.dumps({"code": ""})
+
+    if not isinstance(parsed, dict):
+        return json.dumps({"code": ""})
+
+    direct_code = parsed.get("code")
+    if isinstance(direct_code, str):
+        return json.dumps({"code": direct_code})
+
+    for value in parsed.values():
+        if not isinstance(value, dict):
+            continue
+
+        nested_code = value.get("code")
+        if isinstance(nested_code, str):
+            return json.dumps({"code": nested_code})
+
+    return json.dumps({"code": ""})
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Tool result parsers
 # ──────────────────────────────────────────────────────────────────────────────

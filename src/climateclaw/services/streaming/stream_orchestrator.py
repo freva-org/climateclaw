@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
-from climateclaw.core.available_chatbots import model_supports_images
+from climateclaw.core.available_chatbots import model_is_ollama, model_supports_images
 from climateclaw.core.heartbeat import heartbeat_content
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import Authenticator, ThreadStorage
@@ -39,6 +39,7 @@ from climateclaw.services.streaming.tool_calls import (
     FinalSummary,
     InvalidToolArguments,
     accumulate_tool_calls,
+    code_variant_content,
     finalize_tool_calls,
     get_tool_input_schema,
     normalize_tool_arguments,
@@ -124,7 +125,11 @@ async def stream_with_tools(
                     fn = tc.get("function") or {}
                     call_id = tc.get("id", call_id)
                     args_chunk = fn.get("arguments", "")
-                    if args_chunk and tool_name == "code_interpreter":
+                    if (
+                        args_chunk
+                        and tool_name == "code_interpreter"
+                        and not model_is_ollama(model)
+                    ):
                         # stream arguments chunk immediately
                         yield SVCode(code=args_chunk, id=call_id)
 
@@ -217,19 +222,32 @@ async def stream_with_tools(
         # Append assistant tool-call message
         messages.append({"role": "assistant", "content": "", "tool_calls": [tc]})
 
-        if normalization_error is None:
-            # Store valid, normalized arguments in MongoDB and stream them to the frontend.
-            if name == "code_interpreter":
-                # accumulated code text to be appended to thread
-                tool_v = SVCode(code=args_txt, id=id)
-            else:
-                tool_v = SVToolCall(arg=args_txt, id=id, tool_name=name)  # type: ignore[assignment]
-                # code is already streamed, we stream the other tool calls here too
-                yield tool_v
-
-            await add_to_conversation(
-                thread_id, [tool_v], storage=storage, store_thread=store_thread
+        # Store valid, normalized arguments in MongoDB and stream them to the frontend.
+        if name == "code_interpreter":
+            # accumulated code text to be appended to thread
+            tool_v = SVCode(
+                code=code_variant_content(
+                    raw_arguments=raw_args_txt,
+                    normalized_arguments=(
+                        args_txt if normalization_error is None else None
+                    ),
+                ),
+                id=call_id,
             )
+            if model_is_ollama(model):
+                yield tool_v
+        else:
+            tool_v = SVToolCall(
+                arg=(args_txt if normalization_error is None else raw_args_txt),
+                id=call_id,
+                tool_name=name,
+            )  # type: ignore[assignment]
+            # code is already streamed, we stream the other tool calls here too
+            yield tool_v
+
+        await add_to_conversation(
+            thread_id, [tool_v], storage=storage, store_thread=store_thread
+        )
 
         async def run_with_heartbeat():
             """Run the tool while periodically sending heartbeats."""
