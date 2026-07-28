@@ -5,6 +5,9 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError
+
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import McpManager
 from climateclaw.services.streaming.stream_variants import (
@@ -18,6 +21,18 @@ from climateclaw.services.streaming.stream_variants import (
 )
 
 DEFAULT_LOGGER = configure_logging(__name__)
+
+
+class InvalidToolArguments(ValueError):
+    """Raised when tool arguments do not conform to the tool's JSON schema."""
+
+
+@dataclass(frozen=True)
+class NormalizedToolArguments:
+    arguments: dict[str, Any]
+    was_unwrapped: bool = False
+    wrapper_key: str | None = None
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # MCP tool runner
@@ -101,6 +116,127 @@ def finalize_tool_calls(agg: dict[str, Any]) -> list[dict[str, Any]]:
         }
         out.append(tc)
     return out
+
+
+def normalize_tool_arguments(
+    raw_arguments: str,
+    input_schema: dict[str, Any],
+) -> NormalizedToolArguments:
+    """
+    Validate model-generated tool arguments.
+
+    If the direct arguments do not satisfy the schema, allow exactly one
+    arbitrary wrapper around an object that does satisfy the schema.
+
+    Examples:
+
+        {"code": "..."}
+        -> accepted unchanged
+
+        {"args": {"code": "..."}}
+        -> normalized if {"code": "..."} satisfies that tool's schema
+
+        {"anything": "...", "code": "..."}
+        -> rejected
+    """
+    arguments = _parse_tool_arguments(raw_arguments)
+
+    if not input_schema:
+        raise InvalidToolArguments("No input schema is available for this tool.")
+
+    validator = Draft202012Validator(dict(input_schema))
+
+    direct_error = _first_validation_error(validator, arguments)
+    if direct_error is None:
+        return NormalizedToolArguments(arguments=arguments)
+
+    # Only unwrap an unambiguous, one-property object:
+    # {"any_wrapper": {...correct arguments...}}
+    if len(arguments) == 1:
+        wrapper_key, wrapped_value = next(iter(arguments.items()))
+
+        if isinstance(wrapped_value, dict):
+            wrapped_error = _first_validation_error(
+                validator,
+                wrapped_value,
+            )
+
+            if wrapped_error is None:
+                return NormalizedToolArguments(
+                    arguments=wrapped_value,
+                    was_unwrapped=True,
+                    wrapper_key=wrapper_key,
+                )
+
+    raise InvalidToolArguments(
+        "Tool arguments do not match the declared input schema. "
+        f"Received: {arguments!r}. "
+        f"Validation error: {_format_validation_error(direct_error)}"
+    )
+
+
+def _parse_tool_arguments(
+    raw_arguments: str,
+) -> dict[str, Any]:
+    if isinstance(raw_arguments, str):
+        try:
+            parsed = json.loads(raw_arguments or "{}")
+        except json.JSONDecodeError as exc:
+            raise InvalidToolArguments(
+                f"Tool arguments are not a valid JSON string: {exc}"
+            ) from exc
+    else:
+        raise InvalidToolArguments(
+            f"Tool arguments must be a JSON string, not {type(raw_arguments).__name__}."
+        )
+
+    if not isinstance(parsed, dict):
+        raise InvalidToolArguments(
+            f"Tool arguments must decode to a JSON object, not {type(parsed).__name__}."
+        )
+
+    return parsed
+
+
+def _first_validation_error(
+    validator: Draft202012Validator,
+    arguments: dict[str, Any],
+) -> ValidationError | None:
+    return next(iter(validator.iter_errors(arguments)), None)
+
+
+def _format_validation_error(error: ValidationError) -> str:
+    if error.absolute_path:
+        path = ".".join(str(part) for part in error.absolute_path)
+        return f"{path}: {error.message}"
+
+    return error.message
+
+
+def get_tool_input_schema(
+    mcp: McpManager,
+    tool_name: str,
+) -> dict[str, Any] | None:
+    """
+    Find a tool's input schema from the OpenAI-style tool definitions
+    cached by McpManager.
+    """
+    for tool in mcp.available_tools():
+        if not isinstance(tool, dict):
+            continue
+
+        function = tool.get("function")
+        if not isinstance(function, dict):
+            continue
+
+        if function.get("name") != tool_name:
+            continue
+
+        parameters = function.get("parameters")
+        if isinstance(parameters, dict):
+            return parameters
+
+    return None
 
 
 # ──────────────────────────────────────────────────────────────────────────────

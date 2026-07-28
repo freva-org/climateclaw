@@ -37,8 +37,11 @@ from climateclaw.services.streaming.stream_variants import (
 )
 from climateclaw.services.streaming.tool_calls import (
     FinalSummary,
+    InvalidToolArguments,
     accumulate_tool_calls,
     finalize_tool_calls,
+    get_tool_input_schema,
+    normalize_tool_arguments,
     parse_tool_result,
     run_tool_via_mcp,
 )
@@ -137,6 +140,7 @@ async def stream_with_tools(
 
     # 2) Any tool calls?
     tool_calls = finalize_tool_calls(tool_agg)
+    log.debug(f"Finalized tool calls: {tool_calls}")
 
     if accumulated_asst_text:
         asst_v = SVAssistant(text="".join(accumulated_asst_text))
@@ -154,22 +158,78 @@ async def stream_with_tools(
     # 3) Run tools
     id = ""
     for tc in tool_calls:
-        messages.append({"role": "assistant", "content": "", "tool_calls": [tc]})
-        name = (tc.get("function") or {}).get("name", "")
+        function = tc.get("function") or {}
+        name = function.get("name", "")
         id = tc.get("id", id)
-        args_txt = (tc.get("function") or {}).get("arguments", "")
+        raw_args_txt = function.get("arguments", "")
 
-        if name == "code_interpreter":
-            # accumulated code text to be appended to thread
-            tool_v = SVCode(code=args_txt, id=id)
-        else:
-            tool_v = SVToolCall(arg=args_txt, id=id, tool_name=name)  # type: ignore[assignment]
-            # code is already streamed, we stream the other tool calls here too
-            yield tool_v
-
-        await add_to_conversation(
-            thread_id, [tool_v], storage=storage, store_thread=store_thread
+        log.info(
+            f"Received tool execution: name={name} raw_arguments={raw_args_txt}",
         )
+
+        normalization_error: str | None = None
+
+        try:
+            input_schema = get_tool_input_schema(mcp, name) if mcp else None
+
+            if input_schema is None:
+                raise InvalidToolArguments(f"No input schema found for tool {name}.")
+
+            normalized = normalize_tool_arguments(
+                raw_arguments=raw_args_txt,
+                input_schema=input_schema,
+            )
+
+            args_txt = json.dumps(normalized.arguments)
+
+            if normalized.was_unwrapped:
+                log.warning(
+                    "Normalized one-level tool argument wrapper: "
+                    "tool=%r id=%r wrapper=%r raw_arguments=%r",
+                    name,
+                    id,
+                    normalized.wrapper_key,
+                    raw_args_txt,
+                )
+
+            # Replace the malformed arguments in the actual assistant
+            # tool-call message sent back to the model.
+            tc["function"] = {
+                **function,
+                "arguments": args_txt,
+            }
+
+        except InvalidToolArguments as exc:
+            args_txt = raw_args_txt
+            normalization_error = (
+                f"Invalid arguments for tool {name}: {exc} "
+                "Retry the tool call using its declared input schema exactly."
+            )
+
+            log.warning(
+                "Rejected malformed tool call: tool=%r id=%r arguments=%r error=%s",
+                name,
+                id,
+                raw_args_txt,
+                exc,
+            )
+
+        # Append assistant tool-call message
+        messages.append({"role": "assistant", "content": "", "tool_calls": [tc]})
+
+        if normalization_error is None:
+            # Store valid, normalized arguments in MongoDB and stream them to the frontend.
+            if name == "code_interpreter":
+                # accumulated code text to be appended to thread
+                tool_v = SVCode(code=args_txt, id=id)
+            else:
+                tool_v = SVToolCall(arg=args_txt, id=id, tool_name=name)  # type: ignore[assignment]
+                # code is already streamed, we stream the other tool calls here too
+                yield tool_v
+
+            await add_to_conversation(
+                thread_id, [tool_v], storage=storage, store_thread=store_thread
+            )
 
         async def run_with_heartbeat():
             """Run the tool while periodically sending heartbeats."""
@@ -208,19 +268,36 @@ async def stream_with_tools(
                 # Ensure the task is removed from the registry when it finishes
                 await unregister_tool_task(thread_id, tool_task)
 
-        try:
-            result_text = None
-            heartbeats_v: list[StreamVariant] = []
-            async for item in run_with_heartbeat():
-                if isinstance(item, SVServerHint):
-                    yield item  # Stream heartbeat ServerHint variants
-                    heartbeats_v.append(item)
-                elif isinstance(item, str):
-                    # The function returns the final tool result as last value
-                    result_text = item
-        except Exception as e:
-            log.exception("Tool %s failed", name)
-            result_text = json.dumps({"error": str(e)})
+        result_text: str | None = None
+        heartbeats_v: list[StreamVariant] = []
+
+        if normalization_error is not None:
+            # Do not call MCP. Feed a normal tool error back to the model.
+            result_text = json.dumps(
+                {
+                    "error": normalization_error,
+                }
+            )
+        else:
+            try:
+                async for item in run_with_heartbeat():
+                    if isinstance(item, SVServerHint):
+                        yield item  # Stream heartbeat ServerHint variants
+                        heartbeats_v.append(item)
+                    elif isinstance(item, str):
+                        # The function returns the final tool result as last value
+                        result_text = item
+
+            except Exception as e:
+                log.exception("Tool {name} failed")
+                result_text = json.dumps({"error": str(e)})
+
+        if result_text is None:
+            result_text = json.dumps(
+                {
+                    "error": f"Tool {name} returned no result.",
+                }
+            )
 
         tool_out_v: list[StreamVariant] = []
         tool_msgs: list[OpenAIMessage] = []
@@ -230,7 +307,7 @@ async def stream_with_tools(
             tool_name=name,
             call_id=id,
             include_images=model_supports_images(model),
-        ):  # type: ignore[arg-type]
+        ):
             if isinstance(r, FinalSummary):
                 (
                     tool_out_v,
