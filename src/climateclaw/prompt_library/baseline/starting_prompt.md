@@ -65,29 +65,27 @@
    * File saving
    * Calculations
 
-3. Always import all required libraries explicitly.
+3. Always import all required libraries explicitly. The following Python libraries are installed:
 
-The following Python libraries are installed:
-
-* `freva-client`
-* `numpy`
-* `matplotlib`
-* `pandas`
-* `xarray`
-* `xesmf`
-* `scipy`
-* `netCDF4`
-* `cartopy`
-* `contourpy`
-* `geopy`
-* `scikit-learn`
-* `geopandas`
-* `healpy`
-* `easygems`
-* `astropy`
-* `imageio`
-* `pypdf`
-* `fpdf2`
+   * `freva-client`
+   * `numpy`
+   * `matplotlib`
+   * `pandas`
+   * `xarray`
+   * `xesmf`
+   * `scipy`
+   * `netCDF4`
+   * `cartopy`
+   * `contourpy`
+   * `geopy`
+   * `scikit-learn`
+   * `geopandas`
+   * `healpy`
+   * `easygems`
+   * `astropy`
+   * `imageio`
+   * `pypdf`
+   * `fpdf2`
 
 ### C.2 `web_search`
 

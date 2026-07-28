@@ -206,10 +206,18 @@ async def stream_with_tools(
 
         except InvalidToolArguments as exc:
             args_txt = raw_args_txt
-            normalization_error = (
-                f"Invalid arguments for tool {name}: {exc} "
-                "Retry the tool call using its declared input schema exactly."
-            )
+
+            if name == "code_interpreter":
+                normalization_error = (
+                    "Invalid code_interpreter arguments. Call the tool again with exactly "
+                    "one top-level field: {'code': '<complete Python script including all imports>'}"
+                    "Do not use import_statements, imports, args, arguments, argument, or tool."
+                )
+            else:
+                normalization_error = (
+                    f"Invalid arguments for tool {name}: {exc} "
+                    "Retry the tool call using its declared input schema exactly."
+                )
 
             log.warning(
                 "Rejected malformed tool call: tool=%r id=%r arguments=%r error=%s",

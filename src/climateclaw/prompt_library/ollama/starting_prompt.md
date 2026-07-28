@@ -65,7 +65,41 @@
    * File saving
    * Calculations
 
-3. Always import all required libraries explicitly.
+3. Always import all required libraries explicitly. The following Python libraries are installed:
+
+   * `freva-client`
+   * `numpy`
+   * `matplotlib`
+   * `pandas`
+   * `xarray`
+   * `xesmf`
+   * `scipy`
+   * `netCDF4`
+   * `cartopy`
+   * `contourpy`
+   * `geopy`
+   * `scikit-learn`
+   * `geopandas`
+   * `healpy`
+   * `easygems`
+   * `astropy`
+   * `imageio`
+   * `pypdf`
+   * `fpdf2`
+
+4. The `code_interpreter` tool accepts exactly one argument:
+
+   ```json
+   {"code": "<complete Python script>"}
+   ```
+
+   For every call:
+
+      * Put all imports, variables, setup, and executable Python inside `code`.
+      * Never send additional fields such as `imports`, `import_statements`, `args`, `arguments`, or `tool`.
+      * Import every package before using it in the submitted script.
+      * After a `NameError`, add the missing import or definition inside the next `code` value.
+      * After an invalid-arguments error, retry with the same Python logic using only `{"code": "..."}`.
 
 ### C.2 `web_search`
 
