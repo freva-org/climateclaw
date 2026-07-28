@@ -133,10 +133,10 @@ def normalize_tool_arguments(
         {"code": "..."}
         -> accepted unchanged
 
-        {"args": {"code": "..."}}
+        {"args": {"code": "..."}, "tool": "..."}
         -> normalized if {"code": "..."} satisfies that tool's schema
 
-        {"anything": "...", "code": "..."}
+        {"arguments": "...", "code": "..."}
         -> rejected
     """
     arguments = _parse_tool_arguments(raw_arguments)
@@ -150,23 +150,37 @@ def normalize_tool_arguments(
     if direct_error is None:
         return NormalizedToolArguments(arguments=arguments)
 
-    # Only unwrap an unambiguous, one-property object:
-    # {"any_wrapper": {...correct arguments...}}
-    if len(arguments) == 1:
-        wrapper_key, wrapped_value = next(iter(arguments.items()))
+    valid_wrapped_arguments: list[tuple[str, dict[str, Any]]] = []
 
-        if isinstance(wrapped_value, dict):
-            wrapped_error = _first_validation_error(
-                validator,
-                wrapped_value,
-            )
+    for wrapper_key, wrapped_value in arguments.items():
+        if not isinstance(wrapped_value, dict):
+            continue
 
-            if wrapped_error is None:
-                return NormalizedToolArguments(
-                    arguments=wrapped_value,
-                    was_unwrapped=True,
-                    wrapper_key=wrapper_key,
-                )
+        wrapped_error = _first_validation_error(
+            validator,
+            wrapped_value,
+        )
+
+        if wrapped_error is None:
+            valid_wrapped_arguments.append((wrapper_key, wrapped_value))
+
+    if len(valid_wrapped_arguments) == 1:
+        wrapper_key, wrapped_value = valid_wrapped_arguments[0]
+
+        return NormalizedToolArguments(
+            arguments=wrapped_value,
+            was_unwrapped=True,
+            wrapper_key=wrapper_key,
+        )
+
+    if len(valid_wrapped_arguments) > 1:
+        wrapper_keys = [wrapper_key for wrapper_key, _ in valid_wrapped_arguments]
+
+    raise InvalidToolArguments(
+        "Tool arguments contain multiple one-level objects that match "
+        f"the declared input schema: {wrapper_keys!r}. "
+        "The intended arguments are ambiguous."
+    )
 
     raise InvalidToolArguments(
         "Tool arguments do not match the declared input schema. "
