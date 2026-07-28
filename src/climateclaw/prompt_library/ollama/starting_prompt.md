@@ -120,7 +120,7 @@ When answering with information from `web_search`, include inline citations with
 6. Always provide the databrowser host:
 
    ```python
-   host="nextgems.dkrz.de"
+   host = "nextgems.dkrz.de"
    ```
 
 ### D.1 Default Dataset

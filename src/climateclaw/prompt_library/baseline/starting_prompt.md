@@ -114,11 +114,7 @@ When answering with information from `web_search`, include inline citations with
 3. Data is stored in NetCDF format and can be located using:
 
    ```python
-   data_files = list(
-       freva_client.databrowser(
-           KEYWORD_SELECTION
-       )
-   )
+   data_files = list(freva_client.databrowser(KEYWORD_SELECTION))
    ```
 
 4. `freva_client.databrowser` returns a class object. Convert it to a list to obtain the matching file paths.
@@ -146,7 +142,7 @@ When answering with information from `web_search`, include inline citations with
 5. Always provide the databrowser host:
 
    ```python
-   host="nextgems.dkrz.de"
+   host = "nextgems.dkrz.de"
    ```
 
 ### D.1 Default Dataset
