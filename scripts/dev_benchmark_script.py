@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import sys
+import time
+from dataclasses import dataclass
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 os.environ["CLIMATECLAW_DEV"] = "1"
 os.environ["CLIMATECLAW_LITE_LLM_ADDRESS"] = "http://localhost:4000"
@@ -13,12 +17,6 @@ os.environ["CLIMATECLAW_CODE_SERVER_URL"] = "http://localhost:8051"
 os.environ["CLIMATECLAW_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
 os.environ["CLIMATECLAW_PLUGIN_CODE_SEARCH_SERVER_URL"] = "http://localhost:8053"
 os.environ["CLIMATECLAW_MONGODB_HOST"] = "localhost"
-
-
-import asyncio
-import json
-import time
-from dataclasses import dataclass
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.prompting import get_entire_prompt
@@ -36,7 +34,7 @@ from climateclaw.services.streaming.stream_orchestrator import (
 from climateclaw.services.streaming.stream_variants import from_sv_to_json
 
 """
-Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour.
+Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headless means that it runs without a web server, and without any user interaction. It is intended for development and benchmarking purposes.
 
 - Config below (no argparse).
 - Disk-only persistence (never Mongo).
@@ -48,12 +46,12 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour.
 # CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
 
-MODEL = "gpt-4.1"
+MODEL = "gpt-5.6-luna"  # model to benchmark
 USER_ID = "janedoe"
-PROMPT = "plot x=y"
+PROMPT = "Hi, who are you?"
 
-RUNS = 3
-CONCURRENCY = 3  # ← set to 1 for clean mode
+RUNS = 1  # number of runs to perform
+CONCURRENCY = 1  # ← set to 1 for clean mode
 
 PRINT_STREAM = False
 PRINT_PER_RUN_SUMMARY = True
@@ -68,6 +66,7 @@ log = configure_logging("dev_script")
 class RunResult:
     idx: int
     thread_id: str
+    answer: str
     duration_s: float
     chunks: int
     chars: int
@@ -97,6 +96,7 @@ async def _run_once(idx: int, sem: asyncio.Semaphore) -> RunResult:
         chunk_count = 0
         char_count = 0
         status = "Done"
+        answer = ""
 
         try:
             async for variant in run_stream(
@@ -110,6 +110,7 @@ async def _run_once(idx: int, sem: asyncio.Semaphore) -> RunResult:
                     txt = getattr(variant, "text", "") or ""
                     chunk_count += 1
                     char_count += len(txt)
+                    answer += txt
 
                 if PRINT_STREAM and getattr(variant, "variant", None) != "Assistant":
                     print(json.dumps(from_sv_to_json(variant), ensure_ascii=False))
@@ -129,7 +130,15 @@ async def _run_once(idx: int, sem: asyncio.Semaphore) -> RunResult:
                 f"chunks={chunk_count} chars={char_count} time={duration:.3f}s"
             )
 
-        return RunResult(idx, thread_id, duration, chunk_count, char_count, status)
+        return RunResult(
+            idx,
+            thread_id,
+            answer,
+            duration,
+            chunk_count,
+            char_count,
+            status,
+        )
 
 
 async def main() -> None:
@@ -137,7 +146,7 @@ async def main() -> None:
     tasks = [asyncio.create_task(_run_once(i, sem)) for i in range(RUNS)]
     results = await asyncio.gather(*tasks)
 
-    if PRINT_FINAL_SUMMARY and results:
+    if results:
         ok = [r for r in results if r.status == "Done"]
         errs = [r for r in results if r.status != "Done"]
         avg = sum(r.duration_s for r in results) / len(results)
@@ -147,17 +156,22 @@ async def main() -> None:
         total_chunks = sum(r.chunks for r in results)
         total_chars = sum(r.chars for r in results)
 
-        print("\n=== Summary ===")
-        print(f"model={MODEL} runs={RUNS} concurrency={CONCURRENCY}")
-        print(f"success={len(ok)} errors={len(errs)}")
-        print(
-            f"avg_time={avg:.3f}s p50_time={p50:.3f}s fastest={fastest.duration_s:.3f}s slowest={slowest.duration_s:.3f}s"
-        )
-        print(f"total_chunks={total_chunks} total_chars={total_chars}")
-        if errs:
-            print("errors:")
-            for r in errs[:10]:
-                print(f"  run={r.idx} thread={r.thread_id} status={r.status}")
+        if PRINT_FINAL_SUMMARY:
+            print("\n=== Summary ===")
+            print(f"model={MODEL} runs={RUNS} concurrency={CONCURRENCY}")
+            print(f"success={len(ok)} errors={len(errs)}")
+            print(
+                f"avg_time={avg:.3f}s p50_time={p50:.3f}s fastest={fastest.duration_s:.3f}s slowest={slowest.duration_s:.3f}s"
+            )
+            print(f"total_chunks={total_chunks} total_chars={total_chars}")
+            print(
+                f"Assistant answer sample (from run {fastest.idx}):\n\n{fastest.answer}"
+            )
+
+            if errs:
+                print("errors:")
+                for r in errs[:10]:
+                    print(f"  run={r.idx} thread={r.thread_id} status={r.status}")
 
 
 if __name__ == "__main__":
