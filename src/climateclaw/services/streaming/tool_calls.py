@@ -357,7 +357,7 @@ def parse_code_interpreter_result(result: dict, id: str, include_images: bool):
 
     # Image/html/json etc., rich output
     for i, r in enumerate(result.get("display_data", []) or []):
-        if "image/png" in r.keys() and include_images:
+        if "image/png" in r.keys():
             base64_image = r["image/png"]
             image_id = id + f"_{i}"
             image_v = SVImage(b64=base64_image, id=image_id)
@@ -371,7 +371,7 @@ def parse_code_interpreter_result(result: dict, id: str, include_images: bool):
                         ),
                         image_v,
                     ],
-                    include_images=True,
+                    include_images=include_images,
                 )
             )
 

@@ -197,7 +197,7 @@ def model_supports_images(model: str) -> bool:
     """
     True for names starting with the defined list.
     """
-    models = ("gpt", "qwen3.6", "gemma4", "mistral-medium", "ministral")
+    models = ("gpt", "qwen3.6", "gemma4", "mistral", "ministral")
     return model.startswith(models)
 
 
