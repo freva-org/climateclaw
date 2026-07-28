@@ -18,7 +18,7 @@ Prompt loading & assembly (non-streaming), single API for all models.
 What this module does
 ---------------------
 • Pick a prompt-set directory based on the model (GPT-5 falls back to baseline for now)
-• Load 3 prompt assets: starting_prompt.txt, examples.jsonl, summary_prompt.txt
+• Load 3 prompt assets: starting_prompt.md, examples.jsonl, summary_prompt.md
 • Build OpenAI Chat messages in this order:
     1) System(starting_prompt)   [name="prompt"]
     2) Example conversation messages (from examples.jsonl via StreamVariants)
@@ -34,8 +34,8 @@ Differences from Rust (documented for future parity)
 logger = logging.getLogger(__name__)
 
 # Filenames we expect in a prompt set
-STARTING_TXT = "starting_prompt.txt"
-SUMMARY_TXT = "summary_prompt.txt"
+STARTING_TXT = "starting_prompt.md"
+SUMMARY_TXT = "summary_prompt.md"
 EXAMPLES_JL = "examples.jsonl"
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
