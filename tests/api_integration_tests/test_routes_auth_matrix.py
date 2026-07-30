@@ -9,13 +9,18 @@ ENDPOINTS_GET = [
 async def test_all_get_routes_require_auth(client):
     async with client:
         for ep in ENDPOINTS_GET + [
-            "/api/chatbot/getthread",
             "/api/chatbot/getuserthreads",
+        ]:
+            r = await client.get(ep)
+            assert r.status_code == 401, f"{ep} should be protected (missing headers)"
+
+        for ep in [
+            "/api/chatbot/getthread",
             "/api/chatbot/streamresponse",
             "/api/chatbot/editthread",
             "/api/chatbot/userfeedback",
         ]:
-            r = await client.get(ep)
+            r = await client.post(ep)
             assert r.status_code == 401, f"{ep} should be protected (missing headers)"
 
 
@@ -46,9 +51,9 @@ async def test_routes_succeed_with_auth_and_username_injection(
             assert r.json()[0][0].get("user_id") == "alice"
 
             # 3) /getthread: must pass thread_id
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/getthread",
-                params={"thread_id": "t-123"},
+                json={"thread_id": "t-123"},
                 headers=GOOD_HEADERS,
             )
             assert r.status_code == 200
@@ -58,10 +63,10 @@ async def test_routes_succeed_with_auth_and_username_injection(
             assert body and body[0]["variant"] == "ServerHint"
 
             # 4) GET-only SSE (Rust parity) — just assert it succeeds
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/streamresponse",
                 headers=GOOD_HEADERS,
-                params={
+                json={
                     "thread_id": "t-123",
                     "input": "hi there",
                     "chatbot": "qwen2.5:3b",

@@ -4,7 +4,8 @@ import json
 import time
 from collections.abc import Generator
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from climateclaw.core.available_chatbots import available_chatbots, default_chatbot
@@ -45,6 +46,13 @@ router = APIRouter()
 CHECK_INTERVAL = 3  # seconds, the interval to wait before check STOP request
 
 
+class StreamResponseRequest(BaseModel):
+    thread_id: str | None = None
+    input: str | None = None
+    chatbot: str | None = None
+    store_thread: bool = True
+
+
 def _sse_data(obj: SVDict) -> Generator[bytes]:
     if obj.get("variant") == IMAGE:
         image_b64 = obj.get("content")
@@ -60,12 +68,9 @@ def _sse_data(obj: SVDict) -> Generator[bytes]:
         yield f"{payload}\n".encode()
 
 
-@router.get("/streamresponse", dependencies=[AuthRequired])
+@router.post("/streamresponse", dependencies=[AuthRequired])
 async def streamresponse(
-    thread_id: str | None = Query(None),
-    input: str | None = Query(None),
-    chatbot: str | None = Query(None),
-    store_thread: bool = True,
+    request: StreamResponseRequest,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -119,6 +124,12 @@ async def streamresponse(
             - If stream preparation fails or an internal server error occurs
               before streaming begins.
     """
+
+    thread_id = request.thread_id
+    input = request.input
+    chatbot = request.chatbot
+    store_thread = request.store_thread
+
     logger = configure_logging(__name__)
     read_history = False
     is_new_thread = False

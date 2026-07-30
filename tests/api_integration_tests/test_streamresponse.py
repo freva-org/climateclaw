@@ -19,9 +19,9 @@ async def test_streamresponse_returns_500_on_prepare_failure(
 
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/streamresponse",
-                params={"thread_id": "t-err", "input": "hi", "user_id": "alice"},
+                json={"thread_id": "t-err", "input": "hi", "user_id": "alice"},
                 headers={**GOOD_HEADERS, "x-freva-config-path": "/tmp/config.yml"},
             )
 
