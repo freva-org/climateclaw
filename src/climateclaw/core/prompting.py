@@ -64,12 +64,14 @@ def _resolve_baseline_dir() -> Path:
     raise FileNotFoundError(f"Baseline prompt set not found. Tried: {tried}")
 
 
-def _resolve_gpt5_dir_or_placeholder() -> Path:
-    # Placeholder policy: until GPT-5 is implemented, fall back to baseline.
-    logger.warning(
-        "GPT-5 prompting is a placeholder; falling back to BASELINE prompt set."
-    )
-    return _resolve_baseline_dir()
+def _resolve_gpt5_dir() -> Path:
+    for d in GPT5_DIRS:
+        if all(
+            (d / name).is_file() for name in (STARTING_TXT, SUMMARY_TXT, EXAMPLES_JL)
+        ):
+            return d
+    tried = [str(d.resolve()) for d in GPT5_DIRS]
+    raise FileNotFoundError(f"GPT-5 prompt set not found. Tried: {tried}")
 
 
 def _resolve_ollama_dir() -> Path:
@@ -94,7 +96,7 @@ def _resolve_ollama_dir() -> Path:
 
 def _pick_prompt_dir(model: str) -> Path:
     if model_is_gpt_5(model):
-        return _resolve_gpt5_dir_or_placeholder()
+        return _resolve_gpt5_dir()
     elif model_is_ollama(model):
         return _resolve_ollama_dir()
     return _resolve_baseline_dir()
@@ -142,8 +144,6 @@ def _load_examples_as_messages(examples_path: str | Path) -> list[dict]:
         include_images=False,
         include_meta=True,  # parity note: Rust typically drops meta; we keep for now
     )  # type: ignore[return-value]
-    # Note: OpenAIMessage is a class that inherits from TypedDict, so it can be used as a dict by json.dumps.
-    # This means that the above error message can be ignored.
 
 
 def get_entire_prompt(user_id: str, thread_id: str, model: str) -> list[dict[str, Any]]:
@@ -156,13 +156,6 @@ def get_entire_prompt(user_id: str, thread_id: str, model: str) -> list[dict[str
     messages.append(_as_system_message(assets["starting"]))
     messages.extend(_load_examples_as_messages(assets["examples_path"]))
     messages.append(_as_system_message(assets["summary"]))
-
-    # Optional: mark placeholder when model is GPT-5 (useful for debugging)
-    if model_is_gpt_5(model):
-        logger.info(
-            "GPT-5 placeholder active: baseline prompts used for model='%s'.", model
-        )
-
     return messages
 
 

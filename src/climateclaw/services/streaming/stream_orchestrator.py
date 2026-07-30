@@ -98,6 +98,7 @@ async def stream_with_tools(
 
     if hasattr(resp, "__aiter__"):
         call_id = ""
+        streamed_code_indices: set[int] = set()
         async for chunk in resp:
             choice = (chunk.get("choices") or [{}])[0]
             delta = choice.get("delta") or {}
@@ -112,18 +113,27 @@ async def stream_with_tools(
             tc_list = delta.get("tool_calls") or []
             if tc_list:
                 accumulate_tool_calls({"choices": [{"delta": delta}]}, tool_agg)
-                tool_name = (
-                    tool_agg.get("by_index", [])[0].get("function").get("name")
-                    if tool_agg
-                    else None
-                )
                 for tc in tc_list:
                     fn = tc.get("function") or {}
-                    call_id = tc.get("id", call_id)
+                    tool_index = tc.get("index")
+                    tool_name = (
+                        tool_agg.get("by_index", {})
+                        .get(tool_index, {})
+                        .get("function", {})
+                        .get("name")
+                    )
+                    call_id = tc.get("id") or call_id
                     args_chunk = fn.get("arguments", "")
-                    if args_chunk and tool_name == "code_interpreter":
+                    is_complete = tc.get("arguments_complete", False)
+                    if (
+                        args_chunk
+                        and tool_name == "code_interpreter"
+                        and (not is_complete or tool_index not in streamed_code_indices)
+                    ):
                         # stream arguments chunk immediately
                         yield SVCode(code=args_chunk, id=call_id)
+                        if tool_index is not None:
+                            streamed_code_indices.add(tool_index)
 
             #  end-of-message
             if choice.get("finish_reason"):
@@ -154,7 +164,13 @@ async def stream_with_tools(
     # 3) Run tools
     id = ""
     for tc in tool_calls:
-        messages.append({"role": "assistant", "content": "", "tool_calls": [tc]})
+        messages.append(
+            {
+                "role": "assistant",
+                "content": "".join(accumulated_asst_text) or None,
+                "tool_calls": [tc],
+            }
+        )
         name = (tc.get("function") or {}).get("name", "")
         id = tc.get("id", id)
         args_txt = (tc.get("function") or {}).get("arguments", "")

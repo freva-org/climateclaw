@@ -10,10 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from matplotlib import pyplot as plt
+from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-os.environ["CLIMATECLAW_DEV"] = "1"
+os.environ["CLIMATECLAW_DEV"] = "0"  # "1"/"true"/"yes" means dev mode
 os.environ["CLIMATECLAW_LITE_LLM_ADDRESS"] = "http://localhost:4000"
 os.environ["CLIMATECLAW_RAG_SERVER_URL"] = "http://localhost:8050"
 os.environ["CLIMATECLAW_CODE_SERVER_URL"] = "http://localhost:8051"
@@ -21,7 +22,7 @@ os.environ["CLIMATECLAW_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
 os.environ["CLIMATECLAW_PLUGIN_CODE_SEARCH_SERVER_URL"] = "http://localhost:8053"
 os.environ["CLIMATECLAW_MONGODB_HOST"] = "localhost"
 
-from climateclaw.core.logging_setup import configure_logging
+from climateclaw.core.logging_setup import configure_logging, silence_logger
 from climateclaw.core.prompting import get_entire_prompt
 from climateclaw.services.authentication.auth import Authenticator
 from climateclaw.services.storage.helpers import create_dir_at_cache
@@ -51,17 +52,27 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headl
 
 MODEL = "gpt-4.1"  # model to benchmark
 USER_ID = "janedoe"
-# PROMPT = "Hi. Who are you?"
+RUNS = 1  # number of runs to perform
+CONCURRENCY = 1  # ← set to 1 for clean mode
+
+PRINT_STREAM = False
+PRINT_PER_RUN_SUMMARY = False
+SILENCE_LOGGING = True
+
+# run evaluation of tool calls (TP, FP, FN, accuracy, precision, recall)
+EVAL_TOOL_CALLS = True
+PLOT_METRICS = False  # plot metrics as bar charts at the end of the benchmark
+
 ## direct questions about a plugin + indirect question that is more widely phrased, but should still trigger the plugin
 BENCHMARK = {
     "leadtimeselektor": [
         "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
         "How can I best extract lead times from decadal climate predictions?",
     ],
-    "problems": [
-        "What is the logic of the 'problems' plugin?",
-        "I want to perform skill score evaluation for climate data against observations. How can I do that?",
-    ],
+    # "problems": [
+    #     "What is the logic of the 'problems' plugin?",
+    #     "I want to perform skill score evaluation for climate data against observations. How can I do that?",
+    # ],
     # "recalibration": [
     #     "How does the 'recalibration' plugin work?",
     #     "How can I best calibrate climate model outputs to match observed data distributions?",
@@ -69,18 +80,8 @@ BENCHMARK = {
 }
 ALL_PLUGINS = ["leadtimeselektor", "problems", "cvprepare", "recalibration", "terciles"]
 
-RUNS = 2  # number of runs to perform
-CONCURRENCY = 1  # ← set to 1 for clean mode
-
-PRINT_STREAM = False
-PRINT_PER_RUN_SUMMARY = True
-PRINT_FINAL_SUMMARY = False
-
-EVAL_TOOL_CALLS = True  # run evaluation of tool calls (TP, FP, FN, accuracy, precision, recall)
-PLOT_METRICS = False  # plot metrics as bar charts at the end of the benchmark
-
 # ──────────────────────────────────────────────────────────────────────────────
-
+# TODO: make eval faster, e.g. by omitting printed logs!
 log = configure_logging("dev_script")
 
 
@@ -88,14 +89,10 @@ log = configure_logging("dev_script")
 class RunResult:
     idx: int
     thread_id: str
-    answer: str
+    # answer: str
     tool_name: str
     tool_args: str
     tool_output: str
-    duration_s: float
-    chunks: int
-    chars: int
-    status: str
 
 
 async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
@@ -118,10 +115,8 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
         system_prompt = get_entire_prompt(USER_ID, thread_id, MODEL)
 
         t0 = time.perf_counter()
-        chunk_count = 0
-        char_count = 0
         status = "Done"
-        answer = ""
+        # answer = ""
         tool_name = ""
         tool_args = ""
         tool_output = ""
@@ -134,11 +129,11 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
                 system_prompt=system_prompt,
                 storage=Storage,
             ):
-                if getattr(variant, "variant", None) == "Assistant":
-                    txt = getattr(variant, "text", "") or ""
-                    chunk_count += 1
-                    char_count += len(txt)
-                    answer += txt
+                # if getattr(variant, "variant", None) == "Assistant":
+                #     txt = getattr(variant, "text", "") or ""
+                #     chunk_count += 1
+                #     char_count += len(txt)
+                #     answer += txt
 
                 if getattr(variant, "variant", None) == "ToolCall":
                     tool_name = getattr(variant, "tool_name", "")
@@ -152,30 +147,24 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
 
             await end_and_save_conversation(thread_id, Storage)
 
-        except asyncio.CancelledError:
-            status = "Cancelled"
         except Exception as e:
             status = f"Error:{e}"
 
         duration = time.perf_counter() - t0
 
         if PRINT_PER_RUN_SUMMARY:
-            print(
-                f"[run {idx:03d}] thread={thread_id} status={status} "
-                f"chunks={chunk_count} chars={char_count} time={duration:.3f}s"
-            )
+            print(f"Status: {status},\t Duration: {duration:.2f}s")
+            print(f"called tool: {tool_name}")
+            print(f"  tool args: {tool_args}")
+            print(f"  tool output: {tool_output}")
 
         return RunResult(
             idx,
             thread_id,
-            answer,
+            # answer,
             tool_name,
             tool_args,
             tool_output,
-            duration,
-            chunk_count,
-            char_count,
-            status,
         )
 
 
@@ -269,17 +258,10 @@ async def run_benchmark_for_prompt(
     results = await asyncio.gather(*tasks)
     assert results, "No results returned from benchmark runs"
 
-    ok = [r for r in results if r.status == "Done"]
-    errs = [r for r in results if r.status != "Done"]
+    ok = results  # all runs are considered successful
     tool_names = [r.tool_name for r in results]
     tool_args = [r.tool_args for r in results]
     tool_outputs = [r.tool_output for r in results]
-    avg = sum(r.duration_s for r in results) / len(results)
-    p50 = sorted(r.duration_s for r in results)[len(results) // 2]
-    fastest = min(results, key=lambda r: r.duration_s)
-    slowest = max(results, key=lambda r: r.duration_s)
-    total_chunks = sum(r.chunks for r in results)
-    total_chars = sum(r.chars for r in results)
 
     if EVAL_TOOL_CALLS:
         metrics_dict = _evaluate_tool_call_results(
@@ -287,24 +269,6 @@ async def run_benchmark_for_prompt(
         )
         for k, v in metrics_dict.items():
             eval_dict[k].append(v)
-
-    if PRINT_FINAL_SUMMARY:
-        print("\n=== Summary ===")
-        print(f"model={MODEL} runs={RUNS} concurrency={CONCURRENCY}")
-        print(f"success={len(ok)} errors={len(errs)}")
-        print(
-            f"avg_time={avg:.3f}s p50_time={p50:.3f}s fastest={fastest.duration_s:.3f}s slowest={slowest.duration_s:.3f}s"
-        )
-        print(f"total_chunks={total_chunks} total_chars={total_chars}")
-        print(f"Tool called: {fastest.tool_name} with args: {fastest.tool_args}")
-        print(
-            f"Tool output sample (from run {fastest.idx}):\n{fastest.tool_output}"
-        )
-
-        if errs:
-            print("errors:")
-            for r in errs[:10]:
-                print(f"  run={r.idx} thread={r.thread_id} status={r.status}")
 
     return eval_dict
 
@@ -358,11 +322,18 @@ def plot_metrics(avg_metrics: dict[str, float]) -> None:
 
 
 async def main() -> None:
+    if SILENCE_LOGGING:
+        silence_logger()
+
     eval_dict = defaultdict(list)
-    for plugin, prompts in BENCHMARK.items():
-        for prompt in prompts:
-            print(f"\n=== Running benchmark for prompt: {prompt} ===")
-            eval_dict = await run_benchmark_for_prompt(prompt, plugin, eval_dict)
+    prompt_count = sum(len(prompts) for prompts in BENCHMARK.values())
+    with tqdm(total=prompt_count, desc="Evaluation", unit="prompt") as progress:
+        for plugin, prompts in BENCHMARK.items():
+            progress.set_postfix_str(f"plugin={plugin}")
+            for prompt in prompts:
+                # print(f"\n=== Running benchmark for prompt: {prompt} ===")
+                eval_dict = await run_benchmark_for_prompt(prompt, plugin, eval_dict)
+                progress.update()
 
     # compute average metrics across all prompts
     if EVAL_TOOL_CALLS:

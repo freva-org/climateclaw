@@ -203,7 +203,7 @@ def fetch_plugin_code(
 
 
 def select_relevant_files(
-    plugin: str, query: str, file_paths: list[str], dep: bool = False
+    plugin: str, context: str, file_paths: list[str], dep: bool = False
 ) -> list[str]:
     """
     Given a list of file paths in the plugin repo, ask the model to pick the most relevant
@@ -221,7 +221,7 @@ def select_relevant_files(
             "- Exclude tests, examples, generated files, and any '__init__.py'.\n"
             f"- Return ONLY a valid JSON array of file path strings from the provided list, with at most {MAX_RELEVANT_FILES} items. Output nothing but the JSON array."
             f"Repository file list:\n{file_tree}\n\n"
-            f"User query:\n{query}\n\n"
+            f"User context:\n{context}\n\n"
         )
     else:
         selection_prompt = (
@@ -235,7 +235,7 @@ def select_relevant_files(
             f"- Return ONLY a valid JSON array of at most {MAX_RELEVANT_FILES} file path strings "
             "from that list that are imported or depend upon the fetched code. "
             "If none match, return []."
-            f"=== Fetched Code ===\n{query}\n=== END ===\n\n"
+            f"=== Fetched Code ===\n{context}\n=== END ===\n\n"
             f"=== Remaining Repository Files ===\n{file_tree}\n=== END ===\n\n"
         )
 

@@ -65,7 +65,7 @@ async def acomplete(
     stream: bool = False,
     temperature: float | None = None,
     max_tokens: int | None = None,
-    extra: dict[str, Any] | None = None,
+    extra_params: dict[str, Any] | None = None,
     **request_params: Any,
 ) -> dict[str, Any] | AsyncIterator[dict[str, Any]]:
     """
@@ -83,8 +83,8 @@ async def acomplete(
         payload["temperature"] = temperature
     if max_tokens is not None:
         payload["max_tokens"] = max_tokens
-    if extra:
-        payload.update(extra)
+    if extra_params:
+        payload.update(extra_params)
     payload.update(_passthrough_params(None))
     if request_params:
         payload.update(_passthrough_params(request_params))
