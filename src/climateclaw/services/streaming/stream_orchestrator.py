@@ -89,7 +89,9 @@ async def stream_with_tools(
 
     # 1) First request
     tool_agg: dict[str, Any] = {}
-    tools = mcp.available_tools() if mcp and hasattr(mcp, "available_tools") else []
+    tools = (
+        await mcp.available_tools() if mcp and hasattr(mcp, "available_tools") else []
+    )
 
     if tools:
         resp = await acomplete_func(
@@ -179,7 +181,7 @@ async def stream_with_tools(
         normalization_error: str | None = None
 
         try:
-            input_schema = get_tool_input_schema(mcp, name) if mcp else None
+            input_schema = await get_tool_input_schema(mcp, name) if mcp else None
 
             if input_schema is None:
                 raise InvalidToolArguments(f"No input schema found for tool {name}.")
@@ -287,11 +289,29 @@ async def stream_with_tools(
 
             except asyncio.CancelledError:
                 # /stop or connection close has cancelled this task
+                log.warning(
+                    "Tool task cancelled; interrupting MCP execution for thread=%s",
+                    thread_id,
+                )
+
+                try:
+                    await asyncio.shield(
+                        mcp.cancel_tool_call(
+                            tool_name=name, reason="User requested cancellation"
+                        )
+                    )
+                except Exception:
+                    log.exception(
+                        "Failed to interrupt MCP session during cancellation."
+                    )
+
                 tool_task.cancel()
+                await asyncio.gather(tool_task, return_exceptions=True)
                 raise
 
             except Exception:
                 tool_task.cancel()
+                await asyncio.gather(tool_task, return_exceptions=True)
                 raise
 
             finally:

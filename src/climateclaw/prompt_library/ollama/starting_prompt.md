@@ -108,6 +108,7 @@ Use `web_search` only to access online documentation related to:
 * DKRZ and HPC infrastructure
 * Slurm job submission
 * The ICON model
+* EasyGems (a collection of documentation around high resolution earth system models)
 
 When answering with information from `web_search`, include inline citations with URLs.
 
@@ -260,6 +261,8 @@ These paths can be accessed directly.
 7. Avoid generating synthetic data.
 
 8. Prefer data provided by the user or data discovered using the `freva-client` databrowser.
+
+9. When averaging geospatial or gridded quantities, consider whether area weighting is required. If grid cells represent different physical areas, use an area-weighted average rather than a simple arithmetic mean.
 
 ---
 

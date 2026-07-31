@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 from dataclasses import dataclass
 from typing import Any
@@ -52,19 +51,13 @@ async def run_tool_via_mcp(
     except Exception:
         args = {"_raw": arguments_json}
 
-    server_name = mcp.get_server_from_tool(tool_name)
+    server_name = await mcp.get_server_from_tool(tool_name)
 
     log.info(f"Executing tool call:\nname : {tool_name}   arguments : {args}")
-    # Run the blocking MCP call in a thread so cancellation of the coroutine
-    # doesn’t block the event loop.
-    loop = asyncio.get_running_loop()
-    res = await loop.run_in_executor(
-        None,
-        lambda: mcp.call_tool(
-            server_name,
-            name=tool_name,
-            arguments=args,
-        ),
+    res = await mcp.call_tool(
+        server_name,
+        name=tool_name,
+        arguments=args,
     )
 
     return json.dumps(res)
@@ -231,7 +224,7 @@ def _format_validation_error(error: ValidationError) -> str:
     return error.message
 
 
-def get_tool_input_schema(
+async def get_tool_input_schema(
     mcp: McpManager,
     tool_name: str,
 ) -> dict[str, Any] | None:
@@ -239,7 +232,9 @@ def get_tool_input_schema(
     Find a tool's input schema from the OpenAI-style tool definitions
     cached by McpManager.
     """
-    for tool in mcp.available_tools():
+    available_tools = await mcp.available_tools()
+
+    for tool in available_tools:
         if not isinstance(tool, dict):
             continue
 
@@ -384,7 +379,13 @@ def parse_code_interpreter_result(result: dict, id: str, include_images: bool):
     yield FinalSummary(var_block=code_block, tool_messages=code_msgs, is_error=isError)
 
 
-def parse_generic_tool_result(result: dict, tool_name: str, id: str):
-    web_sv = SVToolOutput(output=result.get("result", ""), tool_name=tool_name, id=id)
+def parse_generic_tool_result(result: dict, tool_name: str, id: str, logger=None):
+    if result.get("result"):
+        out = result.get("result", "")
+    elif result.get("error"):
+        out = result.get("error", "")
+    else:
+        out = "Unknown response."
+    web_sv = SVToolOutput(output=out, tool_name=tool_name, id=id)
     web_msg = help_convert_sv_ccrm([web_sv])
     yield FinalSummary(var_block=[web_sv], tool_messages=web_msg, is_error=False)

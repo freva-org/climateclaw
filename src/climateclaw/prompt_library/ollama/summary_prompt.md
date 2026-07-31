@@ -43,6 +43,7 @@ For questions about the following topics, use the `web_search` tool to consult o
 * DKRZ infrastructure
 * HPC infrastructure
 * The ICON model
+* EasyGems
 
 When using `web_search`, always provide inline citations containing the URLs that were used.
 
