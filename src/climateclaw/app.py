@@ -103,7 +103,7 @@ def custom_openapi():
     return app.openapi_schema
 
 
-app.openapi = custom_openapi
+setattr(app, "openapi", custom_openapi)
 
 
 # CORS – mirror the permissive defaults (might need to adjust later)
