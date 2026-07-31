@@ -49,7 +49,7 @@ async def test_streamresponse_accepts_params_and_headers(
             r = await client.post(
                 "/api/chatbot/streamresponse",
                 json={"thread_id": "t-999", "input": "hello", "user_id": "alice"},
-                headers={**GOOD_HEADERS, "x-freva-config-path": "/tmp/config.yml"},
+                headers={**GOOD_HEADERS},
             )
             assert r.status_code == 200
             assert r.headers.get("content-type", "").startswith("application/x-ndjson")
