@@ -41,10 +41,17 @@ def get_thread_storage(request: Request) -> ThreadStorage:
     return storage
 
 
-def get_mcp_manager(authenticator: Authenticator, thread_id: str) -> McpManager | None:
+async def get_mcp_manager(
+    authenticator: Authenticator, thread_id: str
+) -> McpManager | None:
     """
     Build and eagerly initialize a manager so tools are ready for prompting.
     """
+    # Defaults to send; per-call headers (rest) are added at call time.
+    default_headers: dict[str, str] = {
+        "thread-id": thread_id,
+    }
+
     logger = configure_logging(
         __name__, thread_id=thread_id, user_id=authenticator.username
     )
@@ -54,9 +61,6 @@ def get_mcp_manager(authenticator: Authenticator, thread_id: str) -> McpManager 
     except ValueError as e:
         logger.warning("MCP manager initialization failed: %s", e)
         return None
-
-    # Defaults to send; per-call headers (rest) are added at call time.
-    default_headers: dict[str, str] = {}
 
     mgr = McpManager(
         servers=settings.AVAILABLE_MCP_SERVERS,
@@ -70,7 +74,7 @@ def get_mcp_manager(authenticator: Authenticator, thread_id: str) -> McpManager 
     extra_headers = get_mcp_headers(authenticator, cache)
 
     try:
-        mgr.initialize(extra_headers)
+        await mgr.initialize(extra_headers)
         logger.info("Successfully initialized the MCPManager!")
         return mgr
     except Exception as e:
