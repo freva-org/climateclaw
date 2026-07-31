@@ -16,7 +16,7 @@ services:
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
       CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
-    hostname: climateclaw-instance-${CLIMATECLAW_INSTANCE_NAME}
+    hostname: climateclaw-${CLIMATECLAW_INSTANCE_NAME}
     ports:
       - "${CLIMATECLAW_TARGET_PORT:-8502}:${CLIMATECLAW_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
       - "8600:${CLIMATECLAW_BACKEND_PORT:-8502}" # localhost:8600/docs give FastAPI docs
@@ -44,6 +44,7 @@ services:
       context: .
       dockerfile: docker/rag-server/Dockerfile
     env_file: .env
+    hostname: rag-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
       CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
@@ -61,6 +62,7 @@ services:
       context: .
       dockerfile: docker/code-server/Dockerfile
     env_file: .env
+    hostname: code-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
       CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
@@ -87,6 +89,7 @@ services:
       context: .
       dockerfile: docker/web-search-server/Dockerfile
     env_file: .env
+    hostname: web-search-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
       CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
@@ -107,7 +110,7 @@ services:
 
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
-    hostname: litellm-instance-${CLIMATECLAW_INSTANCE_NAME}
+    hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
       - ./litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
     command: >
@@ -129,7 +132,7 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    hostname: ollama-instance-${CLIMATECLAW_INSTANCE_NAME}
+    hostname: ollama-${CLIMATECLAW_INSTANCE_NAME}
     networks:
       - climateclaw
 

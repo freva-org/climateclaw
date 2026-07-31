@@ -119,7 +119,6 @@ Generated artifacts that persist across runs:
 - **Integration: code interpreter**: `CLIMATECLAW_CODE_SERVER_URL=http://localhost:8051 uv run pytest tests/full_integration_tests/test_code_interpreter.py -m integration`.
 - **Integration: web-search**: `CLIMATECLAW_WEB_SEARCH_SERVER_URL=http://localhost:8052 uv run pytest tests/full_integration_tests/test_web_search.py -m integration`.
 - **Interactive chat**: `uv run python scripts/dev_chat.py` starts a REPL that exercises the same orchestrator logic, persisting outputs to disk and optionally pointing at local MCP servers.
-<!-- - **Manual REPL**: `uv run python scripts/dev_chat.py` exercises the full orchestrator; handy for verifying prompts, tool wiring, and thread persistence. -->
 
 ## Scaling & HAProxy
 - **Prod scaling**: `./prod.sh up -d --build` generates `docker-compose.scaled.yml` + `haproxy.cfg` via `gen_compose.py`, then launches HAProxy in front of replicas.
