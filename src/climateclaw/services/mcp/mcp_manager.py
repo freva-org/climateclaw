@@ -218,7 +218,7 @@ class McpManager:
 
 
 def get_mcp_headers(
-    auth: Authenticator, cache: os.PathLike
+    auth: Authenticator, cache: os.PathLike, model: str
 ) -> dict[str, dict[str, str | None]]:
     mongodb_uri = get_mongodb_uri()
     access_token = auth.access_token
@@ -240,6 +240,7 @@ def get_mcp_headers(
         "plugin-code-search-server": {
             "Authorization": auth_header,
             "username": auth.username or "unknown_user",
+            "model": model,
         },
     }
     return headers

@@ -26,8 +26,6 @@ What this module does
 
 Differences from Rust (documented for future parity)
 ----------------------------------------------------
-1) GPT-5: placeholder — we do NOT use GPT-5-specific prompt files yet; we log a warning
-   and fall back to the baseline prompt set.
 """
 
 
@@ -111,7 +109,7 @@ def _load_prompts(
     model: str,
 ) -> dict[Literal["starting", "summary", "examples_path"], str]:
     """
-    Load raw prompt assets for the given model (with GPT-5 placeholder fallback).
+    Load raw prompt assets for the given model.
 
     Returns:
         {

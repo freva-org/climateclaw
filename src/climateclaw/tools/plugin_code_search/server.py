@@ -7,7 +7,6 @@ from urllib.parse import quote as urlquote
 
 import httpx
 from fastmcp import FastMCP
-from openai import OpenAI
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
@@ -15,15 +14,12 @@ from climateclaw.tools.header_gate import make_header_gate
 
 logger = configure_logging(__name__, named_log="plugin_code_search_server")
 
-OPENAI_API_KEY: Optional[str] = os.getenv("CLIMATECLAW_OPENAI_API_KEY")
-GITLAB_ACCESS_TOKEN: Optional[str] = os.getenv("CLIMATECLAW_GITLAB_ACCESS_TOKEN")
-
 HOST = os.getenv("CLIMATECLAW_MCP_HOST", "0.0.0.0")
 PORT = int(os.getenv("CLIMATECLAW_MCP_PORT", "8053"))
 PATH = os.getenv("CLIMATECLAW_MCP_PATH", "/mcp")  # standard path
 
 # ── Config ───────────────────────────────────────────────────────────────────
-PLUGIN_SEARCH_MODEL = "gpt-5.6-luna"  # model to use for plugin code search
+GITLAB_ACCESS_TOKEN: Optional[str] = os.getenv("CLIMATECLAW_GITLAB_ACCESS_TOKEN")
 GITLAB_BASE_URL = "https://gitlab.dkrz.de/api/v4"
 FREVA_PROJECT_NAMES = {
     "coming decade": "kd1418",
@@ -47,12 +43,14 @@ ALLOWED_FILE_EXTENSIONS = (
 MAX_FILE_SIZE_BYTES = 50_000  # skip files larger than this
 MAX_TOTAL_CODE_CHARS = 50_000  # truncate total fetched code after this limit
 MAX_RELEVANT_FILES = 3  # max files to fetch for relevance filtering
-PLUGIN_TOOL_USERNAME = "username"
+USERNAME = "username"
+MODEL = "model"
 
 
 # ─── App ────────────────────────────────────────────────────────────────────
 # Per-request header context
-user_ctx: ContextVar[str | None] = ContextVar("user_ctx", default=None)
+username_ctx: ContextVar[str | None] = ContextVar("username_ctx", default=None)
+model_ctx: ContextVar[str | None] = ContextVar("model_ctx", default=None)
 
 mcp = FastMCP("plugin-code-search-server")
 logger.info("Starting Freva-Plugin Code Search MCP server on %s:%s%s", HOST, PORT, PATH)
@@ -60,21 +58,39 @@ logger.info("Starting Freva-Plugin Code Search MCP server on %s:%s%s", HOST, POR
 # Start the MCP server using Streamable HTTP transport
 app = make_header_gate(
     mcp.http_app(),
-    ctx_list=[user_ctx],
-    header_name_list=[PLUGIN_TOOL_USERNAME],
+    ctx_list=[username_ctx, model_ctx],
+    header_name_list=[USERNAME, MODEL],
     logger=logger,
     mcp_path=PATH,
 )
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 def _get_user():
-    user = user_ctx.get()
+    user = username_ctx.get()
     if not user:
-        logger.warning(f"Missing required header '{PLUGIN_TOOL_USERNAME}'! ")
+        logger.warning(f"Missing required header '{USERNAME}'! ")
         return "unknown_user"
     else:
         return user
+
+
+def _get_model():
+    model = model_ctx.get()
+    if not model:
+        logger.warning(f"Missing required header '{MODEL}'! ")
+        return MODEL
+    else:
+        return model
+
+
+async def call_llm(prompt: str) -> str:
+    model = _get_model()
+    resp = await acomplete(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw_text = first_text(resp).strip()
+    return raw_text
 
 
 # ── GitLab helpers ────────────────────────────────────────────────
@@ -241,11 +257,7 @@ async def select_relevant_files(
         )
 
     try:
-        resp = await acomplete(
-            model=PLUGIN_SEARCH_MODEL,
-            messages=[{"role": "user", "content": selection_prompt}],
-        )
-        raw_text = first_text(resp).strip()
+        raw_text = await call_llm(selection_prompt)
         # Strip markdown code fences if present
         if raw_text.startswith("```"):
             raw_text = "\n".join(raw_text.split("\n")[1:])
@@ -380,11 +392,7 @@ async def auto_detect_plugin_project(user_query: str) -> tuple[str, str]:
         f"User query:\n{user_query}\n\n"
         f"Available plugin summaries:\n{plugin_descriptions}"
     )
-    resp = await acomplete(
-        model=PLUGIN_SEARCH_MODEL,
-        messages=[{"role": "user", "content": selection_prompt}],
-    )
-    raw_text = first_text(resp).strip()
+    raw_text = await call_llm(selection_prompt)
     plugin_name, project_name = raw_text.split(",")
     logger.info(
         "Auto-detected plugin '%s' and project '%s' for examining code base.",

@@ -70,7 +70,7 @@ settings = get_settings()
 # CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
 
-MODEL = "gpt-4.1"
+MODEL = "gpt-5.6-luna"  # model to use
 USER_ID = "janedoe"
 
 PRINT_DEBUG = False  # Print non-Assistant stream variants (ServerHint, etc.)
@@ -185,7 +185,7 @@ async def main() -> None:
         if user_input.lower().startswith("/new"):
             # Optional prefix: "/new"
             thread_id = await new_thread_id()
-            await prepare_for_stream(thread_id, user_id=USER_ID, Auth=Auth)
+            await prepare_for_stream(thread_id, user_id=USER_ID, Auth=Auth, model=MODEL)
             print(f"Started new conversation. Thread: {thread_id}")
             continue
 
@@ -194,6 +194,7 @@ async def main() -> None:
             thread_id=thread_id,
             user_id=USER_ID,
             Auth=Auth,
+            model=MODEL,
             Storage=Storage,
             read_history=read_history,
         )

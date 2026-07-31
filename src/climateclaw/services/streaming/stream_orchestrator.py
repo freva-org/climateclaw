@@ -325,6 +325,7 @@ async def prepare_for_stream(
     thread_id: str,
     user_id: str,
     Auth: Authenticator,
+    model: str,
     Storage: ThreadStorage | None = None,
     read_history: bool | None = False,
     logger=None,
@@ -342,7 +343,7 @@ async def prepare_for_stream(
     # Check if the conversation already exists in registry
     # If not initialize it, and add the first messages
     await initialize_conversation(
-        thread_id, user_id, messages=messages, auth=Auth, logger=log
+        thread_id, user_id, messages=messages, auth=Auth, model=model, logger=log
     )
 
     if messages:

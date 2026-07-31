@@ -57,7 +57,9 @@ RUNS = 5  # number of runs to perform
 CONCURRENCY = 5  # number of concurrent runs to perform
 
 PRINT_STREAM = False
-PRINT_PER_RUN_SUMMARY = False  # print summary of each run (status, prompt, tool call, tool output)
+PRINT_PER_RUN_SUMMARY = (
+    False  # print summary of each run (status, prompt, tool call, tool output)
+)
 SILENCE_LOGGING = True
 
 # run evaluation of tool calls (TP, FP, FN, accuracy, precision, recall)
@@ -103,6 +105,7 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
             thread_id=thread_id,
             user_id=USER_ID,
             Auth=Auth,
+            model=MODEL,
             Storage=Storage,
             read_history=read_history,
         )
@@ -330,7 +333,9 @@ async def main() -> None:
     # compute average metrics across all prompts
     if EVAL_TOOL_CALLS:
         avg_metrics = {k: sum(v) / len(v) for k, v in eval_dict.items()}
-        print(f"\n=== Average metrics [in %] across all prompts ({RUNS} runs/prompt) ===")
+        print(
+            f"\n=== Average metrics [in %] across all prompts ({RUNS} runs/prompt) ==="
+        )
         for k, v in avg_metrics.items():
             print(f"{k}: {v:.1%}")
 
