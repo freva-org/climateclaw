@@ -10,9 +10,10 @@ from fastmcp import FastMCP
 from openai import OpenAI
 
 from climateclaw.core.logging_setup import configure_logging
+from climateclaw.services.streaming.litellm_client import acomplete, first_text
 from climateclaw.tools.header_gate import make_header_gate
 
-logger = configure_logging(__name__, named_log="freva_plugin_server")
+logger = configure_logging(__name__, named_log="plugin_code_search_server")
 
 OPENAI_API_KEY: Optional[str] = os.getenv("CLIMATECLAW_OPENAI_API_KEY")
 GITLAB_ACCESS_TOKEN: Optional[str] = os.getenv("CLIMATECLAW_GITLAB_ACCESS_TOKEN")
@@ -22,7 +23,7 @@ PORT = int(os.getenv("CLIMATECLAW_MCP_PORT", "8053"))
 PATH = os.getenv("CLIMATECLAW_MCP_PATH", "/mcp")  # standard path
 
 # ── Config ───────────────────────────────────────────────────────────────────
-PLUGIN_SEARCH_MODEL = "gpt-5.4-mini"
+PLUGIN_SEARCH_MODEL = "gpt-5.6-luna"  # model to use for plugin code search
 GITLAB_BASE_URL = "https://gitlab.dkrz.de/api/v4"
 FREVA_PROJECT_NAMES = {
     "coming decade": "kd1418",
@@ -202,7 +203,7 @@ def fetch_plugin_code(
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def select_relevant_files(
+async def select_relevant_files(
     plugin: str, context: str, file_paths: list[str], dep: bool = False
 ) -> list[str]:
     """
@@ -240,15 +241,11 @@ def select_relevant_files(
         )
 
     try:
-        selection_resp = client.responses.create(
+        resp = await acomplete(
             model=PLUGIN_SEARCH_MODEL,
-            input=[{"role": "user", "content": selection_prompt}],
-            stream=False,
+            messages=[{"role": "user", "content": selection_prompt}],
         )
-        raw_text = selection_resp.output_text.strip()
-        logger.debug(
-            "LLM file selection response for plugin '%s': %s", plugin, raw_text
-        )
+        raw_text = first_text(resp).strip()
         # Strip markdown code fences if present
         if raw_text.startswith("```"):
             raw_text = "\n".join(raw_text.split("\n")[1:])
@@ -265,7 +262,7 @@ def select_relevant_files(
     return [p for p in selected_files if p in set(file_paths)][:MAX_RELEVANT_FILES]
 
 
-def collect_plugin_context(plugin: str, project_id: int, user_query: str) -> str:
+async def collect_plugin_context(plugin: str, project_id: int, user_query: str) -> str:
     """
     Three-stage context retrieval of code base:
         1. Ask LLM which files are most relevant for the user's query.
@@ -277,7 +274,7 @@ def collect_plugin_context(plugin: str, project_id: int, user_query: str) -> str
 
     def _log_stage(stage: str, files: list[str]):
         logger.info(
-            "%s retrieval stage selected %d/%d files for plugin '%s': %s",
+            "LLM-based %s retrieval stage selected %d/%d files for plugin '%s': %s",
             stage,
             len(files),
             len(file_paths),
@@ -291,7 +288,7 @@ def collect_plugin_context(plugin: str, project_id: int, user_query: str) -> str
         return "(repository is empty)"
 
     # ── Stage 1: ask the LLM to select relevant files ─────────────────────────
-    base_files = select_relevant_files(plugin, user_query, file_paths)
+    base_files = await select_relevant_files(plugin, user_query, file_paths)
     _log_stage("Initial", base_files)
 
     # ── Stage 2: fetch selected files ────────────────────────────────────────
@@ -299,7 +296,7 @@ def collect_plugin_context(plugin: str, project_id: int, user_query: str) -> str
 
     # ── Stage 3: resolve dependencies ────────────────────────────────────────
     tree_remaining = [p for p in file_paths if p not in set(base_files)]
-    dep_files = select_relevant_files(plugin, init_code, tree_remaining, dep=True)
+    dep_files = await select_relevant_files(plugin, init_code, tree_remaining, dep=True)
     _log_stage("Dependency", dep_files)
     if not dep_files:
         return init_code
@@ -361,7 +358,7 @@ def validate_plugin_call(
     return True, "Validation successful"
 
 
-def auto_detect_plugin_project(user_query: str) -> tuple[str, str]:
+async def auto_detect_plugin_project(user_query: str) -> tuple[str, str]:
     """
     Attempt to automatically detect the plugin and project names from the user's query
     by making a call to the LLM.
@@ -383,13 +380,12 @@ def auto_detect_plugin_project(user_query: str) -> tuple[str, str]:
         f"User query:\n{user_query}\n\n"
         f"Available plugin summaries:\n{plugin_descriptions}"
     )
-    selection_resp = client.responses.create(
+    resp = await acomplete(
         model=PLUGIN_SEARCH_MODEL,
-        input=[{"role": "user", "content": selection_prompt}],
-        stream=False,
+        messages=[{"role": "user", "content": selection_prompt}],
     )
-
-    plugin_name, project_name = selection_resp.output_text.strip().split(",")
+    raw_text = first_text(resp).strip()
+    plugin_name, project_name = raw_text.split(",")
     logger.info(
         "Auto-detected plugin '%s' and project '%s' for examining code base.",
         plugin_name,
@@ -399,23 +395,23 @@ def auto_detect_plugin_project(user_query: str) -> tuple[str, str]:
 
 
 @mcp.tool()
-def plugin_code_search(user_query: str) -> str:
+async def plugin_code_search(user_query: str) -> str:
     """
     Search and analyze the source code of a Freva data analysis plugin for decadal climate
     predictions. Use this where repository-grounded code context could be used to answer the question, i.e, when the user
     - explicitly asks how a plugin's internal logic works, how to run or
     configure it, or when code snippets from the plugin should be translated or
     adapted into Python examples;
-    - asks asks a specific or complex climate-analysis question involving regional, decadal, or extreme-event analysis (e.g. lead time selection, hindcast skill scoring, bias adjustment, downscaling, extreme-event indices).
+    - asks about a specific climate or weather-related question involving regional, decadal, or extreme-event analysis (lead time selection, hindcast skill scoring, precipitation indices, crop impact, heat waves/HWMID, climate/extreme indices, region matching, urban heatwave extraction, precipitation disaggregation, and plugin creation).
 
     Args:
-        user_query (str): What the user wants to know about or do w.r.t. decadal climate prediction plugins.
+        user_query (str): What the user wants to know about or do with a dedicated Freva plugin regarding climate or weather data analysis.
 
     Returns:
         str: Relevant code context fetched from source files of the plugin repository;
         or an error message if the plugin call is not authorized / code retrieval fails.
     """
-    plugin_name, project_name = auto_detect_plugin_project(user_query)
+    plugin_name, project_name = await auto_detect_plugin_project(user_query)
     project = FREVA_PROJECT_NAMES.get(project_name.strip().lower(), "")
     plugin = plugin_name.strip().lower()
 
@@ -426,11 +422,9 @@ def plugin_code_search(user_query: str) -> str:
         return message
 
     # Fetch the plugin code and return it with a header
-    logger.info(
-        "Fetching source code for plugin '%s' with query: %s", plugin, user_query
-    )
+    logger.info("Fetching source code for plugin '%s'", plugin)
     try:
-        code_content = collect_plugin_context(plugin, project_id, user_query)  # type: ignore
+        code_content = await collect_plugin_context(plugin, project_id, user_query)  # type: ignore
     except Exception as e:
         logger.warning("Failed to fetch plugin code for '%s': %s", plugin, e)
         return f"Failed to retrieve source code for plugin '{plugin}': {e}"

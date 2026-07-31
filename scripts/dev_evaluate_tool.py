@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 from collections import defaultdict
@@ -14,7 +15,7 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-os.environ["CLIMATECLAW_DEV"] = "0"  # "1"/"true"/"yes" means dev mode
+os.environ["CLIMATECLAW_DEV"] = "1"  # "1"/"true"/"yes" means dev mode
 os.environ["CLIMATECLAW_LITE_LLM_ADDRESS"] = "http://localhost:4000"
 os.environ["CLIMATECLAW_RAG_SERVER_URL"] = "http://localhost:8050"
 os.environ["CLIMATECLAW_CODE_SERVER_URL"] = "http://localhost:8051"
@@ -50,38 +51,32 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headl
 # CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
 
-MODEL = "gpt-4.1"  # model to benchmark
+MODEL = "gpt-5.6-luna"  # model to benchmark
 USER_ID = "janedoe"
-RUNS = 1  # number of runs to perform
-CONCURRENCY = 1  # ← set to 1 for clean mode
+RUNS = 5  # number of runs to perform
+CONCURRENCY = 5  # number of concurrent runs to perform
 
 PRINT_STREAM = False
-PRINT_PER_RUN_SUMMARY = False
+PRINT_PER_RUN_SUMMARY = False  # print summary of each run (status, prompt, tool call, tool output)
 SILENCE_LOGGING = True
 
 # run evaluation of tool calls (TP, FP, FN, accuracy, precision, recall)
 EVAL_TOOL_CALLS = True
-PLOT_METRICS = False  # plot metrics as bar charts at the end of the benchmark
+PLOT_METRICS = True  # plot metrics as bar charts at the end of the benchmark
 
 ## direct questions about a plugin + indirect question that is more widely phrased, but should still trigger the plugin
-BENCHMARK = {
-    "leadtimeselektor": [
-        "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
-        "How can I best extract lead times from decadal climate predictions?",
-    ],
-    # "problems": [
-    #     "What is the logic of the 'problems' plugin?",
-    #     "I want to perform skill score evaluation for climate data against observations. How can I do that?",
-    # ],
-    # "recalibration": [
-    #     "How does the 'recalibration' plugin work?",
-    #     "How can I best calibrate climate model outputs to match observed data distributions?",
-    # ],
-}
-ALL_PLUGINS = ["leadtimeselektor", "problems", "cvprepare", "recalibration", "terciles"]
+path_to_prompts = Path(__file__).parent / "evaluation" / "benchmark_prompts.json"
+with open(path_to_prompts, "r", encoding="utf-8") as f:
+    BENCHMARK = json.load(f)
+
+path_to_plugins = (
+    Path(__file__).parents[1]
+    / "src/climateclaw/tools/plugin_code_search/available_plugins.md"
+)
+plugin_overview = path_to_plugins.read_text(encoding="utf-8")
+ALL_PLUGINS = re.findall(r"\*\*([^*]+)\*\*", plugin_overview)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# TODO: make eval faster, e.g. by omitting printed logs!
 log = configure_logging("dev_script")
 
 
@@ -130,10 +125,8 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
                 storage=Storage,
             ):
                 # if getattr(variant, "variant", None) == "Assistant":
-                #     txt = getattr(variant, "text", "") or ""
-                #     chunk_count += 1
-                #     char_count += len(txt)
-                #     answer += txt
+                #     txt_piece = getattr(variant, "text", "") or ""
+                #     answer += txt_piece
 
                 if getattr(variant, "variant", None) == "ToolCall":
                     tool_name = getattr(variant, "tool_name", "")
@@ -154,9 +147,10 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
 
         if PRINT_PER_RUN_SUMMARY:
             print(f"Status: {status},\t Duration: {duration:.2f}s")
+            print(f"Prompt: {prompt}")
             print(f"called tool: {tool_name}")
             print(f"  tool args: {tool_args}")
-            print(f"  tool output: {tool_output}")
+            print(f"  tool output: {tool_output}\n")
 
         return RunResult(
             idx,
@@ -234,12 +228,12 @@ def _evaluate_tool_call_results(
     )
 
     return {
-        "true_pos_tool": true_pos_tool,
-        "false_pos_tool": false_pos_tool,
-        "false_neg_tool": false_neg_tool,
-        "true_pos_plugin": true_pos_plugin,
-        "false_pos_plugin": false_pos_plugin,
-        "false_neg_plugin": false_neg_plugin,
+        "true_pos_tool": true_pos_tool / RUNS,
+        "false_pos_tool": false_pos_tool / RUNS,
+        "false_neg_tool": false_neg_tool / RUNS,
+        "true_pos_plugin": true_pos_plugin / RUNS,
+        "false_pos_plugin": false_pos_plugin / RUNS,
+        "false_neg_plugin": false_neg_plugin / RUNS,
         "accuracy_tool": accuracy_tool,
         "precision_tool": precision_tool,
         "recall_tool": recall_tool,
@@ -257,8 +251,6 @@ async def run_benchmark_for_prompt(
     tasks = [asyncio.create_task(_run_once(i, sem, prompt)) for i in range(RUNS)]
     results = await asyncio.gather(*tasks)
     assert results, "No results returned from benchmark runs"
-
-    ok = results  # all runs are considered successful
     tool_names = [r.tool_name for r in results]
     tool_args = [r.tool_args for r in results]
     tool_outputs = [r.tool_output for r in results]
@@ -273,7 +265,7 @@ async def run_benchmark_for_prompt(
     return eval_dict
 
 
-def plot_metrics(avg_metrics: dict[str, float]) -> None:
+def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
     # pie chart for tool/plugin TP, FP, FN
     fig, axs = plt.subplots(1, 2, figsize=(12, 6))
     tool_metrics = {
@@ -295,7 +287,7 @@ def plot_metrics(avg_metrics: dict[str, float]) -> None:
     )
     plt.tight_layout()
     plt.subplots_adjust(wspace=0.25)
-    plt.savefig("tool_evaluation_pie_charts.png")
+    plt.savefig(save_dir / "tool_evaluation_pie_charts.png")
 
     # bar chart for tool/plugin accuracy, precision, recall
     fig, axs = plt.subplots(1, 2, figsize=(12, 6))
@@ -318,7 +310,7 @@ def plot_metrics(avg_metrics: dict[str, float]) -> None:
     )
     plt.tight_layout()
     plt.subplots_adjust(wspace=0.25)
-    plt.savefig("tool_evaluation_metrics.png")
+    plt.savefig(save_dir / "tool_evaluation_metrics.png")
 
 
 async def main() -> None:
@@ -326,25 +318,27 @@ async def main() -> None:
         silence_logger()
 
     eval_dict = defaultdict(list)
-    prompt_count = sum(len(prompts) for prompts in BENCHMARK.values())
+    prompt_count = sum(len(prompts) * RUNS for prompts in BENCHMARK.values())
     with tqdm(total=prompt_count, desc="Evaluation", unit="prompt") as progress:
         for plugin, prompts in BENCHMARK.items():
             progress.set_postfix_str(f"plugin={plugin}")
             for prompt in prompts:
                 # print(f"\n=== Running benchmark for prompt: {prompt} ===")
                 eval_dict = await run_benchmark_for_prompt(prompt, plugin, eval_dict)
-                progress.update()
+                progress.update(RUNS)
 
     # compute average metrics across all prompts
     if EVAL_TOOL_CALLS:
         avg_metrics = {k: sum(v) / len(v) for k, v in eval_dict.items()}
-        print(f"\n=== Average metrics across all prompts ({RUNS} runs per prompt) ===")
+        print(f"\n=== Average metrics [in %] across all prompts ({RUNS} runs/prompt) ===")
         for k, v in avg_metrics.items():
-            print(f"{k}: {v:.2f}")
+            print(f"{k}: {v:.1%}")
 
     # plot metrics as bar charts (one for tool, one for plugin)
     if PLOT_METRICS and EVAL_TOOL_CALLS:
-        plot_metrics(avg_metrics)
+        eval_dir = Path(__file__).parent / "eval_results"
+        eval_dir.mkdir(parents=True, exist_ok=True)
+        plot_metrics(avg_metrics, eval_dir)
 
 
 if __name__ == "__main__":
