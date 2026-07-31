@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from .api import chatbot, static
 from .core.logging_setup import configure_logging
@@ -62,6 +63,47 @@ app = FastAPI(
     openapi_url="/api/chatbot/openapi.json",
     lifespan=lifespan,
 )
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        routes=app.routes,
+    )
+
+    security_schemes = openapi_schema.setdefault("components", {}).setdefault(
+        "securitySchemes", {}
+    )
+    security_schemes["BearerAuth"] = {
+        "type": "http",
+        "scheme": "bearer",
+    }
+    security_schemes["FrevaRestUrl"] = {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-freva-rest-url",
+    }
+
+    for path, path_item in openapi_schema.get("paths", {}).items():
+        if not path.startswith("/api/chatbot/"):
+            continue
+
+        for operation in path_item.values():
+            if not isinstance(operation, dict):
+                continue
+            operation.setdefault("security", []).append(
+                {"BearerAuth": [], "FrevaRestUrl": []}
+            )
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 
 # CORS – mirror the permissive defaults (might need to adjust later)
