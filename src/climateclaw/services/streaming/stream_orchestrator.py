@@ -116,15 +116,19 @@ async def stream_with_tools(
             tc_list = delta.get("tool_calls") or []
             if tc_list:
                 accumulate_tool_calls({"choices": [{"delta": delta}]}, tool_agg)
-                tool_name = (
-                    tool_agg.get("by_index", [])[0].get("function").get("name")
-                    if tool_agg
-                    else None
-                )
+                by_index = tool_agg.get("by_index") or {}
+
                 for tc in tc_list:
+                    idx = tc.get("index")
+                    aggregated_tc = by_index.get(idx, {})
+
                     fn = tc.get("function") or {}
-                    call_id = tc.get("id", call_id)
+                    aggregated_fn = aggregated_tc.get("function") or {}
+
+                    tool_name = fn.get("name") or aggregated_fn.get("name")
+                    call_id = tc.get("id") or aggregated_tc.get("id") or call_id
                     args_chunk = fn.get("arguments", "")
+
                     if (
                         args_chunk
                         and tool_name == "code_interpreter"
