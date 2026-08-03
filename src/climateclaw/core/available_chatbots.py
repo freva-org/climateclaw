@@ -156,7 +156,7 @@ def default_chatbot_local() -> str:
     """
     Default local chatbot.
     """
-    return "mistral-small3.2:24b"
+    return "gemma4:31b"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
