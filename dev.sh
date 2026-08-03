@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ------------------------------------------------------------------
-# Simple dev launcher for freva-gpt-backend-py
+# Simple dev launcher for ClimateClaw
 #
 # Custom flags (handled here, NOT passed to docker compose):
 #   --debug / --DEBUG          -> DEBUG=1
@@ -19,7 +19,7 @@ Usage: ./dev.sh [OPTIONS] [DOCKER_COMPOSE_ARGS...]
 
 Custom options:
   -h, --help        Show this help message
-  --debug, --DEBUG  Enable debug mode (FREVAGPT_DEBUG=1)
+  --debug, --DEBUG  Enable debug mode (CLIMATECLAW_DEBUG=1)
   --debug=VALUE     Set debug explicitly, e.g. --debug=0 or --debug=1
   --no-debug        Disable debug mode
   --scale           Generate and use docker-compose.dev.scaled.yml
@@ -37,10 +37,10 @@ Notes:
 EOF
 }
 
-# Set FREVAGPT_DEV flag for everything in this session
-export FREVAGPT_DEV=1
+# Set CLIMATECLAW_DEV flag for everything in this session
+export CLIMATECLAW_DEV=1
 
-FREVAGPT_DEBUG="${FREVAGPT_DEBUG:-0}"
+CLIMATECLAW_DEBUG="${CLIMATECLAW_DEBUG:-0}"
 COMPOSE_FILE="docker-compose.dev.yml"
 COMPOSE_ARGS=()
 
@@ -48,15 +48,15 @@ for arg in "$@"; do
   case "$arg" in
     # Enable debug
     --debug|--DEBUG)
-      FREVAGPT_DEBUG=1
+      CLIMATECLAW_DEBUG=1
       ;;
     # Explicit value: --debug=0 / --DEBUG=1 etc.
     --debug=*|--DEBUG=*)
-      FREVAGPT_DEBUG="${arg#*=}"
+      CLIMATECLAW_DEBUG="${arg#*=}"
       ;;
     # Disable debug
     --no-debug)
-      FREVAGPT_DEBUG=0
+      CLIMATECLAW_DEBUG=0
       ;;
     # Help
     -h|--help)
@@ -76,9 +76,10 @@ for arg in "$@"; do
 done
 
 # Export for docker compose / containers
-export FREVAGPT_DEBUG
+export CLIMATECLAW_DEBUG
 
-echo "[dev.sh] Using ${COMPOSE_FILE} with DEBUG=${FREVAGPT_DEBUG}"
+echo "[dev.sh] Using ${COMPOSE_FILE} with DEBUG=${CLIMATECLAW_DEBUG}"
 echo "[dev.sh] docker compose -f ${COMPOSE_FILE} ${COMPOSE_ARGS[*]}"
 
-docker compose -f ${COMPOSE_FILE} "${COMPOSE_ARGS[@]}"
+docker compose -f "${COMPOSE_FILE}" --profile build-only build climateclaw-base
+docker compose -f "${COMPOSE_FILE}" "${COMPOSE_ARGS[@]}"

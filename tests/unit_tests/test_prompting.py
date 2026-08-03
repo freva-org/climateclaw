@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from src.core import prompting as P
+from climateclaw.core import prompting as P
 
 
 def test_get_entire_prompt_uses_assets_from_dir(tmp_path: Path, monkeypatch):

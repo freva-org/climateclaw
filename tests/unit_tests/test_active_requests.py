@@ -1,6 +1,6 @@
 import pytest
 
-from src.tools.active_requests import (
+from climateclaw.tools.active_requests import (
     ACTIVE_REQUESTS,
     RequestCancelled,
     tracked_request,
