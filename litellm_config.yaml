@@ -20,6 +20,12 @@ model_list:
       api_base: "http://ollama:11434"
     model_info:
       supports_function_calling: true
+  - model_name: "gemma4:26b"
+    litellm_params:
+      model: "ollama_chat/gemma4:26b"
+      api_base: "http://ollama:11434"
+    model_info:
+      supports_function_calling: true
   - model_name: "ministral-3:8b"
     litellm_params:
       model: "ollama_chat/ministral-3:8b"
