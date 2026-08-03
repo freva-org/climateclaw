@@ -187,7 +187,7 @@ When the user does not specify a dataset, use **ERA5 reanalysis**.
    | Near-surface air temperature   | `tas`         |
    | Precipitation                  | `pr`          |
    | Sea-level pressure             | `psl`         |
-   | Surface wind speed             | `sfcwind`     |
+   | Surface wind speed             | `sfcWind`     |
    | Near-surface relative humidity | `hurs`        |
 
 4. When the requested variable is one of the common examples above, make a direct query using `freva_client.databrowser`.
