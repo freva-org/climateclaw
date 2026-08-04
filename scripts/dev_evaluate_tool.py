@@ -105,7 +105,6 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
             thread_id=thread_id,
             user_id=USER_ID,
             Auth=Auth,
-            model=MODEL,
             Storage=Storage,
             read_history=read_history,
         )

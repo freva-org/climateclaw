@@ -4,6 +4,7 @@ import os
 import threading
 from typing import Any, Literal
 
+from climateclaw.core.available_chatbots import default_chatbot
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.settings import get_settings
 from climateclaw.services.authentication.auth import Authenticator
@@ -218,7 +219,7 @@ class McpManager:
 
 
 def get_mcp_headers(
-    auth: Authenticator, cache: os.PathLike, model: str
+    auth: Authenticator, cache: os.PathLike
 ) -> dict[str, dict[str, str | None]]:
     mongodb_uri = get_mongodb_uri()
     access_token = auth.access_token
@@ -240,7 +241,7 @@ def get_mcp_headers(
         "plugin-code-search-server": {
             "Authorization": auth_header,
             "username": auth.username or "unknown_user",
-            "model": model,
+            "model": default_chatbot(),
         },
     }
     return headers

@@ -190,7 +190,6 @@ async def streamresponse(
             thread_id=thread_id,
             user_id=user_name,
             Auth=auth,
-            model=model_name,
             Storage=storage,
             read_history=read_history,
             logger=logger,

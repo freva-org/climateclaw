@@ -41,7 +41,7 @@ def get_thread_storage(request: Request) -> ThreadStorage:
     return storage
 
 
-def get_mcp_manager(authenticator: Authenticator, thread_id: str, model: str) -> McpManager | None:
+def get_mcp_manager(authenticator: Authenticator, thread_id: str) -> McpManager | None:
     """
     Build and eagerly initialize a manager so tools are ready for prompting.
     """
@@ -67,7 +67,7 @@ def get_mcp_manager(authenticator: Authenticator, thread_id: str, model: str) ->
 
     cache = CACHE_ROOT / thread_id
 
-    extra_headers = get_mcp_headers(authenticator, cache, model)
+    extra_headers = get_mcp_headers(authenticator, cache)
 
     try:
         mgr.initialize(extra_headers)

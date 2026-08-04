@@ -74,7 +74,6 @@ async def initialize_conversation(
     user_id: str,
     messages: list[StreamVariant],
     auth: Authenticator,
-    model: str,
     logger=None,
 ):
     """
@@ -85,7 +84,7 @@ async def initialize_conversation(
     log = logger or configure_logging(__name__, thread_id=thread_id, user_id=user_id)
     now = datetime.now(timezone.utc)
 
-    mcp_mgr = get_mcp_manager(authenticator=auth, thread_id=thread_id, model=model)
+    mcp_mgr = get_mcp_manager(authenticator=auth, thread_id=thread_id)
 
     # Precreate the conversation object to reduce time spent under lock
     maybe_new_conv = ActiveConversation(
