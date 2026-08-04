@@ -70,6 +70,12 @@ PLOT_METRICS = True  # plot metrics as bar charts at the end of the benchmark
 path_to_prompts = Path(__file__).parent / "evaluation" / "benchmark_prompts.json"
 with open(path_to_prompts, "r", encoding="utf-8") as f:
     BENCHMARK = json.load(f)
+# BENCHMARK = {
+#     "leadtimeselektor": [
+#     "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
+#     "How are you?",
+#     ]
+# }
 
 path_to_plugins = (
     Path(__file__).parents[1]
@@ -293,6 +299,9 @@ def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
 
     # bar chart for tool/plugin accuracy, precision, recall
     fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+    for ax in axs:
+        ax.set_ylim(0, 1)
+        ax.set_ylabel("Metric Value", labelpad=12)
     tool_metrics = {
         "Accuracy": avg_metrics.get("accuracy_tool", 0),
         "Precision": avg_metrics.get("precision_tool", 0),
@@ -311,7 +320,7 @@ def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
         f"Evaluation Metrics for 'plugin_code_search' tool (Model: {MODEL}, Runs/Query: 30)"
     )
     plt.tight_layout()
-    plt.subplots_adjust(wspace=0.25)
+    plt.subplots_adjust(wspace=0.3)
     plt.savefig(save_dir / "tool_evaluation_metrics.png")
 
 
