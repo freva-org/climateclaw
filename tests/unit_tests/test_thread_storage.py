@@ -36,7 +36,7 @@ async def test_save_and_read_thread(monkeypatch, patch_mongodb, GOOD_HEADERS):
     await storage.save_thread(
         thread_id=tid,
         user_id=user_id,
-        content=[SVUser(text="hi")],
+        content=[SVUser(text="hi", model="gpt-4.1")],
         append_to_existing=True,
     )
     await storage.save_thread(
@@ -54,6 +54,7 @@ async def test_save_and_read_thread(monkeypatch, patch_mongodb, GOOD_HEADERS):
     kinds = [v.get("variant") for v in conv]
     # Prompt, User, Assistant, StreamEnd (no unexpected extra StreamEnd)
     assert kinds == ["Prompt", "User", "Assistant", "StreamEnd"]
+    assert conv[1] == {"variant": "User", "content": "hi", "model": "gpt-4.1"}
     assert coll.storage[tid]["content"] == conv
 
     # Check the user_id is stored correctly

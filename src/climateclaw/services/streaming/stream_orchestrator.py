@@ -396,7 +396,7 @@ async def run_stream(
     log = logger or DEFAULT_LOGGER
 
     # Append user content
-    user_v = SVUser(text=user_input or "")
+    user_v = SVUser(text=user_input or "", model=model)
     await add_to_conversation(
         thread_id, [user_v], storage=storage, store_thread=store_thread
     )

@@ -72,6 +72,9 @@ class SVPrompt(_SVBase):
 class SVUser(_SVBase):
     variant: Literal["User"] = Field(default="User")
     text: str
+    model: str = Field(
+        default="", description="Model used to respond to this user request"
+    )
 
 
 class SVAssistant(_SVBase):
@@ -431,7 +434,11 @@ def from_json_to_sv(obj: dict) -> StreamVariant:
             text="" if c is None else str(c), feedback="" if f is None else str(f)
         )
     if v == USER:
-        return SVUser(text="" if c is None else str(c))
+        m = obj.get("model")
+        return SVUser(
+            text="" if c is None else str(c),
+            model="" if m is None else str(m),
+        )
     if v == PROMPT:
         return SVPrompt(payload="" if c is None else str(c))
     if v == SERVER_HINT:
@@ -499,7 +506,10 @@ def from_sv_to_json(v: StreamVariant) -> SVDict:
     d = v.model_dump()
     kind = d["variant"]
     if kind == USER:
-        return {"variant": USER, "content": d["text"]}
+        out = {"variant": USER, "content": d["text"]}
+        if d.get("model"):
+            out["model"] = d["model"]
+        return out
     if kind == ASSISTANT:
         if d.get("feedback"):
             return {

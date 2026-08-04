@@ -61,19 +61,36 @@ def test_normalize_conv_for_prompt_filters_meta():
 
 def test_ccrm_conversion_basic():
     conv: list[StreamVariant] = [
-        SVUser(text="hi"),
+        SVUser(text="hi", model="gpt-4.1"),
         SVAssistant(text="hello"),
         SVStreamEnd(message="Done"),
     ]
     msgs = help_convert_sv_ccrm(conv, include_images=False, include_meta=False)
     assert msgs[0]["role"] == "user"
+    assert msgs[0]["content"] == "hi"
+    assert "model" not in msgs[0]
     assert msgs[1]["role"] == "assistant"
     assert "stream_end" not in (m.get("name") for m in msgs if "name" in m)
 
 
-def test_wire_roundtrip():
+def test_code_wire_roundtrip():
     original = SVCode(code="x=1", id="cid")
     wire = from_sv_to_json(original)
     assert wire == {"variant": "Code", "content": "x=1", "id": "cid"}
     back = from_json_to_sv(wire)
     assert back == original  # pydantic models are comparable
+
+
+def test_user_wire_roundtrip_includes_model():
+    original = SVUser(text="hi", model="gpt-4.1")
+    wire = from_sv_to_json(original)
+    assert wire == {"variant": "User", "content": "hi", "model": "gpt-4.1"}
+    back = from_json_to_sv(wire)
+    assert back == original
+
+
+def test_user_wire_roundtrip_without_model_is_backwards_compatible():
+    wire = {"variant": "User", "content": "hi"}
+    back = from_json_to_sv(wire)
+    assert back == SVUser(text="hi")
+    assert from_sv_to_json(back) == wire
