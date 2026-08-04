@@ -22,7 +22,7 @@ services:
       - "8600:${CLIMATECLAW_BACKEND_PORT:-8502}" # localhost:8600/docs give FastAPI docs
       - "${CLIMATECLAW_DEBUG_PORT:-5678}:${CLIMATECLAW_DEBUG_PORT:-5678}" # Port for debugpy
     volumes:
-      - /Users/fischer/DKRZ/Coding/ClimateClaw/decadal_data:/app/decadal_data:ro # mounts local ClimateClaw directory for easy access to code and resources from code-server
+      - /Users/fischer/DKRZ/Coding/ClimateClaw/work:/work:ro # mounts sshfs work directory for easy access to code and resources from climateclaw container
       - ./cache/:/app/cache
       - ./logs/:/app/logs
     networks:
@@ -74,7 +74,7 @@ services:
     ports:
       - 8051:8051
     volumes:
-      - /Users/fischer/DKRZ/Coding/ClimateClaw/decadal_data:/app/decadal_data:ro # mounts local ClimateClaw directory for easy access to code and resources from code-server
+      - /Users/fischer/DKRZ/Coding/ClimateClaw/work:/work:ro
       - ./cache/:/app/cache
       - ./logs/:/app/logs
     networks:

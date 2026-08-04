@@ -53,8 +53,8 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headl
 
 MODEL = "gpt-5.6-luna"  # model to benchmark
 USER_ID = "janedoe"
-RUNS = 5  # number of runs to perform
-CONCURRENCY = 5  # number of concurrent runs to perform
+RUNS = 10  # number of runs to perform
+CONCURRENCY = 10  # number of concurrent runs to perform
 
 PRINT_STREAM = False
 PRINT_PER_RUN_SUMMARY = (
@@ -286,10 +286,10 @@ def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
     axs[1].pie(plugin_metrics.values(), labels=plugin_metrics.keys(), autopct="%1.1f%%")
     axs[1].set_title("Plugin Call Metrics")
     plt.suptitle(
-        f"Evaluation Metrics for 'plugin_code_search' tool (Model: {MODEL}, Runs/Query: {RUNS})"
+        f"Evaluation Metrics for 'plugin_code_search' tool (Model: {MODEL}, Runs/Query: 30)"
     )
     plt.tight_layout()
-    plt.subplots_adjust(wspace=0.25)
+    plt.subplots_adjust(wspace=0.4)
     plt.savefig(save_dir / "tool_evaluation_pie_charts.png")
 
     # bar chart for tool/plugin accuracy, precision, recall
@@ -309,7 +309,7 @@ def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
     axs[1].bar(plugin_metrics.keys(), plugin_metrics.values())
     axs[1].set_title("Plugin Metrics")
     plt.suptitle(
-        f"Evaluation Metrics for 'plugin_code_search' tool (Model: {MODEL}, Runs/Query: {RUNS})"
+        f"Evaluation Metrics for 'plugin_code_search' tool (Model: {MODEL}, Runs/Query: 30)"
     )
     plt.tight_layout()
     plt.subplots_adjust(wspace=0.25)
@@ -341,7 +341,7 @@ async def main() -> None:
 
     # plot metrics as bar charts (one for tool, one for plugin)
     if PLOT_METRICS and EVAL_TOOL_CALLS:
-        eval_dir = Path(__file__).parent / "eval_results"
+        eval_dir = Path(__file__).parent / "evaluation"
         eval_dir.mkdir(parents=True, exist_ok=True)
         plot_metrics(avg_metrics, eval_dir)
 
