@@ -260,12 +260,12 @@ def main():
 
     compose_path = sys.argv[1]
     project = (
-        sys.argv[2] if len(sys.argv) > 2 else os.environ.get("FREVAGPT_PROJECT_NAME")
+        sys.argv[2] if len(sys.argv) > 2 else os.environ.get("CLIMATECLAW_PROJECT_NAME")
     )
 
     if project:
-        os.environ["FREVAGPT_PROJECT_NAME"] = project
-        os.environ["FREVAGPT_PROJECT_WEBSITE"] = website_for_project(project)
+        os.environ["CLIMATECLAW_PROJECT_NAME"] = project
+        os.environ["CLIMATECLAW_PROJECT_WEBSITE"] = website_for_project(project)
         preview_paths = preview_paths_for_project(project)
 
     backend_port = os.environ.get("CLIMATECLAW_BACKEND_PORT", "8502")
