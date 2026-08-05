@@ -35,12 +35,12 @@ PREVIEW_MOUNTS = {
 }
 
 WEBSITES = {
-    "codes": ["https://codes.dkrz.de"],
-    "eve": ["https://eve.dkrz.de"],
-    "freva-dev": ["https://freva.dkrz.de"],
-    "nextgems": ["https://gems.dkrz.de"],
-    "regiklim-ces": ["https://www-regiklim.dkrz.de"],
-    "xces": ["https://www.xces.dkrz.de"],
+    "codes": "https://codes.dkrz.de",
+    "eve": "https://eve.dkrz.de",
+    "freva-dev": "https://freva.dkrz.de",
+    "nextgems": "https://gems.dkrz.de",
+    "regiklim-ces": "https://www-regiklim.dkrz.de",
+    "xces": "https://www.xces.dkrz.de",
 }
 
 
@@ -63,7 +63,7 @@ def preview_paths_for_project(project: str | None) -> list[str] | None:
     return PREVIEW_MOUNTS[project]
 
 
-def website_for_project(project: str | None) -> list[str] | None:
+def website_for_project(project: str | None) -> str | None:
     if not project:
         return None
 
