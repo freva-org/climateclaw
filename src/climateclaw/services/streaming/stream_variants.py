@@ -59,6 +59,9 @@ class SVPrompt(_SVBase):
 class SVUser(_SVBase):
     variant: Literal["User"] = Field(default="User")
     content: str
+    model: str = Field(
+        default="", description="Model used to respond to this user request"
+    )
 
 
 class SVAssistant(_SVBase):
@@ -281,7 +284,11 @@ def from_json_to_sv(obj: dict) -> StreamVariant:
     if v == ASSISTANT:
         return SVAssistant(content=_as_str(c), feedback=f)
     if v == USER:
-        return SVUser(content=_as_str(c))
+        m = obj.get("model")
+        return SVUser(
+            content=_as_str(c),
+            model=_as_str(m),
+        )
     if v == PROMPT:
         return SVPrompt(content=_as_str(c))
     if v == SERVER_HINT:
@@ -412,6 +419,14 @@ def normalize_code_output(out: Any) -> str:
         norm_out = out | {
             "display_data": _normalize_display_data(out.get("display_data"))
         }
+        if not (
+            out.get("stdout")
+            or out.get("stderr")
+            or out.get("result_repr")
+            or out.get("error")
+        ):
+            norm_out["stdout"] = "Execution completed successfully."
+
         return json.dumps(norm_out, ensure_ascii=False)
 
     if isinstance(out, list):
