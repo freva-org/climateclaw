@@ -10,16 +10,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DEFAULT_MCP_PORTS = {
-    "rag-server": "8050",
-    "code-server": "8051",
-    "web-search-server": "8052",
+MCP_SERVER_CONFIG = {
+    "rag-server": {"env": "RAG_SERVER", "port": "8050"},
+    "code-server": {"env": "CODE_SERVER", "port": "8051"},
+    "web-search-server": {"env": "WEB_SEARCH_SERVER", "port": "8052"},
 }
-MCP_SERVICES = {"rag-server", "code-server", "web-search-server"}
-
-
-def env_name(name: str) -> str:
-    return name.replace("-", "_")
+MCP_SERVICES = set(MCP_SERVER_CONFIG)
 
 
 def expand_service(name, service, replicas):
@@ -208,13 +204,15 @@ def main():
         if s.strip()
     ]
     mcp_replica_n = {
-        s: int(os.environ.get(f"CLIMATECLAW_{env_name(s).upper()}_REPLICAS", "1"))
+        s: int(
+            os.environ.get(f"CLIMATECLAW_{MCP_SERVER_CONFIG[s]['env']}_REPLICAS", "1")
+        )
         for s in available_mcp_servers
     }
     port_dict = {
         s: os.environ.get(
-            f"CLIMATECLAW_{env_name(s).upper()}_PORT",
-            DEFAULT_MCP_PORTS.get(env_name(s)),
+            f"CLIMATECLAW_{MCP_SERVER_CONFIG[s]['env']}_PORT",
+            MCP_SERVER_CONFIG[s]["port"],
         )
         for s in available_mcp_servers
     }
