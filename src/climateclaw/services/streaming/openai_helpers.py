@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Any, Dict, List, Union, cast
 
 from typing_extensions import TypedDict
@@ -165,7 +166,7 @@ def help_convert_sv_ccrm(
             out.append(_tool_call_message(v.content, v.id, tool_name=TOOL_NAME_CODE))
 
         elif isinstance(v, SVCodeOutput):
-            code_result = v.content.copy()
+            code_result = deepcopy(v.content)
             for file in code_result.get("created_files", []):
                 file.pop("preview_url", None)
 

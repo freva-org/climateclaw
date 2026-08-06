@@ -196,7 +196,7 @@ services:
       - CHAT_BOT=1
     volumes:
       - ./docker/freva.conf:/data/evaluation_system.conf
-      - ./cache/:/opt/freva_web/static/preview
+      - ./cache/:/opt/freva_web/static/preview/climateclaw
 
   freva-cache:
     networks:
