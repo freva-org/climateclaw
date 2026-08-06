@@ -66,10 +66,10 @@ SILENCE_LOGGING = True
 EVAL_TOOL_CALLS = True
 PLOT_METRICS = True  # plot metrics as bar charts at the end of the benchmark
 
-## direct questions about a plugin + indirect question that is more widely phrased, but should still trigger the plugin
+## evaluation suite, consisting of direct questions about a plugin + indirect ones that are more widely phrased
 path_to_prompts = Path(__file__).parent / "evaluation" / "benchmark_prompts.json"
 with open(path_to_prompts, "r", encoding="utf-8") as f:
-    BENCHMARK = json.load(f)
+    BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
 # BENCHMARK = {
 #     "leadtimeselektor": [
 #     "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
@@ -82,7 +82,8 @@ path_to_plugins = (
     / "src/climateclaw/tools/plugin_code_search/available_plugins.md"
 )
 plugin_overview = path_to_plugins.read_text(encoding="utf-8")
-ALL_PLUGINS = re.findall(r"\*\*([^*]+)\*\*", plugin_overview)
+plugins = re.findall(r"\*\*([^*]+)\*\*", plugin_overview)
+ALL_PLUGINS = [p.lower() for p in plugins]
 
 # ──────────────────────────────────────────────────────────────────────────────
 log = configure_logging("dev_script")

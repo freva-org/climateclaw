@@ -27,12 +27,6 @@ FREVA_PROJECT_NAMES = {
     "regiklim": "ch1187",
     "freva": "freva",
 }
-FREVA_PROJECTS = [
-    "Coming Decade",
-    "ClimXtreme",
-    "RegiKlim",
-    "Freva",
-]
 ALLOWED_FILE_EXTENSIONS = (
     ".py",
     ".sh",
@@ -321,20 +315,12 @@ def validate_plugin_call(
     plugin: str, project: str, project_id: int | None
 ) -> Tuple[bool, str]:
     """
-    Validate the project and plugin names, and check if GitLab repo access for the current
-    user is configured for reading rights.
+    Validate GitLab repo availability for chosen plugin / project names,
+    as well as reading access for the current user.
     Returns a tuple (bool, str):
     - False and an error message string if validation fails; or
     - True and a success message if valid.
     """
-    # validate project name
-    if not project:
-        error_msg = (
-            f"Unknown project '{project}'. "
-            f"Available projects: {', '.join(FREVA_PROJECTS)}"
-        )
-        return False, error_msg
-
     # validate GitLab access of user
     if project_id is None:
         error_msg = f"Plugin '{plugin}' not found in GitLab project '{project}'."
@@ -370,30 +356,32 @@ def validate_plugin_call(
     return True, "Validation successful"
 
 
-async def auto_detect_plugin_project(user_query: str) -> tuple[str, str]:
+async def detect_plugin_project(user_query: str) -> tuple[str, str]:
     """
     Attempt to automatically detect the plugin and project names from the user's query
     by making a call to the LLM.
 
     Returns a tuple of (plugin_name, project_name):
     - plugin_name (str): Name of the repo or plugin (e.g. "leadtimeselektor")
-    - project_name (str): Name of the Freva instance/project
+    - project_name (str): Name of the Freva instance (e.g. "kd1418" for "coming decade")
     """
     file_path = Path(__file__).parent / "available_plugins.md"
     plugin_descriptions = file_path.read_text(encoding="utf-8", newline="\n")
-
+    # let LLM select plugin and project names from the available plugin summaries
     selection_prompt = (
-        "Task: Select the single best matching Freva plugin & project name for the user query from the provided plugin summaries.\n"
+        "Task: Select the semantically best matching Freva plugin & project name for the user query from the provided plugin summaries.\n"
         "Rules:\n"
-        "- Use only plugin/project names that appear in the summaries.\n"
+        "- Select only plugin & project names that appear in the summaries.\n"
         "- Return exactly one plugin and its corresponding project.\n"
-        "- If unsure, choose the closest semantic match.\n"
         "- Output must be exactly this format with no extra text: <plugin_name>,<project_name>\n\n"
         f"User query:\n{user_query}\n\n"
         f"Available plugin summaries:\n{plugin_descriptions}"
     )
     raw_text = await call_llm(selection_prompt)
-    plugin_name, project_name = raw_text.split(",")
+    # format to "<plugin_name>,<project_name>" output
+    plugin_name, project_name = raw_text.split(",", maxsplit=1)
+    plugin_name = plugin_name.strip().lower()
+    project_name = FREVA_PROJECT_NAMES.get(project_name.strip().lower(), "")
     logger.info(
         "Auto-detected plugin '%s' and project '%s' for examining code base.",
         plugin_name,
@@ -419,26 +407,25 @@ async def plugin_code_search(user_query: str) -> str:
         str: Relevant code context fetched from source files of the plugin repository;
         or an error message if the plugin call is not authorized / code retrieval fails.
     """
-    plugin_name, project_name = await auto_detect_plugin_project(user_query)
-    project = FREVA_PROJECT_NAMES.get(project_name.strip().lower(), "")
-    plugin = plugin_name.strip().lower()
+    plugin_name, project_name = await detect_plugin_project(user_query)
+    # return f"plugin_name: {plugin_name}, project_name: {project_name}"  # only for benchmarking the plugin detection stage
 
     # Validate the plugin call
-    project_id = get_project_id(plugin, project)
-    result, message = validate_plugin_call(plugin, project, project_id)
+    project_id = get_project_id(plugin_name, project_name)
+    result, message = validate_plugin_call(plugin_name, project_name, project_id)
     if not result:
         return message
 
     # Fetch the plugin code and return it with a header
-    logger.info("Fetching source code for plugin '%s'", plugin)
+    logger.info("Fetching source code for plugin '%s'", plugin_name)
     try:
-        code_content = await collect_plugin_context(plugin, project_id, user_query)  # type: ignore
+        code_content = await collect_plugin_context(plugin_name, project_id, user_query)  # type: ignore
     except Exception as e:
-        logger.warning("Failed to fetch plugin code for '%s': %s", plugin, e)
-        return f"Failed to retrieve source code for plugin '{plugin}': {e}"
+        logger.warning("Failed to fetch plugin code for '%s': %s", plugin_name, e)
+        return f"Failed to retrieve source code for plugin '{plugin_name}': {e}"
 
     header = (
-        f"Relevant retrieved code of the '{plugin}' plugin "
-        f"(https://gitlab.dkrz.de/{project}/plugins4freva/{plugin}):\n\n"
+        f"Relevant retrieved code of the '{plugin_name}' plugin "
+        f"(https://gitlab.dkrz.de/{project_name}/plugins4freva/{plugin_name}):\n\n"
     )
     return header + code_content

@@ -246,7 +246,10 @@ async def stream_with_tools(
                 (
                     tool_out_v,
                     tool_msgs,
-                ) = r.var_block, r.tool_messages
+                ) = (
+                    r.var_block,
+                    r.tool_messages,
+                )
                 break
             else:
                 yield r  # Streaming the result to endpoint
