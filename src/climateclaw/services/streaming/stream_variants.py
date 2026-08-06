@@ -79,7 +79,7 @@ class SVCode(_SVBase):
 
 class SVCodeOutput(_SVBase):
     variant: Literal["CodeOutput"] = Field(default="CodeOutput")
-    content: str
+    content: dict[str, Any]
     id: str
 
 
@@ -144,7 +144,7 @@ StreamVariant = Annotated[
 Conversation = list[StreamVariant]
 
 SVDict = dict[
-    str, str | list[str]
+    str, str | list[str] | dict[str, Any]
 ]  # for when handling variants as dicts (e.g. from JSON)
 
 
@@ -371,17 +371,15 @@ def parse_examples_jsonl(path: str | Path) -> list[StreamVariant]:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def empty_code_interpreter_output() -> str:
-    return json.dumps(
-        {
-            "stdout": "",
-            "stderr": "",
-            "result_repr": "",
-            "display_data": [],
-            "error": "",
-            "created_files": [],
-        }
-    )
+def empty_code_interpreter_output() -> dict[str, Any]:
+    return {
+        "stdout": "",
+        "stderr": "",
+        "result_repr": "",
+        "display_data": [],
+        "error": "",
+        "created_files": [],
+    }
 
 
 def _normalize_display_data(value: Any) -> list[dict[str, Any]]:
@@ -401,7 +399,7 @@ def _normalize_display_data(value: Any) -> list[dict[str, Any]]:
     return [{"text/plain": str(value)}]
 
 
-def normalize_code_output(out: Any) -> str:
+def normalize_code_output(out: Any) -> dict[str, Any]:
     """
     Normalize current and legacy CodeOutput payloads into the actual
     code_interpreter output shape:
@@ -427,7 +425,7 @@ def normalize_code_output(out: Any) -> str:
         ):
             norm_out["stdout"] = "Execution completed successfully."
 
-        return json.dumps(norm_out, ensure_ascii=False)
+        return norm_out
 
     if isinstance(out, list):
         text = out[0]
@@ -437,20 +435,18 @@ def normalize_code_output(out: Any) -> str:
             norm_out = out_json | {
                 "display_data": _normalize_display_data(out_json.get("display_data"))
             }
-            return json.dumps(norm_out, ensure_ascii=False)
-        except json.JSONDecodeError:
+            return norm_out
+        except (TypeError, json.JSONDecodeError):
             text = str(out)
 
-    return json.dumps(
-        {
-            "stdout": text,
-            "stderr": "",
-            "result_repr": "",
-            "display_data": [],
-            "error": "",
-            "created_files": [],
-        }
-    )
+    return {
+        "stdout": text,
+        "stderr": "",
+        "result_repr": "",
+        "display_data": [],
+        "error": "",
+        "created_files": [],
+    }
 
 
 # ──────────────────────────────────────────────────────────────────────────────

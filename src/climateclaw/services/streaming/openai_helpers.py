@@ -165,7 +165,7 @@ def help_convert_sv_ccrm(
             out.append(_tool_call_message(v.content, v.id, tool_name=TOOL_NAME_CODE))
 
         elif isinstance(v, SVCodeOutput):
-            code_result = json.loads(v.content)
+            code_result = v.content.copy()
             for file in code_result.get("created_files", []):
                 file.pop("preview_url", None)
 

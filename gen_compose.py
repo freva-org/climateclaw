@@ -20,18 +20,18 @@ MCP_SERVICES = {"rag-server", "code-server", "web-search-server"}
 # NOTE: freva-dev and nextgems currently share deployment instance
 # so we mount both their preview paths together
 PREVIEW_MOUNTS = {
-    "codes": ["/work/kd1418/codes/work/share/preview"],
-    "eve": ["/work/ch1187/clint/freva-dev/share/preview"],
+    "codes": ["/work/kd1418/codes/work/share/preview/climateclaw"],
+    "eve": ["/work/ch1187/clint/freva-dev/share/preview/climateclaw"],
     "freva-dev": [
-        "/work/ch1187/clint/freva-dev/share/preview",
-        "/work/ch1187/clint/nextgems/share/preview",
+        "/work/ch1187/clint/freva-dev/share/preview/climateclaw",
+        "/work/ch1187/clint/nextgems/share/preview/climateclaw",
     ],
     "nextgems": [
-        "/work/ch1187/clint/freva-dev/share/preview",
-        "/work/ch1187/clint/nextgems/share/preview",
+        "/work/ch1187/clint/freva-dev/share/preview/climateclaw",
+        "/work/ch1187/clint/nextgems/share/preview/climateclaw",
     ],
-    "regiklim-ces": ["/work/ch1187/regiklim-work/share/preview"],
-    "xces": ["/work/bm1159/XCES/xces-work/share/preview"],
+    "regiklim-ces": ["/work/ch1187/regiklim-work/share/preview/climateclaw"],
+    "xces": ["/work/bm1159/XCES/xces-work/share/preview/climateclaw"],
 }
 
 WEBSITES = {
