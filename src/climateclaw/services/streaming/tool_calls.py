@@ -138,7 +138,7 @@ def parse_tool_result(
         out_msg = f"{tool_name} error: {out}"
 
         if tool_name == "code_interpreter":
-            toolout_v = SVCodeOutput(content=out_msg, id=call_id)
+            toolout_v = SVCodeOutput(content=normalize_code_output(out_msg), id=call_id)
         else:
             toolout_v = SVToolOutput(content=out_msg, tool_name=tool_name, id=call_id)
         yield toolout_v
