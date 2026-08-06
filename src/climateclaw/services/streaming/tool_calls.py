@@ -163,7 +163,9 @@ def parse_code_interpreter_result(result: Dict, id: str, thread_id: str, logger=
         if not f_name:
             continue
 
-        file["preview_url"] = f"{PROJECT_WEBSITE}/static/preview/{thread_id}/{f_name}"
+        file["preview_url"] = (
+            f"{PROJECT_WEBSITE}/static/preview/climateclaw/{thread_id}/{f_name}"
+        )
 
     result["created_files"] = created_files
 
