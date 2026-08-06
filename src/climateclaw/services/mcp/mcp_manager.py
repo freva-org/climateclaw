@@ -224,7 +224,7 @@ class McpManager:
         raise RuntimeError(f"Tool invocation failed on all targets: {name}")
 
     async def cancel_tool_call(self, tool_name: str, reason: str | None = None) -> None:
-        client_name = self.get_server_from_tool(tool_name=tool_name)
+        client_name = await self.get_server_from_tool(tool_name=tool_name)
         client = self._clients.get(client_name)
         if client is None:
             return
