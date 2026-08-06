@@ -12,6 +12,7 @@ from climateclaw.services.streaming.stream_variants import (
     empty_code_interpreter_output,
     from_json_to_sv,
     from_sv_to_json,
+    normalize_code_output,
     normalize_conv_for_prompt,
 )
 
@@ -30,7 +31,8 @@ def test_cleanup_inserts_codeoutput_and_end():
     assert kinds == ["User", "Code", "CodeOutput", "StreamEnd"]
     assert isinstance(out[2], SVCodeOutput)
     assert out[2].id == "call_1"
-    assert isinstance(out[2].content, str)
+    assert isinstance(out[2].content, dict)
+    assert out[2].content["stdout"] == ""
 
 
 def test_cleanup_no_extra_end_if_existing():
@@ -78,3 +80,24 @@ def test_wire_roundtrip():
     assert wire == {"variant": "Code", "content": "x=1", "id": "cid", "feedback": ""}
     back = from_json_to_sv(wire)
     assert back == original  # pydantic models are comparable
+
+
+def test_codeoutput_wire_content_is_structured():
+    original = SVCodeOutput(
+        content=normalize_code_output({"stdout": "ok\n", "stderr": ""}),
+        id="call_1",
+    )
+    wire = from_sv_to_json(original)
+    assert wire["content"]["stdout"] == "ok\n"
+    assert isinstance(wire["content"], dict)
+
+
+def test_legacy_codeoutput_string_normalizes_to_structured_content():
+    wire = {
+        "variant": "CodeOutput",
+        "content": '{"stdout": "ok\\n", "stderr": "", "display_data": []}',
+        "id": "call_1",
+    }
+    back = from_json_to_sv(wire)
+    assert isinstance(back, SVCodeOutput)
+    assert back.content["stdout"] == "ok\n"
