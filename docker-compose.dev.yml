@@ -173,7 +173,7 @@ services:
   freva-web:
     networks:
       - climateclaw
-    image: ghcr.io/freva-org/freva-web:2607.1.0rc3
+    image: ghcr.io/freva-org/freva-web:latest
     ports:
       - "8000:8000"
     container_name: freva-web
