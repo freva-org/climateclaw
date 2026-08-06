@@ -190,13 +190,13 @@ def generate_haproxy(
 
 
 def generate_outer_haproxy(
-    machine_addresses: list[str],
+    node_addresses: list[str],
     backend_port: str,
 ) -> str:
-    """Generate an HAProxy config routing between machine-local HAProxies."""
+    """Generate an HAProxy config routing between node-local HAProxies."""
 
-    if not machine_addresses:
-        raise ValueError("At least one machine address must be configured")
+    if not node_addresses:
+        raise ValueError("At least one node address must be configured")
 
     lines = [
         "global",
@@ -215,9 +215,9 @@ def generate_outer_haproxy(
         "",
         "frontend fe_outer_climateclaw",
         f"    bind *:{backend_port}",
-        "    default_backend be_machine_haproxys",
+        "    default_backend be_node_haproxys",
         "",
-        "backend be_machine_haproxys",
+        "backend be_node_haproxys",
         "    balance url_param thread_id check_post",
         "",
         "    option httpchk",
@@ -226,8 +226,8 @@ def generate_outer_haproxy(
         "",
     ]
 
-    for index, host in enumerate(machine_addresses, start=1):
-        lines.append(f"    server machine{index} {host}:{backend_port} check")
+    for index, host in enumerate(node_addresses, start=1):
+        lines.append(f"    server node{index} {host}:{backend_port} check")
 
     lines.append("")
     return "\n".join(lines)
@@ -291,10 +291,10 @@ def main():
         for s in available_mcp_servers
     }
 
-    machine_addresses = [
+    node_addresses = [
         address.strip()
         for address in os.environ.get(
-            "CLIMATECLAW_MACHINE_ADDRESSES",
+            "CLIMATECLAW_NODE_ADDRESSES",
             "",
         ).split(",")
         if address.strip()
@@ -357,15 +357,15 @@ def main():
 
     outer_haproxy_cfg = None
 
-    if machine_addresses:
-        # if "dev" in compose_path:
-        #     raise ValueError(
-        #         "CLIMATECLAW_MACHINE_ADDRESSES is only supported "
-        #         "for production compose generation"
-        #     )
+    if node_addresses:
+        if "dev" in compose_path:
+            raise ValueError(
+                "CLIMATECLAW_NODE_ADDRESSES is only supported "
+                "for production compose generation"
+            )
 
         outer_haproxy_cfg = generate_outer_haproxy(
-            machine_addresses=machine_addresses,
+            node_addresses=node_addresses,
             backend_port=backend_port,
         )
 
