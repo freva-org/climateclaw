@@ -29,9 +29,7 @@ def _post_process(variants: list[StreamVariant]) -> list[SVDict]:
     for i, v in enumerate(items):
         if isinstance(v, SVStreamEnd):
             is_last = i == len(items) - 1
-            if (not is_last) or (
-                "unexpected manner" in (getattr(v, "message", "") or "").lower()
-            ):
+            if (not is_last) or ("unexpected manner" in (v.content or "").lower()):
                 continue
         cleaned.append(from_sv_to_json(v))
     return cleaned

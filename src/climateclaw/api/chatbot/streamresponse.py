@@ -7,7 +7,11 @@ from collections.abc import Generator
 from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.responses import StreamingResponse
 
-from climateclaw.core.available_chatbots import available_chatbots, default_chatbot
+from climateclaw.core.available_chatbots import (
+    available_chatbots,
+    default_chatbot,
+    default_chatbot_local,
+)
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.prompting import get_entire_prompt
 from climateclaw.services.service_factory import (
@@ -134,7 +138,11 @@ async def streamresponse(
             detail="Input not found. Please provide a non-empty input in the query parameters, of type String.",
         )
 
-    model_name = chatbot or default_chatbot()
+    if chatbot == "local":
+        model_name = default_chatbot_local()
+    else:
+        model_name = chatbot or default_chatbot()
+
     available = available_chatbots()
     if model_name not in available:
         raise HTTPException(
@@ -222,7 +230,7 @@ async def streamresponse(
     async def event_stream():
         if is_new_thread:
             # Append ServerHint with thread_id
-            hint_v = SVServerHint(data={"thread_id": thread_id})
+            hint_v = SVServerHint(content={"thread_id": thread_id})
             for data in _sse_data(from_sv_to_json(hint_v)):
                 yield data
             await add_to_conversation(
@@ -248,7 +256,7 @@ async def streamresponse(
                 last_check = now
                 state = await get_conversation_state(thread_id)
                 if state == ConversationState.STOPPING:
-                    end_v = SVStreamEnd(message="Stream is stopped by user.")
+                    end_v = SVStreamEnd(content="Stream is stopped by user.")
                     for data in _sse_data(from_sv_to_json(end_v)):
                         yield data
                     await cancel_tool_tasks(thread_id)

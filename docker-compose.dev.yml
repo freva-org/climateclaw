@@ -109,7 +109,7 @@ services:
       start_period: 10s
 
   litellm:
-    image: ghcr.io/berriai/litellm:main-stable
+    image: ghcr.io/berriai/litellm:main-latest
     hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
       - ./litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
@@ -196,6 +196,7 @@ services:
       - CHAT_BOT=1
     volumes:
       - ./docker/freva.conf:/data/evaluation_system.conf
+      - ./cache/:/opt/freva_web/static/preview/climateclaw
 
   freva-cache:
     networks:
@@ -358,3 +359,5 @@ volumes:
   settings-data:
   certs-data:
   import-data:
+  web_django-static:
+  web_proxy-logs:

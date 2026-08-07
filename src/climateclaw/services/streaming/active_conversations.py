@@ -254,9 +254,9 @@ async def _replay_code_history(thread_id: str) -> None:
 
     # Extract all code blocks in chronological order
     code_blocks: list[str] = [
-        v.code
+        v.content
         for v in messages
-        if isinstance(v, SVCode) and isinstance(v.code, str) and v.code.strip()
+        if isinstance(v, SVCode) and isinstance(v.content, str) and v.content.strip()
     ]
 
     log = configure_logging(__name__, thread_id=thread_id)
