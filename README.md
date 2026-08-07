@@ -93,10 +93,10 @@ Generated artifacts that persist across runs:
 | `GET` | `/api/chatbot/docs` | Docs payload stub | Placeholder |
 | `GET` | `/api/chatbot/help` | Help payload stub | Placeholder |
 | `GET` | `/api/chatbot/availablechatbots` | Returns model names from `litellm_config.yaml` | Requires auth |
-| `GET` | `/api/chatbot/getthread?thread_id=...` | Fetches thread contents omitting prompts + redundant StreamEnd variants | Requires auth |
-| `GET` | `/api/chatbot/getuserthreads` | Returns latest 10 threads for authenticated user | Falls back to query `user_id` only if `ALLOW_FALLBACK_OLD_AUTH` |
-| `GET` | `/api/chatbot/streamresponse` | Starts an SSE stream of `StreamVariant` JSON payloads | Query params: `thread_id`, `input` (required), `chatbot` |
-| `GET/POST` | `/api/chatbot/stop` | Initiates stopping of an active conversation | Requires auth |
+| `POST` | `/api/chatbot/getthread` | Fetches thread contents omitting prompts + redundant StreamEnd variants | Requires auth |
+| `POST` | `/api/chatbot/getuserthreads` | Returns recent threads for authenticated user | JSON body: `num_threads`, `page` |
+| `POST` | `/api/chatbot/streamresponse` | Starts an SSE stream of `StreamVariant` JSON payloads | Query params: `thread_id`, `input` (required), `chatbot` |
+| `POST` | `/api/chatbot/stop` | Initiates stopping of an active conversation | JSON body: `thread_id`; requires auth |
 
 ### Streaming contract
 - Response type: `application/x-ndjson`

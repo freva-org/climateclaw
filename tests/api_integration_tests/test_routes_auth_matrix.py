@@ -8,13 +8,12 @@ ENDPOINTS_GET = [
 @pytest.mark.asyncio
 async def test_all_get_routes_require_auth(client):
     async with client:
-        for ep in ENDPOINTS_GET + [
-            "/api/chatbot/getuserthreads",
-        ]:
+        for ep in ENDPOINTS_GET + []:
             r = await client.get(ep)
             assert r.status_code == 401, f"{ep} should be protected (missing headers)"
 
         for ep in [
+            "/api/chatbot/getuserthreads",
             "/api/chatbot/getthread",
             "/api/chatbot/streamresponse",
             "/api/chatbot/editthread",
@@ -42,9 +41,9 @@ async def test_routes_succeed_with_auth_and_username_injection(
                 assert r.status_code == 200, f"{ep} should succeed with auth"
 
             # 2) username is injected
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/getuserthreads",
-                params={"num_threads": 2},
+                json={"num_threads": 2},
                 headers=GOOD_HEADERS,
             )
             assert r.status_code == 200
@@ -76,8 +75,10 @@ async def test_routes_succeed_with_auth_and_username_injection(
             assert r.headers.get("content-type", "").startswith("application/x-ndjson")
 
             # 5) /stop
-            r = await client.get(
-                "/api/chatbot/stop", params={"thread_id": "t-123"}, headers=GOOD_HEADERS
+            r = await client.post(
+                "/api/chatbot/stop",
+                json={"thread_id": "t-123"},
+                headers=GOOD_HEADERS,
             )
             assert r.status_code == 200
             assert r.json().get("detail") == "Conversation stopped."
