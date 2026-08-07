@@ -109,6 +109,7 @@ def haproxy_backend(name, port, service_names, sticky_mode=None):
     lines.append(f"backend be_{name}")
     if sticky_mode:
         lines.append(f"    balance {sticky_mode}")
+        lines.append("    hash-type consistent")
 
     for i, service_name in enumerate(service_names, start=1):
         lines.append(f"    server {name}{i} {service_name}:{port} check")
