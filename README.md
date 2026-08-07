@@ -88,17 +88,17 @@ Generated artifacts that persist across runs:
 | `GET` | `/api/chatbot/help` | Help payload stub | Placeholder |
 | `GET` | `/api/chatbot/availablechatbots` | Returns model names from `litellm_config.yaml` | Requires auth |
 | `GET` | `/api/chatbot/newthread` | Generates a fresh `thread_id` | Requires auth |
-| `GET` | `/api/chatbot/getthread?thread_id=...` | Fetches thread contents omitting prompts + redundant StreamEnd variants | Requires auth |
-| `GET` | `/api/chatbot/getuserthreads` | Returns latest 10 threads for authenticated user | Falls back to query `user_id` only if `ALLOW_FALLBACK_OLD_AUTH` |
-| `GET` | `/api/chatbot/streamresponse` | Starts an SSE stream of `StreamVariant` JSON payloads | Query params: `thread_id`, `input` (required), `chatbot` |
-| `GET/POST` | `/api/chatbot/stop` | Initiates stopping of an active conversation | Requires auth |
+| `POST` | `/api/chatbot/getthread` | Fetches thread contents omitting prompts + redundant StreamEnd variants | Requires auth |
+| `POST` | `/api/chatbot/getuserthreads` | Returns recent threads for authenticated user | JSON body: `num_threads`, `page` |
+| `POST` | `/api/chatbot/streamresponse` | Starts an SSE stream of `StreamVariant` JSON payloads | Query params: `thread_id`, `input` (required), `chatbot` |
+| `POST` | `/api/chatbot/stop` | Initiates stopping of an active conversation | JSON body: `thread_id`; requires auth |
 
 ### Streaming contract
 - Response type: `application/x-ndjson`
 - Each `data:` line is a JSON object with `variant` discriminators (`Assistant`, `Code`, `CodeOutput`, `CodeError`, `Image`, `ServerHint`, `StreamEnd`, etc.).
 - Code tool calls stream incremental chunks while LiteLLM emits `tool_calls`. When the MCP tool resolves, results are converted back into JSON events and appended to Mongo/disk storage.
 - The first chunk is a `ServerHint` carrying the `thread_id`; conversation variants are stored in-memory during streaming and flushed to MongoDB at the end, ensuring replay safety.
-- Clients can call `/api/chatbot/stop?thread_id=...` to move a conversation into `STOPPING`; the streaming loop exits and cancels in-flight MCP requests (code, rag, web-search) via the shared `ActiveRequest` registry.
+- Clients can call `POST /api/chatbot/stop` with `{"thread_id": "..."}` to move a conversation into `STOPPING`; the streaming loop exits and cancels in-flight MCP requests (code, rag, web-search) via the shared `ActiveRequest` registry.
 
 ## Persistence, Prompts, and Assets
 - **MongoDB (`mongodb_storage.py`)**: canonical record for threads. Each document stores `user_id`, `thread_id`, ISO timestamp, topic (summarized via LiteLLM), and serialized `StreamVariant` list.

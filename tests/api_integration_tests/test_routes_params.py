@@ -57,3 +57,35 @@ async def test_streamresponse_accepts_params_and_headers(
             text = r.text
             assert "ServerHint" in text
             assert "Assistant" in text
+
+
+@pytest.mark.asyncio
+async def test_stop_requires_thread_id(stub_resp, client, GOOD_HEADERS):
+    with stub_resp:
+        async with client:
+            r = await client.post(
+                "/api/chatbot/stop",
+                json={},
+                headers=GOOD_HEADERS,
+            )
+            assert r.status_code == 422
+            assert (
+                r.json()["detail"]
+                == "Thread ID is missing. Please provide a thread_id in the request body."
+            )
+
+
+@pytest.mark.asyncio
+async def test_stop_returns_404_for_unknown_thread(stub_resp, client, GOOD_HEADERS):
+    with stub_resp:
+        async with client:
+            r = await client.post(
+                "/api/chatbot/stop",
+                json={"thread_id": "missing-thread"},
+                headers=GOOD_HEADERS,
+            )
+            assert r.status_code == 404
+            assert (
+                r.json()["detail"]
+                == "Conversation with given thread-id not found in the registry: missing-thread"
+            )
