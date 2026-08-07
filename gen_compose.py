@@ -10,16 +10,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DEFAULT_MCP_PORTS = {
-    "rag-server": "8050",
-    "code-server": "8051",
-    "web-search-server": "8052",
+MCP_SERVER_CONFIG = {
+    "rag-server": {"env": "RAG_SERVER", "port": "8050"},
+    "code-server": {"env": "CODE_SERVER", "port": "8051"},
+    "web-search-server": {"env": "WEB_SEARCH_SERVER", "port": "8052"},
 }
-MCP_SERVICES = {"rag-server", "code-server", "web-search-server"}
-
-
-def env_name(name: str) -> str:
-    return name.replace("-", "_")
+MCP_SERVICES = set(MCP_SERVER_CONFIG)
 
 
 def expand_service(name, service, replicas):
@@ -113,6 +109,7 @@ def haproxy_backend(name, port, service_names, sticky_mode=None):
     lines.append(f"backend be_{name}")
     if sticky_mode:
         lines.append(f"    balance {sticky_mode}")
+        lines.append("    hash-type consistent")
 
     for i, service_name in enumerate(service_names, start=1):
         lines.append(f"    server {name}{i} {service_name}:{port} check")
@@ -208,13 +205,15 @@ def main():
         if s.strip()
     ]
     mcp_replica_n = {
-        s: int(os.environ.get(f"CLIMATECLAW_{env_name(s).upper()}_REPLICAS", "1"))
+        s: int(
+            os.environ.get(f"CLIMATECLAW_{MCP_SERVER_CONFIG[s]['env']}_REPLICAS", "1")
+        )
         for s in available_mcp_servers
     }
     port_dict = {
         s: os.environ.get(
-            f"CLIMATECLAW_{env_name(s).upper()}_PORT",
-            DEFAULT_MCP_PORTS.get(env_name(s)),
+            f"CLIMATECLAW_{MCP_SERVER_CONFIG[s]['env']}_PORT",
+            MCP_SERVER_CONFIG[s]["port"],
         )
         for s in available_mcp_servers
     }
@@ -238,8 +237,13 @@ def main():
             if name in available_mcp_servers:
                 new_services.update(expand_service(name, svc, mcp_replica_n[name]))
         elif name == "freva-web":
-            svc.get("environment").remove("CHAT_BOT_URL=http://climateclaw:8502")
-            svc.get("environment").append("CHAT_BOT_URL=http://haproxy:8502")
+            env = [
+                e
+                for e in svc.get("environment", [])
+                if not e.startswith("CHAT_BOT_URL=")
+            ]
+            env.append(f"CHAT_BOT_URL=http://haproxy:{backend_port}")
+            svc["environment"] = env
             new_services[name] = svc
         else:
             new_services[name] = svc
