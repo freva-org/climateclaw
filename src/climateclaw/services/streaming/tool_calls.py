@@ -57,6 +57,9 @@ async def run_tool_via_mcp(
         args = {"_raw": arguments_json}
 
     server_name = await mcp.get_server_from_tool(tool_name)
+    if server_name is None:
+        log.error(f"No MCP server found for tool={tool_name}")
+        raise RuntimeError(f"No MCP server found for tool={tool_name}")
 
     log.info(f"Executing tool call:\nname : {tool_name}   arguments : {args}")
     res = await mcp.call_tool(
