@@ -122,13 +122,13 @@ async def streamresponse(
     """
     logger = configure_logging(__name__)
 
-    if thread_id is None:
+    if not thread_id:
         raise HTTPException(
             status_code=422,
             detail="Thread-id not found. Please request a new thread-id and provide it in the query parameters, of type String.",
         )
 
-    if input is None:
+    if not input:
         raise HTTPException(
             status_code=422,
             detail="Input not found. Please provide a non-empty input in the query parameters, of type String.",
