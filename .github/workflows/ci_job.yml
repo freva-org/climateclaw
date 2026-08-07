@@ -114,7 +114,6 @@ jobs:
             docker compose logs climateclaw
             docker compose logs code-server
             docker compose logs web-search-server
-            docker compose logs mongodb
             docker compose logs litellm
             exit 1
           }
