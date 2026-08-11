@@ -169,7 +169,10 @@ def cleanup_conversation(
         if pending_code_id is not None and not isinstance(v, SVCodeOutput):
             out.append(
                 SVCodeOutput(
-                    content=empty_code_interpreter_output(), id=pending_code_id
+                    content=normalize_code_output(
+                        "No response was received from code-interpreter."
+                    ),
+                    id=pending_code_id,
                 )
             )
             pending_code_id = None
@@ -191,7 +194,12 @@ def cleanup_conversation(
     if pending_code_id is not None:
         # close dangling code with an empty output
         out.append(
-            SVCodeOutput(content=empty_code_interpreter_output(), id=pending_code_id)
+            SVCodeOutput(
+                content=normalize_code_output(
+                    "No response was received from code-interpreter."
+                ),
+                id=pending_code_id,
+            )
         )
 
     # Ensure ends with StreamEnd (only if requested)
