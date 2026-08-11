@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import (
@@ -22,6 +23,10 @@ from climateclaw.services.streaming.stream_variants import (
 router = APIRouter()
 
 
+class GetThreadRequest(BaseModel):
+    thread_id: str | None = None
+
+
 def _post_process(variants: list[StreamVariant]) -> list[SVDict]:
     """Remove Prompt variants before returning, drop any StreamEnd except the final one, and drop 'unexpected manner' ones anywhere."""
     items = [item for item in variants if not is_prompt(item)]
@@ -35,9 +40,9 @@ def _post_process(variants: list[StreamVariant]) -> list[SVDict]:
     return cleaned
 
 
-@router.get("/getthread", dependencies=[AuthRequired])
+@router.post("/getthread", dependencies=[AuthRequired])
 async def get_thread(
-    thread_id: str | None = Query(None),
+    request: GetThreadRequest,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -72,6 +77,8 @@ async def get_thread(
         HTTPException (500):
             - If an error occurs while reading or processing the thread.
     """
+
+    thread_id = request.thread_id
 
     if not thread_id:
         raise HTTPException(
