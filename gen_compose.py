@@ -92,11 +92,10 @@ def expand_service(name, service, replicas, preview_paths=None):
             ]
 
         s["hostname"] = replica_name + "-${CLIMATECLAW_INSTANCE_NAME}"
-        if preview_paths and i == 1:
+        if preview_paths:
             volumes = s.get("volumes", [])
             volumes.extend(
-                f"{preview_path}:${{CLIMATECLAW_CACHE_PATH}}"
-                for preview_path in preview_paths
+                f"{preview_path}:/app/cache:rw" for preview_path in preview_paths
             )
             s["volumes"] = volumes
 
@@ -302,11 +301,13 @@ def main():
 
     for name, svc in services.items():
         if name == "climateclaw":
-            new_services.update(expand_service(name, svc, backend_n, preview_paths))
+            new_services.update(expand_service(name, svc, backend_n))
         elif name == "litellm":
             new_services.update(expand_service(name, svc, litellm_n))
         elif name in MCP_SERVICES:
-            if name in available_mcp_servers:
+            if name == "code-server":
+                new_services.update(expand_service(name, svc, backend_n, preview_paths))
+            elif name in available_mcp_servers:
                 new_services.update(expand_service(name, svc, mcp_replica_n[name]))
         elif name == "freva-web":
             svc.get("environment").remove("CHAT_BOT_URL=http://climateclaw:8502")

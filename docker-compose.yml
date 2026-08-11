@@ -23,7 +23,6 @@ services:
       - /work:/work:ro
       - /pool/data:/pool/data:ro
       - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
-      - ${CLIMATECLAW_CACHE_PATH}:/app/cache:rw
     networks:
       - climateclaw
     healthcheck:
@@ -51,7 +50,6 @@ services:
       - /work:/work:ro
       - /pool/data:/pool/data:ro
       - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
-      - ${CLIMATECLAW_CACHE_PATH}:/app/cache:rw
     cpus: 4
     networks:
       - climateclaw
