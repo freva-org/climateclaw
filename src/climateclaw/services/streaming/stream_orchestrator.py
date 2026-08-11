@@ -50,6 +50,7 @@ from climateclaw.services.streaming.tool_calls import (
 )
 
 DEFAULT_LOGGER = configure_logging(__name__)
+HEARTBEAT_INTERVAL_SECONDS = 10
 
 
 @dataclass
@@ -57,6 +58,18 @@ class StreamState:
     user_invoked: bool = True
     tool_call: dict[str, Any] | None = None
     finished: bool = False
+
+
+async def _yield_heartbeats_until(
+    task: asyncio.Task[Any],
+    *,
+    interval: float = HEARTBEAT_INTERVAL_SECONDS,
+) -> AsyncIterator[SVServerHint]:
+    while not task.done():
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=interval)
+        except TimeoutError:
+            yield await heartbeat_content()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -96,17 +109,48 @@ async def stream_with_tools(
     )
 
     if tools:
-        resp = await acomplete_func(
-            model=model, messages=messages, stream=True, tools=tools, tool_choice="auto"
+        resp_task = asyncio.create_task(
+            acomplete_func(
+                model=model,
+                messages=messages,
+                stream=True,
+                tools=tools,
+                tool_choice="auto",
+            )
         )
     else:
-        resp = await acomplete_func(model=model, messages=messages, stream=True)
+        resp_task = asyncio.create_task(
+            acomplete_func(model=model, messages=messages, stream=True)
+        )
+
+    try:
+        async for hb in _yield_heartbeats_until(resp_task):
+            yield hb
+        resp = await resp_task
+    except asyncio.CancelledError:
+        resp_task.cancel()
+        await asyncio.gather(resp_task, return_exceptions=True)
+        raise
 
     accumulated_asst_text: list[str] = []
 
     if hasattr(resp, "__aiter__"):
         call_id = ""
-        async for chunk in resp:
+        stream_iter = resp.__aiter__()
+        while True:
+            chunk_task = asyncio.create_task(stream_iter.__anext__())
+
+            try:
+                async for hb in _yield_heartbeats_until(chunk_task):
+                    yield hb
+                chunk = await chunk_task
+            except StopAsyncIteration:
+                break
+            except asyncio.CancelledError:
+                chunk_task.cancel()
+                await asyncio.gather(chunk_task, return_exceptions=True)
+                raise
+
             choice = (chunk.get("choices") or [{}])[0]
             delta = choice.get("delta") or {}
 
@@ -266,7 +310,7 @@ async def stream_with_tools(
         )
 
         async def run_with_heartbeat():
-            """Run the tool while periodically sending heartbeats."""
+            """Run the tool while sending heartbeats during quiet periods."""
             tool_task = asyncio.create_task(
                 run_tool_via_mcp(
                     mcp=mcp,
@@ -279,11 +323,8 @@ async def stream_with_tools(
             await register_tool_task(thread_id, tool_task)
 
             try:
-                # While tool runs, emit heartbeats every few seconds
-                while not tool_task.done():
-                    hb = await heartbeat_content()
+                async for hb in _yield_heartbeats_until(tool_task):
                     yield hb
-                    await asyncio.sleep(10)  # heartbeat interval (seconds)
 
                 # When done, return the final result text
                 result_text = await tool_task
