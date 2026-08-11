@@ -334,9 +334,14 @@ def main():
     ]
     if port_dict.get("code-server"):
         dev_ports.append(f"{port_dict['code-server']}:{port_dict['code-server']}")
-    prod_ports = [
-        f"{backend_port}:{backend_port}",
-    ]
+    if node_addresses:
+        prod_ports = [
+            f"{backend_port}:{backend_port}",
+        ]
+    else:
+        prod_ports = [
+            f"{backend_target_port}:{backend_port}",
+        ]
 
     network_name = list(base["networks"].keys())[0]
 
