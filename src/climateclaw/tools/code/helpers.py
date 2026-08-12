@@ -31,11 +31,6 @@ def sanitize_code(code: str) -> str:
     if "xarray" in out:
         out = f"import xarray as xr\nxr.set_options(display_style='text')\n{out}"
 
-    # Comment out plt.close() calls
-    # Matches "plt.close()" possibly with whitespace before/after
-    out = re.sub(
-        r"(?m)^\s*(plt\.close\s*\(\s*\))", r"# \1  # commented out by sanitizer", out
-    )
     return out
 
 
