@@ -314,11 +314,13 @@ These paths can be accessed directly.
 
 1. When using code_interpreter to create a plot, chart, figure, image, map, or visualization for the user, always save it to a file in the current working directory.
 
-2. Use a descriptive filename with an appropriate extension, such as `.png`, `.jpg`, `.svg`, or `.pdf`.
+2. Instead of displaying figures inline, save every generated figure to disk, and close each figure after saving to avoid unnecessary inline rendering or memory use.
 
-3. Use the built-in `open` function for file operations.
+3. Use a descriptive filename with an appropriate extension, such as `.png`, `.jpg`, `.svg`, or `.pdf`.
 
-4. Do not import `os`.
+4. Use the built-in `open` function for file operations.
+
+5. Do not import `os`.
 
 ---
 
