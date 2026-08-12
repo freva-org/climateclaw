@@ -25,7 +25,7 @@ Examples:
   $(basename "$0") --project freva-prod up --force-recreate  Recreate containers without rebuild
 
 Requires:
-  FREVAGPT_PROJECT_NAME                 Project name in .env or --project
+  CLIMATECLAW_PROJECT_NAME                 Project name in .env or --project
   podman                                Container engine
   podman compose  OR  podman-compose    Compose tool (plugin preferred)
 EOF
@@ -35,7 +35,7 @@ EOF
 COMPOSE_FILE="docker-compose.yml"
 SCALED_FILE="docker-compose.scaled.yml"
 ENV_FILE=".env"
-PROJECT="${FREVAGPT_PROJECT_NAME:-}"
+PROJECT="${CLIMATECLAW_PROJECT_NAME:-}"
 do_build=false
 args=()
 
@@ -43,7 +43,7 @@ args=()
 # Setting it with flag, overrides both shell and .env
 if [ -z "${PROJECT}" ] && [ -f "${ENV_FILE}" ]; then
     PROJECT="$(
-        sed -n 's/^[[:space:]]*FREVAGPT_PROJECT_NAME[[:space:]]*=[[:space:]]*//p' "${ENV_FILE}" \
+        sed -n 's/^[[:space:]]*CLIMATECLAW_PROJECT_NAME[[:space:]]*=[[:space:]]*//p' "${ENV_FILE}" \
             | tail -n 1 \
             | sed 's/[[:space:]]*#.*$//; s/^["'\'']//; s/["'\'']$//'
     )"
@@ -82,11 +82,11 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -z "${PROJECT}" ]; then
-    echo "[prod.sh] ERROR: project is required. Set FREVAGPT_PROJECT_NAME in .env or pass --project NAME." >&2
+    echo "[prod.sh] ERROR: project is required. Set CLIMATECLAW_PROJECT_NAME in .env or pass --project NAME." >&2
     exit 1
 fi
 
-export FREVAGPT_PROJECT_NAME="${PROJECT}"
+export CLIMATECLAW_PROJECT_NAME="${PROJECT}"
 
 # --- Require podman ---
 if ! command -v podman &>/dev/null; then
@@ -121,7 +121,7 @@ fi
 
 # --- Generate scaled compose file ---
 echo "[prod.sh] Generating scaled compose file from ${COMPOSE_FILE}"
-echo "[prod.sh] Using project: ${FREVAGPT_PROJECT_NAME}"
+echo "[prod.sh] Using project: ${CLIMATECLAW_PROJECT_NAME}"
 ./gen_compose.py "${COMPOSE_FILE}" "${PROJECT}"
 
 # --- Tear down previous deployment ---

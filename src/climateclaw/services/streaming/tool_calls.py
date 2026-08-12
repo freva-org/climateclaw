@@ -21,7 +21,7 @@ from climateclaw.services.streaming.stream_variants import (
 )
 
 DEFAULT_LOGGER = configure_logging(__name__)
-PROJECT_WEBSITE = os.environ.get("FREVAGPT_PROJECT_WEBSITE", "http://localhost:8000")
+PROJECT_WEBSITE = os.environ.get("CLIMATECLAW_PROJECT_WEBSITE", "http://localhost:8000")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # MCP tool runner
