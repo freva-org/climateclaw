@@ -22,12 +22,17 @@ services:
       - "8600:${CLIMATECLAW_BACKEND_PORT:-8502}" # localhost:8600/docs give FastAPI docs
       - "${CLIMATECLAW_DEBUG_PORT:-5678}:${CLIMATECLAW_DEBUG_PORT:-5678}" # Port for debugpy
     volumes:
+      - /Users/fischer/DKRZ/Coding/ClimateClaw/work:/work:ro # mounts sshfs work directory for easy access to code and resources from climateclaw container
       - ./cache/:/app/cache
       - ./logs/:/app/logs
     networks:
       - climateclaw
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${CLIMATECLAW_BACKEND_PORT:-8502}/healthz')\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:${CLIMATECLAW_BACKEND_PORT:-8502}/healthz'')"',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -69,12 +74,17 @@ services:
     ports:
       - 8051:8051
     volumes:
+      - /Users/fischer/DKRZ/Coding/ClimateClaw/work:/work:ro
       - ./cache/:/app/cache
       - ./logs/:/app/logs
     networks:
       - climateclaw
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8051/healthz')\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8051/healthz'')"',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -98,7 +108,40 @@ services:
     volumes:
       - ./logs/:/app/logs
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8052/healthz')\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8052/healthz'')"',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  plugin-code-search-server:
+    image: plugin-code-search-server-${CLIMATECLAW_INSTANCE_NAME}
+    build:
+      context: .
+      dockerfile: docker/plugin-code-search-server/Dockerfile
+    env_file: .env
+    environment:
+      CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
+      CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
+      CLIMATECLAW_MCP_HOST: 0.0.0.0
+      CLIMATECLAW_MCP_PORT: 8053
+      CLIMATECLAW_GITLAB_ACCESS_TOKEN: ${CLIMATECLAW_GITLAB_ACCESS_TOKEN:-}
+    ports:
+      - 8053:8053
+    networks:
+      - climateclaw
+    volumes:
+      - ./logs/:/app/logs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8053/healthz'')"',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -116,7 +159,11 @@ services:
     networks:
       - climateclaw
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:4000/health/liveliness'')"',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -201,7 +248,7 @@ services:
     user: 0:0
     hostname: volume-prep
     restart: "no"
-    command:  find /settings -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    command: find /settings -mindepth 1 -maxdepth 1 -exec rm -rf {} +
     volumes:
       - settings-data:/settings:rw
 
@@ -213,7 +260,14 @@ services:
     depends_on:
       volume-prep:
         condition: service_completed_successfully
-    command: ["clone", "--depth", "1", "https://github.com/freva-org/freva-service-config.git", "/settings"]
+    command:
+      [
+        "clone",
+        "--depth",
+        "1",
+        "https://github.com/freva-org/freva-service-config.git",
+        "/settings",
+      ]
     volumes:
       - settings-data:/settings:rw
 
@@ -226,11 +280,11 @@ services:
       git-prep:
         condition: service_completed_successfully
     command: >
-        sh -eu -c '
-          ls -rlt /settings &&
-          python /settings/dev-utils.py gen-certs --cert-dir /certs &&
-          cp -a /settings/keycloak/import/. /import/
-        '
+      sh -eu -c '
+        ls -rlt /settings &&
+        python /settings/dev-utils.py gen-certs --cert-dir /certs &&
+        cp -a /settings/keycloak/import/. /import/
+      '
     volumes:
       - settings-data:/settings:ro
       - certs-data:/certs:rw
@@ -273,11 +327,11 @@ services:
       - "8080:8080"
       - "8443:8443"
     command: |
-         start-dev
-         --hostname-strict=false
-         --hostname=http://keycloak.localhost:8080
-         --import-realm
-         -Dkeycloak.migration.strategy=OVERWRITE_EXISTING
+      start-dev
+      --hostname-strict=false
+      --hostname=http://keycloak.localhost:8080
+      --import-realm
+      -Dkeycloak.migration.strategy=OVERWRITE_EXISTING
 
   keycloak-bootstrap:
     image: docker.io/alpine
@@ -340,11 +394,9 @@ services:
     volumes:
       - certs-data:/certs:ro
 
-
 networks:
   climateclaw:
     driver: bridge
-
 
 volumes:
   settings-data:

@@ -1,5 +1,4 @@
 services:
-
   climateclaw-base:
     # Build manually with:
     # docker compose -f docker-compose.dev.yml --profile build-only build climateclaw-base
@@ -27,7 +26,11 @@ services:
     networks:
       - climateclaw
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${CLIMATECLAW_BACKEND_PORT:-8502}/healthz')\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:${CLIMATECLAW_BACKEND_PORT:-8502}/healthz'')"',
+        ]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -55,7 +58,11 @@ services:
     networks:
       - climateclaw
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8051/healthz')\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8051/healthz'')"',
+        ]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -75,10 +82,38 @@ services:
     volumes:
       - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8052/healthz')\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8052/healthz'')"',
+        ]
       interval: 5s
       timeout: 3s
       retries: 20
+      start_period: 10s
+
+  plugin-code-search-server:
+    image: plugin-code-search-server-${CLIMATECLAW_INSTANCE_NAME}
+    build:
+      context: .
+      dockerfile: docker/plugin-code-search-server/Dockerfile
+    env_file: .env
+    environment:
+      CLIMATECLAW_MCP_HOST: 0.0.0.0
+      CLIMATECLAW_MCP_PORT: 8053
+    networks:
+      - climateclaw
+    volumes:
+      - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8053/healthz'')"',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
       start_period: 10s
 
   litellm:
@@ -91,7 +126,11 @@ services:
     networks:
       - climateclaw
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:4000/health/liveliness'')"',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -128,7 +167,6 @@ services:
       timeout: 2s
       retries: 3
       start_period: 15s
-
 
 networks:
   climateclaw:

@@ -101,7 +101,7 @@ async def summarize_topic(content: List[StreamVariant]) -> str:
     try:
         resp = await acomplete(
             messages=[{"role": "user", "content": prompt}],
-            model="gpt-4.1-mini",
+            model="gpt-5.4-mini",
             max_tokens=30,
             temperature=0.1,
         )

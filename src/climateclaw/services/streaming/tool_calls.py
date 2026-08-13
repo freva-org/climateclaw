@@ -79,12 +79,12 @@ def accumulate_tool_calls(delta: dict[str, Any], agg: dict[str, Any]) -> None:
         )
         if item.get("id"):
             entry["id"] = item["id"]
-        f = item.get("function") or {}
-        if f.get("name"):
-            entry["function"]["name"] = f["name"]
-        if f.get("arguments"):
+        fn = item.get("function") or {}
+        if fn.get("name"):
+            entry["function"]["name"] = fn["name"]
+        if fn.get("arguments"):
             entry["function"]["arguments"] = (
-                entry["function"].get("arguments", "") + f["arguments"]
+                entry["function"].get("arguments", "") + fn["arguments"]
             )
 
 
@@ -199,4 +199,5 @@ def parse_code_interpreter_result(result: dict, id: str):
 def parse_generic_tool_result(result: dict, tool_name: str, id: str):
     web_sv = SVToolOutput(output=result.get("result", ""), tool_name=tool_name, id=id)
     web_msg = help_convert_sv_ccrm([web_sv])
+    yield web_sv
     yield FinalSummary(var_block=[web_sv], tool_messages=web_msg, is_error=False)
