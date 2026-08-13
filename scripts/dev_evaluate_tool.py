@@ -8,6 +8,7 @@ import sys
 import time
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from matplotlib import pyplot as plt
@@ -63,16 +64,17 @@ PRINT_PER_RUN_SUMMARY = (
 SILENCE_LOGGING = True
 
 # run evaluation of tool calls (TP, FP, FN, accuracy, precision, recall)
-EVAL_TOOL_CALLS = True
+EVAL_TOOL = True
 PLOT_METRICS = True  # plot metrics as bar charts at the end of the benchmark
 
-## evaluation suite, consisting of direct questions about a plugin + indirect ones that are more widely phrased
+## evaluation suite: direct questions about a plugin + indirect ones (more widely phrased)
 path_to_prompts = Path(__file__).parent / "evaluation" / "benchmark_prompts.json"
 with open(path_to_prompts, "r", encoding="utf-8") as f:
     BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
 # BENCHMARK = {
 #     "leadtimeselektor": [
 #     "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
+#     "How can I best extract lead times from decadal climate predictions?",
 #     "How are you?",
 #     ]
 # }
@@ -264,7 +266,7 @@ async def run_benchmark_for_prompt(
     tool_args = [r.tool_args for r in results]
     tool_outputs = [r.tool_output for r in results]
 
-    if EVAL_TOOL_CALLS:
+    if EVAL_TOOL:
         metrics_dict = _evaluate_tool_call_results(
             tool_names, tool_args, tool_outputs, plugin
         )
@@ -275,8 +277,10 @@ async def run_benchmark_for_prompt(
 
 
 def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
+    current_date = datetime.today().strftime("%Y-%m-%d")
     # pie chart for tool/plugin TP, FP, FN
     fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+    metrics = ["TP", "FP", "FN"]
     tool_metrics = {
         "True Positives": avg_metrics.get("true_pos_tool", 0),
         "False Positives": avg_metrics.get("false_pos_tool", 0),
@@ -287,16 +291,22 @@ def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
         "False Positives": avg_metrics.get("false_pos_plugin", 0),
         "False Negatives": avg_metrics.get("false_neg_plugin", 0),
     }
-    axs[0].pie(tool_metrics.values(), labels=tool_metrics.keys(), autopct="%1.1f%%")
-    axs[0].set_title("Tool Call Metrics")
-    axs[1].pie(plugin_metrics.values(), labels=plugin_metrics.keys(), autopct="%1.1f%%")
-    axs[1].set_title("Plugin Call Metrics")
+    charts = [tool_metrics, plugin_metrics]
+    titles = ["Tool Call", "Plugin Call"]
+    for ax, chart, title in zip(axs, charts, titles):
+        pie = ax.pie(
+            chart.values(),
+            autopct="%1.1f%%",
+            textprops=dict(fontsize=14, color="white"),
+        )
+        ax.legend(pie.wedges, metrics, title="Metrics", loc="best", fontsize=14)
+        ax.set_title(title, fontsize=16)
     plt.suptitle(
         f"Evaluation Metrics for 'plugin_code_search' tool (Model: {MODEL}, Runs/Query: 30)"
     )
     plt.tight_layout()
-    plt.subplots_adjust(wspace=0.4)
-    plt.savefig(save_dir / "tool_evaluation_pie_charts.png")
+    plt.subplots_adjust(wspace=0.2)
+    plt.savefig(save_dir / f"tool_evaluation_pie_charts_{current_date}.png", dpi=400)
 
     # bar chart for tool/plugin accuracy, precision, recall
     fig, axs = plt.subplots(1, 2, figsize=(12, 6))
@@ -322,7 +332,7 @@ def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
     )
     plt.tight_layout()
     plt.subplots_adjust(wspace=0.3)
-    plt.savefig(save_dir / "tool_evaluation_metrics.png")
+    plt.savefig(save_dir / f"tool_evaluation_metrics_{current_date}.png", dpi=400)
 
 
 async def main() -> None:
@@ -340,16 +350,16 @@ async def main() -> None:
                 progress.update(RUNS)
 
     # compute average metrics across all prompts
-    if EVAL_TOOL_CALLS:
+    if EVAL_TOOL:
         avg_metrics = {k: sum(v) / len(v) for k, v in eval_dict.items()}
         print(
             f"\n=== Average metrics [in %] across all prompts ({RUNS} runs/prompt) ==="
         )
         for k, v in avg_metrics.items():
-            print(f"{k}: {v:.1%}")
+            print(f"  {k:<17}: {v:.1%}")
 
     # plot metrics as bar charts (one for tool, one for plugin)
-    if PLOT_METRICS and EVAL_TOOL_CALLS:
+    if PLOT_METRICS and EVAL_TOOL:
         eval_dir = Path(__file__).parent / "evaluation"
         eval_dir.mkdir(parents=True, exist_ok=True)
         plot_metrics(avg_metrics, eval_dir)

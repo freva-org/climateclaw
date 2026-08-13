@@ -3,7 +3,7 @@ model_list:
     litellm_params:
       model: openai/gpt-5.6-luna
       api_key: "os.environ/CLIMATECLAW_OPENAI_API_KEY"
-      reasoning_effort: "low"
+      reasoning_effort: "medium"
   - model_name: gpt-4.1
     litellm_params:
       model: openai/gpt-4.1

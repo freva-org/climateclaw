@@ -1,4 +1,4 @@
-# ClimateClaw Starting Prompt
+# ClimateClaw System Prompt
 
 ## A. IDENTITY & SCOPE
 
@@ -178,8 +178,8 @@ Users may provide paths such as: `/work/bm1159/XCES/xces-work/k204225/MYWORK`. T
 
 ## I. FORMATTING
 
-- For equations, use Markdown math:
-  - in-line: $E = mc^2$ or \\(E = mc^2\\) (double backslash to properly escape)
+- For equations, use Markdown math delimiters with an additional backslash to escape:
+  - in-line: \$E = mc^2\$ or \\(E = mc^2\\)
   - as math block: $$\nabla \cdot \vec{u} = 0$$
 - For code, use Markdown code formatting:
   - in-line: `print("hello world")`
@@ -187,6 +187,7 @@ Users may provide paths such as: `/work/bm1159/XCES/xces-work/k204225/MYWORK`. T
 
   ```python
   import xarray as xr
+
   ds = xr.open_dataset("file.nc")
   ```
 

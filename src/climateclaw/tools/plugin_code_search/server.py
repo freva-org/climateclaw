@@ -227,8 +227,8 @@ async def select_relevant_files(
             f"Task: You are selecting the most relevant files from the '{plugin}' Freva plugin repository.\n\n"
             "Selection rules:\n"
             "- Prioritize files that seem most relevant to answer the query intent.\n"
-            "- For high level usage/configuration questions, prioritize wrapper/config files and README/docs.\n"
-            "- For questions about implementation logic, prioritize core source code modules.\n"
+            "- For high level usage/configuration questions, prioritize wrapper/config files,  README and docs.\n"
+            "- For questions about implementation logic, prioritize source code modules.\n"
             "- Exclude tests, examples, generated files, and any '__init__.py'.\n"
             f"- Return ONLY a valid JSON array of file path strings from the provided list, with at most {MAX_RELEVANT_FILES} items. Output nothing but the JSON array."
             f"Repository file list:\n{file_tree}\n\n"
@@ -268,13 +268,15 @@ async def select_relevant_files(
     return [p for p in selected_files if p in set(file_paths)][:MAX_RELEVANT_FILES]
 
 
-async def collect_plugin_context(plugin: str, project_id: int, user_query: str) -> str:
+async def collect_plugin_context(
+    plugin: str, project: str, project_id: int, user_query: str
+) -> str:
     """
     Three-stage context retrieval of code base:
         1. Ask LLM which files are most relevant for the user's query.
         2. Fetch those files, then scan for imports to identify dependent modules.
         3. Fetch the dependencies and return the combined contents.
-    Returns a string containing the concatenated relevant code snippets,
+    Returns a string containing the concatenated relevant source code files,
         separated by file and with a header.
     """
 
@@ -288,12 +290,17 @@ async def collect_plugin_context(plugin: str, project_id: int, user_query: str) 
             files,
         )
 
+    header = (
+        f"Relevant retrieved code of the '{plugin}' plugin "
+        f"(https://gitlab.dkrz.de/{project}/plugins4freva/{plugin}):\n\n"
+    )
+
     # ── Stage 0: fetch the repository tree with all files ────────────────────
     file_paths = fetch_repo_tree(project_id)
     if not file_paths:
         return "(repository is empty)"
 
-    # ── Stage 1: ask the LLM to select relevant files ─────────────────────────
+    # ── Stage 1: let LLM select relevant files ─────────────────────────
     base_files = await select_relevant_files(plugin, user_query, file_paths)
     _log_stage("Initial", base_files)
 
@@ -305,10 +312,11 @@ async def collect_plugin_context(plugin: str, project_id: int, user_query: str) 
     dep_files = await select_relevant_files(plugin, init_code, tree_remaining, dep=True)
     _log_stage("Dependency", dep_files)
     if not dep_files:
-        return init_code
+        return header + init_code
 
     dep_code = fetch_plugin_code(project_id, dep_files, MAX_TOTAL_CODE_CHARS // 3)
-    return init_code + "\n\n# ── Dependency files ──\n\n" + dep_code
+    code_content = init_code + "\n\n### ── Dependency files ── ###\n\n" + dep_code
+    return header + code_content
 
 
 def validate_plugin_call(
@@ -407,25 +415,19 @@ async def plugin_code_search(user_query: str) -> str:
         str: Relevant code context fetched from source files of the plugin repository;
         or an error message if the plugin call is not authorized / code retrieval fails.
     """
-    plugin_name, project_name = await detect_plugin_project(user_query)
-    # return f"plugin_name: {plugin_name}, project_name: {project_name}"  # only for benchmarking the plugin detection stage
+    plugin, project = await detect_plugin_project(user_query)
+    # return f"plugin_name: {plugin}, project_name: {project}"  # only for benchmarking the plugin detection stage
 
     # Validate the plugin call
-    project_id = get_project_id(plugin_name, project_name)
-    result, message = validate_plugin_call(plugin_name, project_name, project_id)
+    project_id = get_project_id(plugin, project)
+    result, message = validate_plugin_call(plugin, project, project_id)
     if not result:
         return message
 
     # Fetch the plugin code and return it with a header
-    logger.info("Fetching source code for plugin '%s'", plugin_name)
+    logger.info("Fetching source code for plugin '%s'", plugin)
     try:
-        code_content = await collect_plugin_context(plugin_name, project_id, user_query)  # type: ignore
+        return await collect_plugin_context(plugin, project, project_id, user_query)  # type: ignore
     except Exception as e:
-        logger.warning("Failed to fetch plugin code for '%s': %s", plugin_name, e)
-        return f"Failed to retrieve source code for plugin '{plugin_name}': {e}"
-
-    header = (
-        f"Relevant retrieved code of the '{plugin_name}' plugin "
-        f"(https://gitlab.dkrz.de/{project_name}/plugins4freva/{plugin_name}):\n\n"
-    )
-    return header + code_content
+        logger.warning("Failed to fetch plugin code for '%s': %s", plugin, e)
+        return f"Failed to retrieve source code for plugin '{plugin}': {e}"
