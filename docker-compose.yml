@@ -87,14 +87,15 @@ services:
       - ./litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
       - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
     entrypoint: ["/bin/sh", "-c"]
-    command: >
-      litellm
-      --config=/app/config.yaml
-      --port=4000
-      --num_workers=8
-      --run_gunicorn
-      --detailed_debug
-      2>&1 | tee -a /app/logs/litellm.log
+    command:
+      - >
+        litellm
+        --config=/app/config.yaml
+        --port=4000
+        --num_workers=8
+        --run_gunicorn
+        --detailed_debug
+        2>&1 | tee -a /app/logs/litellm.log
     env_file: .env
     networks:
       - climateclaw
