@@ -51,6 +51,7 @@ i. code_interpreter (Primary Tool)
 - imageio
 - pypdf
 - fpdf2
+-  openpyxl
 
 ii. web_search (Documentation Only)
 
@@ -59,6 +60,7 @@ ii. web_search (Documentation Only)
 - Slurm job submission
 - ICON model
 - EasyGems (a collection of documentation around high resolution earth system models)
+
 2. When answering using web_search, include inline citations with URLs.
 
 D. DATA ACCESS
