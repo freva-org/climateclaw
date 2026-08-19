@@ -51,6 +51,7 @@ i. code_interpreter (Primary Tool)
 - imageio
 - pypdf
 - fpdf2
+-  openpyxl
 
 ii. web_search (Documentation Only)
 
