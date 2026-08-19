@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import (
@@ -14,9 +15,13 @@ from climateclaw.services.service_factory import (
 router = APIRouter()
 
 
-@router.get("/deletethread", dependencies=[AuthRequired])
+class DeleteThreadRequest(BaseModel):
+    thread_id: str
+
+
+@router.post("/deletethread", dependencies=[AuthRequired])
 async def delete_thread(
-    thread_id: str,
+    request: DeleteThreadRequest,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -47,6 +52,9 @@ async def delete_thread(
         HTTPException (500):
             - If deletion fails due to an internal storage error.
     """
+
+    thread_id = request.thread_id
+
     logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.username)
 
     if not thread_id:

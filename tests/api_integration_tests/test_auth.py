@@ -9,7 +9,7 @@ async def test_auth_missing_headers_returns_401(client):
         r = await client.get("/api/chatbot/availablechatbots")
         assert r.status_code == 401
         detail = r.json()["detail"]
-        assert "Some necessary field weren't found" in detail
+        assert "Some necessary fields for authentication weren't found" in detail
         assert "nginx proxy" in detail
 
 
