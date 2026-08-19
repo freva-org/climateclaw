@@ -59,6 +59,8 @@ ii. web_search (Documentation Only)
 - DKRZ/HPC infrastructure
 - Slurm job submission
 - ICON model
+- EasyGems (a collection of documentation around high resolution earth system models)
+
 2. When answering using web_search, include inline citations with URLs.
 
 D. DATA ACCESS
