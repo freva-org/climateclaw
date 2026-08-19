@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+import importlib
 import logging
 import os
-import importlib
-from typing import Dict, Any
-
-from src.services.mcp.client import McpClient
+from typing import Any
 
 import pytest
+
+from climateclaw.services.mcp.client import McpClient
 
 pytestmark = pytest.mark.integration
 # Run these tests using `pytest -m integration`
@@ -18,9 +18,9 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(autouse=True)
 def _force_dev(monkeypatch):
-    monkeypatch.setenv("FREVAGPT_DEV", "1")
-    monkeypatch.setenv("FREVAGPT_CODE_SERVER_URL", "http://localhost:8051")
-    import src.core.settings as settings
+    monkeypatch.setenv("CLIMATECLAW_DEV", "1")
+    monkeypatch.setenv("CLIMATECLAW_CODE_SERVER_URL", "http://localhost:8051")
+    import climateclaw.core.settings as settings
 
     importlib.reload(settings)
     yield
@@ -28,7 +28,7 @@ def _force_dev(monkeypatch):
 
 @pytest.fixture
 def mcp_client_CI():
-    base_url = os.getenv("FREVAGPT_CODE_SERVER_URL", "http://localhost:8051")
+    base_url = os.getenv("CLIMATECLAW_CODE_SERVER_URL", "http://localhost:8051")
     client = McpClient(
         base_url=base_url,
         default_headers={"freva-config-path": "freva_evaluation.conf"},
@@ -36,7 +36,7 @@ def mcp_client_CI():
     return client
 
 
-def _execute_code_via_mcp(mcp_c, code) -> Dict[str, Any]:
+def _execute_code_via_mcp(mcp_c, code) -> dict[str, Any]:
     """
     Adapter layer to  MCP server.
     The function must return a dict.
@@ -50,7 +50,7 @@ def _execute_code_via_mcp(mcp_c, code) -> Dict[str, Any]:
         args=code,
     )
     # Ensure type and shape of result
-    if not isinstance(results, Dict) and "structuredContent" not in results.keys():
+    if not isinstance(results, dict) and "structuredContent" not in results:
         raise RuntimeError("MCP client returned unknown result from code-interpreter.")
     return results.get("structuredContent", {})
 
@@ -86,8 +86,8 @@ def _exec_and_get_richoutput_value(mcp_client_CI, code):
 
 
 @pytest.mark.skipif(
-    not os.getenv("FREVAGPT_CODE_SERVER_URL"),
-    reason="FREVAGPT_CODE_SERVER_URL not set or code-interpreter MCP server not running",
+    not os.getenv("CLIMATECLAW_CODE_SERVER_URL"),
+    reason="CLIMATECLAW_CODE_SERVER_URL not set or code-interpreter MCP server not running",
 )
 def test_two_plus_two(mcp_client_CI):
     code = {"code": "2+2"}
@@ -126,10 +126,8 @@ def test_imports(mcp_client_CI):
 
     for lib in [
         "xarray",
-        "tzdata",
         "six",
         "shapely",
-        "pytz",
         "shapefile",
         "pyproj",
         "pyparsing",
@@ -208,14 +206,14 @@ def test_plot_extraction(mcp_client_CI):
         "code": "import matplotlib.pyplot as plt\nplt.plot([1, 2, 3], [4, 5, 6])\nplt.show()"
     }
     rich_data = _exec_and_get_richoutput_value(mcp_client_CI, code)
-    assert "image/png" in rich_data[0].keys()
+    assert "image/png" in rich_data[0]
     assert isinstance(rich_data[0].get("image/png"), str)
 
 
 def test_plot_extraction_no_import(mcp_client_CI):
     code = {"code": "plt.plot([1, 2, 3], [4, 5, 6])"}
     rich_data = _exec_and_get_richoutput_value(mcp_client_CI, code)
-    assert "image/png" in rich_data[0].keys()
+    assert "image/png" in rich_data[0]
     assert isinstance(rich_data[0].get("image/png"), str)
 
 
@@ -224,7 +222,7 @@ def test_plot_extraction_second_to_last_line(mcp_client_CI):
         "code": "import matplotlib.pyplot as plt\nplt.plot([1, 2, 3], [4, 5, 6])\nplt.show()\nprint('Done!')"
     }
     rich_data = _exec_and_get_richoutput_value(mcp_client_CI, code)
-    assert "image/png" in rich_data[0].keys()
+    assert "image/png" in rich_data[0]
     assert isinstance(rich_data[0].get("image/png"), str)
 
 
@@ -233,7 +231,7 @@ def test_plot_extraction_without_pltshow(mcp_client_CI):
         "code": "import matplotlib.pyplot as plt\nax = plt.plot([1, 2, 3], [4, 5, 6])\nprint('Done!')"
     }
     rich_data = _exec_and_get_richoutput_value(mcp_client_CI, code)
-    assert "image/png" in rich_data[0].keys()
+    assert "image/png" in rich_data[0]
     assert isinstance(rich_data[0].get("image/png"), str)
 
 
@@ -256,7 +254,7 @@ def test_plot_extraction_close(mcp_client_CI):
         "code": "import matplotlib.pyplot as plt\nplt.plot([1, 2, 3], [4, 5, 6])\nplt.close()"
     }
     rich_data = _exec_and_get_richoutput_value(mcp_client_CI, code)
-    assert "image/png" in rich_data[0].keys()
+    assert "image/png" in rich_data[0]
     assert isinstance(rich_data[0].get("image/png"), str)
 
 
