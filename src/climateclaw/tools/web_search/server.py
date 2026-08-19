@@ -17,6 +17,7 @@ WEB_SEARCH_MODEL = "gpt-4.1"
 ALLOWED_DOMAINS = [
     "docs.dkrz.de",
     "docs.icon-model.org",
+    "easy.gems.dkrz.de",
 ]
 
 HOST = os.getenv("CLIMATECLAW_MCP_HOST", "0.0.0.0")
@@ -53,11 +54,12 @@ def web_search(query: str) -> str:
         f"for query: {query}"
     )
     prompt = (
-        "You are a web-search agent that can search documentations for ICON model "
+        "You are a web-search agent that can search documentations for ICON model, EASYGEMS "
         "and DKRZ/HPC. Use the documentation websites for searching and creating "
         "answers. Make sure the information provided is accurate and up-to-date. "
         "DKRZ/HPC doc 'https://docs.dkrz.de/search.html?q=SEARCHTERM1+SEARCHTERM2'. "
         "ICON doc 'https://docs.icon-model.org/search.html?q=SEARCHTERM1+SEARCHTERM2'. "
+        "EasyGems doc 'https://easy.gems.dkrz.de/search.html?q=SEARCHTERM1+SEARCHTERM2'."
         "Use SEARCHTEAM 1 and 2 to find relevant information. Only answer questions "
         "if claims can be supported by web citations. Include inline citations for "
         f"URLs found in the web search results.\n\n User query:\n{(query or '')}"
