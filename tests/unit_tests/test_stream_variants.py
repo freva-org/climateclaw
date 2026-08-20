@@ -29,7 +29,7 @@ def test_cleanup_inserts_codeoutput_and_end():
     assert kinds == ["User", "Code", "CodeOutput", "StreamEnd"]
     assert isinstance(out[2], SVCodeOutput)
     assert out[2].id == "call_1"
-    assert out[2].output == ""
+    assert out[2].output == "No response was received from code-interpreter."
 
 
 def test_cleanup_no_extra_end_if_existing():
