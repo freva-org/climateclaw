@@ -186,6 +186,78 @@ def generate_haproxy(
     return "\n".join(conf)
 
 
+def generate_outer_haproxy(
+    node_addresses: list[str],
+    backend_port: str,
+) -> str:
+    """Generate an HAProxy config routing between node-local HAProxies."""
+
+    if not node_addresses:
+        raise ValueError("At least one node address must be configured")
+
+    lines = [
+        "global",
+        "    daemon",
+        "    maxconn 4096",
+        "",
+        "defaults",
+        "    mode http",
+        "    option httplog",
+        "    option redispatch",
+        "    timeout connect 5s",
+        "    timeout client  600s",
+        "    timeout server  600s",
+        "    timeout tunnel  1h",
+        "    default-server inter 3s fall 3 rise 2",
+        "",
+        "frontend fe_outer_climateclaw",
+        f"    bind *:{backend_port}",
+        "    default_backend be_node_haproxys",
+        "",
+        "backend be_node_haproxys",
+        "    balance url_param thread_id check_post",
+        "",
+        "    option httpchk",
+        "    http-check send meth GET uri /healthz",
+        "    http-check expect status 200",
+        "",
+    ]
+
+    for index, host in enumerate(node_addresses, start=1):
+        lines.append(f"    server node{index} {host}:{backend_port} check")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
+def add_outer_haproxy_service(
+    services: dict,
+    network_name: str,
+    backend_port: str,
+    target_port: str,
+    config_path: str,
+) -> None:
+    """Add the outer HAProxy to the generated Compose services."""
+
+    services["outer-haproxy"] = {
+        "image": "haproxy:3.0-alpine",
+        "user": "0:0",
+        "restart": "unless-stopped",
+        "ports": [
+            f"{target_port}:{backend_port}",
+        ],
+        "volumes": [
+            (f"./{config_path}:/usr/local/etc/haproxy/haproxy.cfg:ro"),
+        ],
+        "networks": [network_name],
+        "depends_on": {
+            "haproxy": {
+                "condition": "service_started",
+            },
+        },
+    }
+
+
 def main():
 
     if len(sys.argv) < 2:
@@ -217,6 +289,17 @@ def main():
         )
         for s in available_mcp_servers
     }
+
+    node_addresses = [
+        address.strip()
+        for address in os.environ.get(
+            "CLIMATECLAW_NODE_ADDRESSES",
+            "",
+        ).split(",")
+        if address.strip()
+    ]
+
+    outer_haproxy_config_path = "haproxy.outer.cfg"
 
     base = yaml.safe_load(open(compose_path))
 
@@ -255,9 +338,15 @@ def main():
     ]
     if port_dict.get("code-server"):
         dev_ports.append(f"{port_dict['code-server']}:{port_dict['code-server']}")
-    prod_ports = [
-        f"{backend_target_port}:{backend_port}",
-    ]
+
+    if node_addresses:
+        prod_ports = [
+            f"{backend_port}:{backend_port}",
+        ]
+    else:
+        prod_ports = [
+            f"{backend_target_port}:{backend_port}",
+        ]
 
     network_name = list(base["networks"].keys())[0]
 
@@ -275,6 +364,28 @@ def main():
             mcp_replica_n,
         ),
     }
+
+    outer_haproxy_cfg = None
+
+    if node_addresses:
+        if "dev" in compose_path:
+            raise ValueError(
+                "CLIMATECLAW_NODE_ADDRESSES is only supported "
+                "for production compose generation"
+            )
+
+        outer_haproxy_cfg = generate_outer_haproxy(
+            node_addresses=node_addresses,
+            backend_port=backend_port,
+        )
+
+        add_outer_haproxy_service(
+            services=new_services,
+            network_name=network_name,
+            backend_port=backend_port,
+            target_port=backend_target_port,
+            config_path=outer_haproxy_config_path,
+        )
 
     out = base | {"services": new_services}
 
@@ -295,8 +406,16 @@ def main():
     )
 
     Path("haproxy.cfg").write_text(haproxy_cfg)
+    generated_files = [
+        output_path.name,
+        "haproxy.cfg",
+    ]
 
-    print(f"Generated {output_path.name} and haproxy.cfg")
+    if outer_haproxy_cfg is not None:
+        Path(outer_haproxy_config_path).write_text(outer_haproxy_cfg)
+        generated_files.append(outer_haproxy_config_path)
+
+    print(f"Generated {', '.join(generated_files)}")
 
 
 if __name__ == "__main__":
