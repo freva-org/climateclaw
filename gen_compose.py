@@ -17,6 +17,8 @@ MCP_SERVER_CONFIG = {
 }
 MCP_SERVICES = set(MCP_SERVER_CONFIG)
 
+DEV_MODE = os.environ.get("CLIMATECLAW_DEV", "0")
+
 
 def expand_service(name, service, replicas):
     services = {}
@@ -44,9 +46,10 @@ def expand_ollama_service(name, service, replicas):
     if replicas == 1:
         return services
 
-    for i in range(1, replicas + 1):
-        replica_name = f"{name}-{i}"
-        services[replica_name]["devices"] = [f"nvidia.com/gpu={i - 1}"]
+    if not DEV_MODE:
+        for i in range(1, replicas + 1):
+            replica_name = f"{name}-{i}"
+            services[replica_name]["devices"] = [f"nvidia.com/gpu={i - 1}"]
 
     return services
 
