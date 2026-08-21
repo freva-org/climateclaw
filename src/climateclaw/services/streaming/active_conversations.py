@@ -84,7 +84,7 @@ async def initialize_conversation(
     log = logger or configure_logging(__name__, thread_id=thread_id, user_id=user_id)
     now = datetime.now(timezone.utc)
 
-    mcp_mgr = get_mcp_manager(authenticator=auth, thread_id=thread_id)
+    mcp_mgr = await get_mcp_manager(authenticator=auth, thread_id=thread_id)
 
     # Precreate the conversation object to reduce time spent under lock
     maybe_new_conv = ActiveConversation(
@@ -280,8 +280,7 @@ async def _replay_code_history(thread_id: str) -> None:
 
     for code in code_blocks:
         try:
-            # Run the blocking MCP call in a thread, reusing helper from stream_orchestrator
-
+            # Run the MCP call asynchronously, reusing helper from stream_orchestrator
             await run_tool_via_mcp(
                 mcp=mcp,
                 tool_name="code_interpreter",
@@ -359,17 +358,24 @@ async def cleanup_idle(
     """
     now = datetime.now(timezone.utc)
     idle_threads: list[str] = []
+    managers_to_close = []
 
     # Decide which ones to evict
     for thread_id, conv in list(Registry.items()):
         if now - conv.last_activity > max_idle:
             idle_threads.append(thread_id)
             if conv.mcp_manager:
-                conv.mcp_manager.close()
+                managers_to_close.append(conv.mcp_manager)
 
     # Remove them under lock.
     async with RegistryLock:
         for thread_id in idle_threads:
             Registry.pop(thread_id)
+
+    for mgr in managers_to_close:
+        try:
+            await mgr.close()
+        except Exception:
+            DEFAULT_LOGGER.exception("Failed to close MCP manager during idle cleanup.")
 
     return idle_threads
