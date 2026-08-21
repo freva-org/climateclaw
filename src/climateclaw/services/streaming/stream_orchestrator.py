@@ -85,7 +85,7 @@ async def stream_with_tools(
 
     # 1) First request
     tool_agg: dict[str, Any] = {}
-    tools = mcp.openai_tools() if mcp and hasattr(mcp, "openai_tools") else []
+    tools = await mcp.openai_tools() if mcp and hasattr(mcp, "openai_tools") else []
 
     if tools:
         resp = await acomplete_func(
@@ -196,12 +196,37 @@ async def stream_with_tools(
                 yield result_text
 
             except asyncio.CancelledError:
-                # /stop or connection close has cancelled this task
-                tool_task.cancel()
-                raise
+                conv_state = await get_conversation_state(thread_id)
+                if conv_state == ConversationState.STOPPING:
+                    log.warning(
+                        "Tool task cancelled; interrupting MCP execution for thread=%s",
+                        thread_id,
+                    )
+
+                    result_text = json.dumps(
+                        {
+                            "structuredContent": {
+                                "error": "Tool task cancelled upon user request."
+                            }
+                        }
+                    )
+                    yield result_text
+
+                else:
+                    log.exception(
+                        "Tool task cancelled unexpectedly; thread=%s state=%s tool=%s",
+                        thread_id,
+                        conv_state,
+                        name,
+                    )
+
+                    tool_task.cancel()
+                    await asyncio.gather(tool_task, return_exceptions=True)
+                    raise
 
             except Exception:
                 tool_task.cancel()
+                await asyncio.gather(tool_task, return_exceptions=True)
                 raise
 
             finally:
@@ -241,6 +266,9 @@ async def stream_with_tools(
 
         if tool_msgs:
             messages.extend(tool_msgs)  # type: ignore[arg-type]
+
+        if await get_conversation_state(thread_id) == ConversationState.STOPPING:
+            return
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -290,8 +318,17 @@ async def run_stream(
                 yield piece
 
         except asyncio.CancelledError:
-            end_v = SVStreamEnd(message="Cancelled.")
-            log.error("Stream is cancelled.")
+            conv_state = await get_conversation_state(thread_id)
+            if conv_state == ConversationState.STOPPING:
+                log.info(
+                    "Stream cancelled after client stop request; thread=%s", thread_id
+                )
+            else:
+                log.exception(
+                    "Stream cancelled unexpectedly; thread=%s state=%s",
+                    thread_id,
+                    conv_state,
+                )
             stream_state.finished = True
         except Exception as e:
             log.exception("Stream error: %s", e)
