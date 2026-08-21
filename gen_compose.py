@@ -305,10 +305,12 @@ def main():
     DEV_MODE = True if "dev" in compose_path else False
     CLUSTER_MODE = True if len(node_addresses) > 1 else False
     if DEV_MODE and CLUSTER_MODE:
-        raise ValueError(
+        print(
             "CLIMATECLAW_NODE_ADDRESSES is only supported "
-            "for production compose generation"
+            "in production. Ignoring these addressed in development "
+            "and deploying in single-node mode."
         )
+        CLUSTER_MODE = False
 
     outer_haproxy_config_path = "haproxy.outer.cfg"
 
