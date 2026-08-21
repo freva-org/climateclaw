@@ -119,7 +119,14 @@ def haproxy_backend(name, port, service_names, sticky_mode=None):
 
 
 def generate_haproxy(
-    services, backend_n, backend_port, litellm_n, server_list, replica_dict, port_dict
+    services,
+    backend_n,
+    backend_port,
+    litellm_n,
+    server_list,
+    replica_dict,
+    port_dict,
+    timeout,
 ):
     conf = []
 
@@ -131,8 +138,8 @@ def generate_haproxy(
         "defaults\n"
         "    mode http\n"
         "    timeout connect 5s\n"
-        "    timeout client  60s\n"
-        "    timeout server  60s\n"
+        f"    timeout client {timeout}s\n"
+        f"    timeout server {timeout}s\n"
         "    default-server inter 3s fall 3 rise 2\n"
         "\n"
     )
@@ -217,6 +224,7 @@ def main():
         )
         for s in available_mcp_servers
     }
+    mcp_request_timeout = int(os.getenv("CLIMATECLAW_MCP_REQUEST_TIMEOUT_SEC", "600"))
 
     base = yaml.safe_load(open(compose_path))
 
@@ -292,6 +300,7 @@ def main():
         available_mcp_servers,
         mcp_replica_n,
         port_dict,
+        mcp_request_timeout,
     )
 
     Path("haproxy.cfg").write_text(haproxy_cfg)
