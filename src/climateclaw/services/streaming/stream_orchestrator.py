@@ -203,18 +203,15 @@ async def stream_with_tools(
                         thread_id,
                     )
 
-                    try:
-                        await asyncio.shield(
-                            mcp.cancel_tool_call(
-                                tool_name=name, reason="User requested cancellation"
-                            )
-                        )
-                    except Exception:
-                        log.exception(
-                            "Failed to interrupt MCP session during cancellation."
-                        )
+                    result_text = json.dumps(
+                        {
+                            "structuredContent": {
+                                "error": "Tool task cancelled upon user request."
+                            }
+                        }
+                    )
+                    yield result_text
 
-                    yield "Tool task cancelled upon user request."
                 else:
                     log.exception(
                         "Tool task cancelled unexpectedly; thread=%s state=%s tool=%s",
@@ -269,6 +266,9 @@ async def stream_with_tools(
 
         if tool_msgs:
             messages.extend(tool_msgs)  # type: ignore[arg-type]
+
+        if await get_conversation_state(thread_id) == ConversationState.STOPPING:
+            return
 
 
 # ──────────────────────────────────────────────────────────────────────────────
