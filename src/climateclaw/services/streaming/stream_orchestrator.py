@@ -214,6 +214,7 @@ async def stream_with_tools(
                             "Failed to interrupt MCP session during cancellation."
                         )
 
+                    yield "Tool task cancelled upon user request."
                 else:
                     log.exception(
                         "Tool task cancelled unexpectedly; thread=%s state=%s tool=%s",
@@ -222,9 +223,9 @@ async def stream_with_tools(
                         name,
                     )
 
-                tool_task.cancel()
-                await asyncio.gather(tool_task, return_exceptions=True)
-                raise
+                    tool_task.cancel()
+                    await asyncio.gather(tool_task, return_exceptions=True)
+                    raise
 
             except Exception:
                 tool_task.cancel()
