@@ -134,7 +134,7 @@ def generate_haproxy(
         "global\n"
         "    daemon\n"
         "    maxconn 256\n"
-        "\n"
+        f"    log {os.environ.get('CLIMATECLAW_SYSLOG_TARGET', 'stdout')} format raw local0 info\n"
         "defaults\n"
         "    mode http\n"
         "    timeout connect 5s\n"
