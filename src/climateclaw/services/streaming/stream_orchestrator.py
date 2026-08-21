@@ -196,21 +196,30 @@ async def stream_with_tools(
                 yield result_text
 
             except asyncio.CancelledError:
-                # /stop or connection close has cancelled this task
-                log.warning(
-                    "Tool task cancelled; interrupting MCP execution for thread=%s",
-                    thread_id,
-                )
-
-                try:
-                    await asyncio.shield(
-                        mcp.cancel_tool_call(
-                            tool_name=name, reason="User requested cancellation"
-                        )
+                conv_state = await get_conversation_state(thread_id)
+                if conv_state == ConversationState.STOPPING:
+                    log.warning(
+                        "Tool task cancelled; interrupting MCP execution for thread=%s",
+                        thread_id,
                     )
-                except Exception:
+
+                    try:
+                        await asyncio.shield(
+                            mcp.cancel_tool_call(
+                                tool_name=name, reason="User requested cancellation"
+                            )
+                        )
+                    except Exception:
+                        log.exception(
+                            "Failed to interrupt MCP session during cancellation."
+                        )
+
+                else:
                     log.exception(
-                        "Failed to interrupt MCP session during cancellation."
+                        "Tool task cancelled unexpectedly; thread=%s state=%s tool=%s",
+                        thread_id,
+                        conv_state,
+                        name,
                     )
 
                 tool_task.cancel()
@@ -308,8 +317,17 @@ async def run_stream(
                 yield piece
 
         except asyncio.CancelledError:
-            end_v = SVStreamEnd(message="Cancelled.")
-            log.error("Stream is cancelled.")
+            conv_state = await get_conversation_state(thread_id)
+            if conv_state == ConversationState.STOPPING:
+                log.info(
+                    "Stream cancelled after client stop request; thread=%s", thread_id
+                )
+            else:
+                log.exception(
+                    "Stream cancelled unexpectedly; thread=%s state=%s",
+                    thread_id,
+                    conv_state,
+                )
             stream_state.finished = True
         except Exception as e:
             log.exception("Stream error: %s", e)
