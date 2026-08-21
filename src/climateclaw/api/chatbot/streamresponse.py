@@ -229,6 +229,8 @@ async def streamresponse(
                 thread_id, [hint_v], storage=storage, store_thread=store_thread
             )
 
+        stop_requested = False
+
         last_check = time.monotonic()
         async for variant in run_stream(
             model=model_name,
