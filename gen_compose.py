@@ -19,6 +19,7 @@ MCP_SERVICES = set(MCP_SERVER_CONFIG)
 
 
 def expand_service(name, service, replicas):
+    """Add replicated services"""
     services = {}
 
     for i in range(1, replicas + 1):
@@ -39,6 +40,7 @@ def expand_service(name, service, replicas):
 
 
 def expand_depends_on(depends_on, replica_counts):
+    """Update the dependencies with names of replicated services"""
     if isinstance(depends_on, dict):
         expanded = {}
         for dependency, config in depends_on.items():
@@ -64,6 +66,7 @@ def expand_depends_on(depends_on, replica_counts):
 
 
 def update_service_dependencies(services, replica_counts):
+    """Update the service dependencies inhereted from the base compose"""
     for service in services.values():
         if "depends_on" in service:
             service["depends_on"] = expand_depends_on(
@@ -266,11 +269,11 @@ def main():
 
     compose_path = sys.argv[1]
 
+    # Read env variables
     backend_port = os.environ.get("CLIMATECLAW_BACKEND_PORT", "8502")
     backend_target_port = os.environ.get("CLIMATECLAW_TARGET_PORT", "8502")
     backend_n = int(os.environ.get("CLIMATECLAW_BACKEND_REPLICAS", "1"))
     litellm_n = int(os.environ.get("CLIMATECLAW_LITELLM_REPLICAS", "1"))
-
     available_mcp_servers = [
         s
         for s in os.environ.get("CLIMATECLAW_AVAILABLE_MCP_SERVERS", "").split(",")
@@ -289,7 +292,6 @@ def main():
         )
         for s in available_mcp_servers
     }
-
     node_addresses = [
         address.strip()
         for address in os.environ.get(
@@ -299,8 +301,18 @@ def main():
         if address.strip()
     ]
 
+    # Check for different modes of deployment
+    DEV_MODE = True if "dev" in compose_path else False
+    CLUSTER_MODE = True if len(node_addresses) > 1 else False
+    if DEV_MODE and CLUSTER_MODE:
+        raise ValueError(
+            "CLIMATECLAW_NODE_ADDRESSES is only supported "
+            "for production compose generation"
+        )
+
     outer_haproxy_config_path = "haproxy.outer.cfg"
 
+    # Read base compose file
     base = yaml.safe_load(open(compose_path))
 
     services = base["services"]
@@ -311,6 +323,7 @@ def main():
         **mcp_replica_n,
     }
 
+    # Replicate services
     for name, svc in services.items():
         if name == "climateclaw":
             new_services.update(expand_service(name, svc, backend_n))
@@ -331,29 +344,29 @@ def main():
         else:
             new_services[name] = svc
 
+    # Update service dependencies on replicated services
     update_service_dependencies(new_services, replica_counts)
 
+    ## Add HAProxy service to compose
+    # HAProxy exposed ports for DEV
     dev_ports = [
         f"{backend_target_port}:{backend_port}",
     ]
     if port_dict.get("code-server"):
         dev_ports.append(f"{port_dict['code-server']}:{port_dict['code-server']}")
 
-    if node_addresses:
-        prod_ports = [
-            f"{backend_port}:{backend_port}",
-        ]
+    # HAProxy exposed ports for production. We don't expose MDP server ports in prod.
+    if CLUSTER_MODE:
+        prod_ports = [f"{backend_port}:{backend_port}"]
     else:
-        prod_ports = [
-            f"{backend_target_port}:{backend_port}",
-        ]
+        prod_ports = [f"{backend_target_port}:{backend_port}"]
 
     network_name = list(base["networks"].keys())[0]
 
     new_services["haproxy"] = {
         "image": "haproxy:3.0-alpine",
         "user": "0:0",
-        "ports": dev_ports if "dev" in compose_path else prod_ports,
+        "ports": dev_ports if DEV_MODE else prod_ports,
         "volumes": ["./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro"],
         "networks": [network_name],
         "depends_on": haproxy_dependencies(
@@ -365,15 +378,20 @@ def main():
         ),
     }
 
+    # Generate HAProxy config for node
+    haproxy_cfg = generate_haproxy(
+        new_services,
+        backend_n,
+        backend_port,
+        litellm_n,
+        available_mcp_servers,
+        mcp_replica_n,
+        port_dict,
+    )
+
     outer_haproxy_cfg = None
 
-    if node_addresses:
-        if "dev" in compose_path:
-            raise ValueError(
-                "CLIMATECLAW_NODE_ADDRESSES is only supported "
-                "for production compose generation"
-            )
-
+    if CLUSTER_MODE:
         outer_haproxy_cfg = generate_outer_haproxy(
             node_addresses=node_addresses,
             backend_port=backend_port,
@@ -394,16 +412,6 @@ def main():
     output_path = input_path.with_name(f"{input_path.stem}.scaled{input_path.suffix}")
 
     output_path.write_text(yaml.dump(out, sort_keys=False))
-
-    haproxy_cfg = generate_haproxy(
-        new_services,
-        backend_n,
-        backend_port,
-        litellm_n,
-        available_mcp_servers,
-        mcp_replica_n,
-        port_dict,
-    )
 
     Path("haproxy.cfg").write_text(haproxy_cfg)
     generated_files = [
