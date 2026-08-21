@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import (
@@ -18,11 +19,15 @@ from climateclaw.services.streaming.active_conversations import (
 router = APIRouter()
 
 
-@router.get("/userfeedback", dependencies=[AuthRequired])
+class UserFeedbackRequest(BaseModel):
+    thread_id: str
+    feedback_index: int
+    feedback: str
+
+
+@router.post("/userfeedback", dependencies=[AuthRequired])
 async def user_feedback(
-    thread_id: str,
-    feedback_index: int,
-    feedback: str,
+    request: UserFeedbackRequest,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -76,6 +81,10 @@ async def user_feedback(
         HTTPException (503):
             - Failure connecting to thread storage (MongoDB)
     """
+
+    thread_id = request.thread_id
+    feedback_index = request.feedback_index
+    feedback = request.feedback
 
     if not thread_id:
         raise HTTPException(
