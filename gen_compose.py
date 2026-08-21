@@ -141,7 +141,10 @@ def generate_haproxy(
         f"    timeout client {timeout}s\n"
         f"    timeout server {timeout}s\n"
         "    default-server inter 3s fall 3 rise 2\n"
-        "\n"
+        "    log     global\n"
+        "    option  dontlog-normal\n"
+        '    log-format "%ci:%cp %ft %b/%s Tq=%Tq Tw=%Tw Tc=%Tc Tr=%Tr Tt=%Tt '
+        'status=%ST bytes=%B term=%ts conn=%ac/%fc/%bc/%sc/%rc %{+Q}r"\n'
     )
 
     conf.append(
