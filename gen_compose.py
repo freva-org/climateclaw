@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import os
 import sys
@@ -107,8 +107,14 @@ def haproxy_dependencies(
 def haproxy_backend(name, port, service_names, sticky_mode=None):
     lines = []
     lines.append(f"backend be_{name}")
+
     if sticky_mode:
-        lines.append(f"    balance {sticky_mode}")
+        if sticky_mode == "json_thread_id":
+            lines.append("    option http-buffer-request")
+            lines.append("    balance hash req.body,json_query('$.thread_id')")
+        else:
+            lines.append(f"    balance {sticky_mode}")
+
         lines.append("    hash-type consistent")
 
     for i, service_name in enumerate(service_names, start=1):
@@ -170,7 +176,7 @@ def generate_haproxy(
             "climateclaw",
             backend_port,
             service_instance_names("climateclaw", backend_n, services),
-            "url_param thread_id",
+            "json_thread_id",
         )
     )
 
