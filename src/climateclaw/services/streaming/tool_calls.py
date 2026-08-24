@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 from dataclasses import dataclass
 from typing import Any
@@ -37,19 +36,16 @@ async def run_tool_via_mcp(
     except Exception:
         args = {"_raw": arguments_json}
 
-    server_name = mcp.get_server_from_tool(tool_name)
+    server_name = await mcp.get_server_from_tool(tool_name)
+    if server_name is None:
+        log.error(f"No MCP server found for tool={tool_name}")
+        raise RuntimeError(f"No MCP server found for tool={tool_name}")
 
     log.info(f"Executing tool call:\nname : {tool_name}   arguments : {args}")
-    # Run the blocking MCP call in a thread so cancellation of the coroutine
-    # doesn’t block the event loop.
-    loop = asyncio.get_running_loop()
-    res = await loop.run_in_executor(
-        None,
-        lambda: mcp.call_tool(
-            server_name,
-            name=tool_name,
-            arguments=args,
-        ),
+    res = await mcp.call_tool(
+        server_name,
+        name=tool_name,
+        arguments=args,
     )
 
     return json.dumps(res)
@@ -150,18 +146,19 @@ def parse_code_interpreter_result(result: dict, id: str):
     # Code output: structured dict of displayed data, image or error
 
     # Printed/displayed output + error message if exists
-    out = (
-        ""
-        + (("\n" + result["stdout"]) if result["stdout"] else "")
-        + (("\n" + result["result_repr"]) if result["result_repr"] else "")
+    out = ("\n" + result.get("stdout", "") if result.get("stdout") else "") + (
+        "\n" + result.get("result_repr", "") if result.get("result_repr") else ""
     )
-    out_error = (("\n" + result["stderr"]) if result["stderr"] else "") + (
-        ("\n" + result["error"]) if result["error"] else ""
+    out_error = ("\n" + result.get("stderr", "") if result.get("stderr") else "") + (
+        "\n" + result.get("error", "") if result.get("error") else ""
     )
-    if out or out_error:
+
+    if out.strip() or out_error.strip():
         codeout = out + out_error
+
     else:
         codeout = ""  # We must send something here, the model expects it.
+
     codeout_v = SVCodeOutput(output=codeout, id=id)
     yield codeout_v
     code_block.append(codeout_v)
@@ -196,7 +193,13 @@ def parse_code_interpreter_result(result: dict, id: str):
     yield FinalSummary(var_block=code_block, tool_messages=code_msgs, is_error=isError)
 
 
-def parse_generic_tool_result(result: dict, tool_name: str, id: str):
-    web_sv = SVToolOutput(output=result.get("result", ""), tool_name=tool_name, id=id)
+def parse_generic_tool_result(result: dict, tool_name: str, id: str, logger=None):
+    if result.get("result"):
+        out = result.get("result", "")
+    elif result.get("error"):
+        out = result.get("error", "")
+    else:
+        out = "Unknown response."
+    web_sv = SVToolOutput(output=out, tool_name=tool_name, id=id)
     web_msg = help_convert_sv_ccrm([web_sv])
     yield FinalSummary(var_block=[web_sv], tool_messages=web_msg, is_error=False)

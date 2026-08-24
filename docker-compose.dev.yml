@@ -16,7 +16,7 @@ services:
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
       CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
-    hostname: climateclaw-instance-${CLIMATECLAW_INSTANCE_NAME}
+    hostname: climateclaw-${CLIMATECLAW_INSTANCE_NAME}
     ports:
       - "${CLIMATECLAW_TARGET_PORT:-8502}:${CLIMATECLAW_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
       - "8600:${CLIMATECLAW_BACKEND_PORT:-8502}" # localhost:8600/docs give FastAPI docs
@@ -44,11 +44,12 @@ services:
       context: .
       dockerfile: docker/rag-server/Dockerfile
     env_file: .env
+    hostname: rag-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
       CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
       CLIMATECLAW_MCP_HOST: 0.0.0.0
-      CLIMATECLAW_MCP_PORT: 8050
+      CLIMATECLAW_MCP_PORT: ${CLIMATECLAW_RAG_PORT:-8050}
     volumes:
       - ./resources:/app/resources:ro
       - ./logs/:/app/logs
@@ -61,13 +62,15 @@ services:
       context: .
       dockerfile: docker/code-server/Dockerfile
     env_file: .env
+    hostname: code-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
       CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
       CLIMATECLAW_MCP_HOST: 0.0.0.0
-      CLIMATECLAW_MCP_PORT: 8051
+      CLIMATECLAW_MCP_PORT: ${CLIMATECLAW_CODE_PORT:-8051}
     ports:
       - 8051:8051
+    cpus: 4
     volumes:
       - ./cache/:/app/cache
       - ./logs/:/app/logs
@@ -86,6 +89,7 @@ services:
       context: .
       dockerfile: docker/web-search-server/Dockerfile
     env_file: .env
+    hostname: web-search-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
       CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
@@ -106,10 +110,14 @@ services:
 
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
-    hostname: litellm-instance-${CLIMATECLAW_INSTANCE_NAME}
+    hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
       - ./litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
-    command: "--config=/app/config.yaml"
+    command: >
+      --config=/app/config.yaml
+      --port=4000
+      --num_workers=1
+      --run_gunicorn
     env_file: .env
     ports:
       - "4000:4000" # Expose LiteLLM port to the host machine for direct access if needed, e.g. local dev
@@ -124,7 +132,7 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    hostname: ollama-instance-${CLIMATECLAW_INSTANCE_NAME}
+    hostname: ollama-${CLIMATECLAW_INSTANCE_NAME}
     networks:
       - climateclaw
 
