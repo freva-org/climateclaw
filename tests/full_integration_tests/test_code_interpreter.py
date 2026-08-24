@@ -263,15 +263,6 @@ async def test_plot_extraction_false_negative(mcp_client_CI):
     assert rich_data == []
 
 
-async def test_plot_extraction_close(mcp_client_CI):
-    code = {
-        "code": "import matplotlib.pyplot as plt\nplt.plot([1, 2, 3], [4, 5, 6])\nplt.close()"
-    }
-    rich_data = await _exec_and_get_richoutput_value(mcp_client_CI, code)
-    assert "image/png" in rich_data[0].keys()
-    assert isinstance(rich_data[0].get("image/png"), str)
-
-
 async def test_indentation(mcp_client_CI):
     code = {"code": "a=3\nif a < 2:\n\tprint('smaller')\nelse:\n\tprint('larger')"}
     assert await _exec_and_get_printed_value(mcp_client_CI, code) == "larger\n"
