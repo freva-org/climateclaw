@@ -16,7 +16,7 @@ services:
       context: .
       dockerfile: docker/climateclaw/Dockerfile
     env_file: .env
-    hostname: climateclaw-instance-${CLIMATECLAW_INSTANCE_NAME}
+    hostname: climateclaw-${CLIMATECLAW_INSTANCE_NAME}
     ports:
       - "${CLIMATECLAW_TARGET_PORT:-8502}:${CLIMATECLAW_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
     volumes:
@@ -44,6 +44,7 @@ services:
       context: .
       dockerfile: docker/code-server/Dockerfile
     env_file: .env
+    hostname: code-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_MCP_HOST: 0.0.0.0
       CLIMATECLAW_MCP_PORT: 8051
@@ -52,6 +53,7 @@ services:
       - /pool/data:/pool/data:ro
       - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
       - ${CLIMATECLAW_CACHE_PATH}:/app/cache:rw
+    cpus: 4
     networks:
       - climateclaw
     healthcheck:
@@ -67,6 +69,7 @@ services:
       context: .
       dockerfile: docker/web-search-server/Dockerfile
     env_file: .env
+    hostname: web-search-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_MCP_HOST: 0.0.0.0
       CLIMATECLAW_MCP_PORT: 8052
@@ -83,10 +86,14 @@ services:
 
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
-    hostname: litellm-instance-${CLIMATECLAW_INSTANCE_NAME}
+    hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
       - ./litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
-    command: "--config=/app/config.yaml"
+    command: >
+      --config=/app/config.yaml
+      --port=4000
+      --num_workers=8
+      --run_gunicorn
     env_file: .env
     networks:
       - climateclaw
@@ -99,7 +106,7 @@ services:
 
   ollama: # Ollama is only for the backend and not accessible from the outside. Port 11434 is not exposed.
     image: ollama/ollama:latest
-    hostname: ollama-instance-${CLIMATECLAW_INSTANCE_NAME}
+    hostname: ollama-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
       - /container/da/climateclaw-ollama-models/.ollama:/root/.ollama
     networks:
@@ -110,7 +117,7 @@ services:
   mongodb:
     user: 0:0
     image: ghcr.io/freva-org/freva-mongo:latest
-    hostname: mongodb-instance-${CLIMATECLAW_INSTANCE_NAME}
+    hostname: mongodb-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       - API_MONGO_USER=${CLIMATECLAW_MONGODB_USER:?MongoDB user and password must be set in the .env file. See .env.example.}
       - API_MONGO_PASSWORD=${CLIMATECLAW_MONGODB_PASSWORD}
