@@ -229,6 +229,8 @@ async def streamresponse(
                 thread_id, [hint_v], storage=storage, store_thread=store_thread
             )
 
+        stop_requested = False
+
         last_check = time.monotonic()
         async for variant in run_stream(
             model=model_name,
@@ -248,18 +250,22 @@ async def streamresponse(
                 last_check = now
                 state = await get_conversation_state(thread_id)
                 if state == ConversationState.STOPPING:
-                    end_v = SVStreamEnd(message="Stream is stopped by user.")
-                    for data in _sse_data(from_sv_to_json(end_v)):
-                        yield data
+                    stop_requested = True
+
                     await cancel_tool_tasks(thread_id)
-                    await end_and_save_conversation(
-                        thread_id, storage, store_thread=store_thread
-                    )
-                    logger.info(
-                        "Stopped streaming after client request",
-                        extra={"thread_id": thread_id, "user_id": user_name},
-                    )
-                    return
+
+        if stop_requested:
+            end_v = SVStreamEnd(message="Stream is stopped by user.")
+            for data in _sse_data(from_sv_to_json(end_v)):
+                yield data
+            await end_and_save_conversation(
+                thread_id, storage, store_thread=store_thread
+            )
+            logger.info(
+                "Stopped streaming after client request",
+                extra={"thread_id": thread_id, "user_id": user_name},
+            )
+            return
 
         await end_and_save_conversation(thread_id, storage, store_thread=store_thread)
         msg = (
