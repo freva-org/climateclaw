@@ -134,7 +134,7 @@ def generate_haproxy(
         "global\n"
         "    daemon\n"
         "    maxconn 256\n"
-        f"    log {os.environ.get('CLIMATECLAW_SYSLOG_TARGET', 'stdout')} format raw local0 info\n"
+        f"    log {os.environ.get('CLIMATECLAW_SYSLOG_TARGET', 'stdout')} format raw local0 info\n\n"
         "defaults\n"
         "    mode http\n"
         "    timeout connect 5s\n"
@@ -271,11 +271,25 @@ def main():
 
     network_name = list(base["networks"].keys())[0]
 
+    log_dir = (
+        "./logs/"
+        if "dev" in compose_path
+        else "/container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs"
+    )
     new_services["haproxy"] = {
         "image": "haproxy:3.0-alpine",
         "user": "0:0",
         "ports": dev_ports if "dev" in compose_path else prod_ports,
-        "volumes": ["./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro"],
+        "volumes": [
+            "./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro",
+            f"{log_dir}:/app/logs",
+        ],
+        "command": [
+            "sh",
+            "-c",
+            "haproxy -W -db -f /usr/local/etc/haproxy/haproxy.cfg "
+            ">> /app/logs/haproxy.log 2>&1",
+        ],
         "networks": [network_name],
         "depends_on": haproxy_dependencies(
             new_services,
