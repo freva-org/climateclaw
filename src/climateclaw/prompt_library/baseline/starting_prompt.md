@@ -86,6 +86,7 @@
    * `imageio`
    * `pypdf`
    * `fpdf2`
+   * `openpyxl`
 
 ### C.2 `web_search`
 
