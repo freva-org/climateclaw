@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import os
 import sys
@@ -122,7 +122,14 @@ def haproxy_backend(name, port, service_names, sticky_mode=None):
 
 
 def generate_haproxy(
-    services, backend_n, backend_port, litellm_n, server_list, replica_dict, port_dict
+    services,
+    backend_n,
+    backend_port,
+    litellm_n,
+    server_list,
+    replica_dict,
+    port_dict,
+    timeout,
 ):
     conf = []
 
@@ -130,14 +137,16 @@ def generate_haproxy(
         "global\n"
         "    daemon\n"
         "    maxconn 256\n"
-        "\n"
+        f"    log {os.environ.get('CLIMATECLAW_SYSLOG_TARGET', 'stdout')} format raw local0 info\n\n"
         "defaults\n"
         "    mode http\n"
         "    timeout connect 5s\n"
-        "    timeout client  60s\n"
-        "    timeout server  60s\n"
+        f"    timeout client {timeout}s\n"
+        f"    timeout server {timeout}s\n"
         "    default-server inter 3s fall 3 rise 2\n"
-        "\n"
+        "    log     global\n"
+        '    log-format "%ci:%cp %ft %b/%s Tq=%Tq Tw=%Tw Tc=%Tc Tr=%Tr Tt=%Tt '
+        'status=%ST bytes=%B term=%ts conn=%ac/%fc/%bc/%sc/%rc %{+Q}r"\n'
     )
 
     conf.append(
@@ -292,6 +301,8 @@ def main():
         )
         for s in available_mcp_servers
     }
+    mcp_request_timeout = int(os.getenv("CLIMATECLAW_MCP_REQUEST_TIMEOUT_SEC", "600"))
+
     node_addresses = [
         address.strip()
         for address in os.environ.get(
@@ -365,11 +376,25 @@ def main():
 
     network_name = list(base["networks"].keys())[0]
 
+    log_dir = (
+        "./logs/"
+        if DEV_MODE
+        else "/container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs"
+    )
     new_services["haproxy"] = {
         "image": "haproxy:3.0-alpine",
         "user": "0:0",
         "ports": dev_ports if DEV_MODE else prod_ports,
-        "volumes": ["./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro"],
+        "volumes": [
+            "./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro",
+            f"{log_dir}:/app/logs",
+        ],
+        "command": [
+            "sh",
+            "-c",
+            "haproxy -W -db -f /usr/local/etc/haproxy/haproxy.cfg "
+            ">> /app/logs/haproxy.log 2>&1",
+        ],
         "networks": [network_name],
         "depends_on": haproxy_dependencies(
             new_services,
@@ -389,6 +414,7 @@ def main():
         available_mcp_servers,
         mcp_replica_n,
         port_dict,
+        mcp_request_timeout,
     )
 
     outer_haproxy_cfg = None

@@ -278,20 +278,27 @@ class McpClient:
                 self._pending_request_id = None
                 self._active_request_id = rpc_id
 
+            response_received = False
+
             try:
                 r = await self._http.post(
                     "/mcp",
                     headers=self._headers(extra_headers, session_id=session_id),
                     json=body,
                 )
+
                 res = self._rpc_result(r, rpc_id)
+                response_received = True
+
                 if isinstance(res.result, dict):
                     return res.result
                 return {"result": res.result}
+
             finally:
-                async with self._lock:
-                    if self._active_request_id == rpc_id:
-                        self._active_request_id = None
+                if response_received:
+                    async with self._lock:
+                        if self._active_request_id == rpc_id:
+                            self._active_request_id = None
         finally:
             async with self._lock:
                 if self._pending_request_id == rpc_id:
@@ -432,12 +439,17 @@ class McpClient:
                 },
             ),
         )
+
         if resp.status_code not in (200, 202, 204):
             raise McpBadRequest(
                 f"cancel_request failed: HTTP {resp.status_code} body={resp.text!r}",
                 status_code=resp.status_code,
                 payload=resp.text,
             )
+
+        async with self._lock:
+            if self._active_request_id == request_id:
+                self._active_request_id = None
 
     # ────────── termination and clean-up ──────────
 
