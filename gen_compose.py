@@ -76,6 +76,38 @@ def website_for_project(project: str | None) -> list[str] | None:
     return WEBSITES[project]
 
 
+def set_environment(service: dict, key: str, value: str) -> None:
+    environment = service.get("environment")
+
+    if environment is None:
+        service["environment"] = [f"{key}={value}"]
+        return
+
+    if isinstance(environment, dict):
+        environment[key] = value
+        return
+
+    if isinstance(environment, list):
+        prefix = f"{key}="
+        service["environment"] = [
+            item for item in environment if not str(item).startswith(prefix)
+        ]
+        service["environment"].append(f"{key}={value}")
+        return
+
+    raise TypeError("service environment must be a mapping or a list")
+
+
+def set_project_environment(service: dict, project: str | None) -> None:
+    if not project:
+        return
+
+    set_environment(service, "CLIMATECLAW_PROJECT_NAME", project)
+    set_environment(
+        service, "CLIMATECLAW_PROJECT_WEBSITE", website_for_project(project)
+    )
+
+
 def expand_service(name, service, replicas, preview_paths=None):
     services = {}
 
@@ -301,8 +333,6 @@ def main():
     )
 
     if project:
-        os.environ["CLIMATECLAW_PROJECT_NAME"] = project
-        os.environ["CLIMATECLAW_PROJECT_WEBSITE"] = website_for_project(project)
         preview_paths = preview_paths_for_project(project)
 
     backend_port = os.environ.get("CLIMATECLAW_BACKEND_PORT", "8502")
@@ -344,6 +374,7 @@ def main():
 
     for name, svc in services.items():
         if name == "climateclaw":
+            set_project_environment(svc, project)
             new_services.update(expand_service(name, svc, backend_n))
         elif name == "litellm":
             new_services.update(expand_service(name, svc, litellm_n))
