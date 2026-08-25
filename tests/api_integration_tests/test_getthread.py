@@ -19,9 +19,9 @@ async def test_getthread_returns_404_when_thread_missing(
 
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/getthread",
-                params={"thread_id": "t-missing"},
+                json={"thread_id": "t-missing"},
                 headers=GOOD_HEADERS,
             )
 
@@ -50,9 +50,9 @@ async def test_getthread_returns_500_when_history_invalid(
 
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/getthread",
-                params={"thread_id": "t-bad"},
+                json={"thread_id": "t-bad"},
                 headers=GOOD_HEADERS,
             )
 
