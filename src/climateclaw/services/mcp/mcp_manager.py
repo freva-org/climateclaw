@@ -212,15 +212,13 @@ class McpManager:
             name=name, args=arguments, extra_headers=extra_headers
         )
 
-    async def cancel_tool_call(self, tool_name: str, reason: str | None = None) -> None:
-        async with self._lock:
-            target = self._lookup_server_unlocked(tool_name)
-            client = self._clients.get(target) if target else None
-
-        if client is None:
-            return
-
-        await client.cancel_request(reason)
+    async def cancel_active_tool_calls(
+        self,
+        reason: str | None = None,
+    ) -> None:
+        for client in self._clients.values():
+            if client is not None:
+                await client.cancel_request(reason)
 
 
 # ──────────────────── Helper functions ──────────────────────────────
