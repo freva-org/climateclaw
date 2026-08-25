@@ -37,12 +37,12 @@ PREVIEW_MOUNTS = {
 }
 
 WEBSITES = {
-    "codes": ["https://codes.dkrz.de"],
-    "eve": ["https://eve.dkrz.de"],
-    "freva-dev": ["https://freva.dkrz.de"],
-    "nextgems": ["https://gems.dkrz.de"],
-    "regiklim-ces": ["https://www-regiklim.dkrz.de"],
-    "xces": ["https://www.xces.dkrz.de"],
+    "codes": "https://codes.dkrz.de",
+    "eve": "https://eve.dkrz.de",
+    "freva-dev": "https://freva.dkrz.de",
+    "nextgems": "https://gems.dkrz.de",
+    "regiklim-ces": "https://www-regiklim.dkrz.de",
+    "xces": "https://www.xces.dkrz.de",
 }
 
 
