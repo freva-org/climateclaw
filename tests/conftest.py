@@ -59,7 +59,6 @@ def GOOD_HEADERS():
     return {
         "Authorization": "Bearer test-token",
         "x-freva-rest-url": "http://rest.example",
-        "x-freva-config-path": "dummy.conf",
     }
 
 

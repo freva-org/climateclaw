@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import (
@@ -22,10 +23,14 @@ from climateclaw.services.streaming.stream_variants import (
 router = APIRouter()
 
 
-@router.get("/editthread", dependencies=[AuthRequired])
+class EditThreadRequest(BaseModel):
+    source_thread_id: str
+    user_index: int
+
+
+@router.post("/editthread", dependencies=[AuthRequired])
 async def edit_thread(
-    source_thread_id: str,
-    user_index: int,
+    request: EditThreadRequest,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -80,6 +85,9 @@ async def edit_thread(
           `source_thread_id`. If deep branching is introduced, root tracking
           logic may require refinement.
     """
+
+    source_thread_id = request.source_thread_id
+    user_index = request.user_index
     user_name = auth.username
 
     if not source_thread_id:
