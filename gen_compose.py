@@ -437,7 +437,7 @@ def main():
         server_list=available_mcp_servers,
         replica_dict=mcp_replica_n,
         port_dict=port_dict,
-        mcp_request_timeout=mcp_request_timeout,
+        timeout=mcp_request_timeout,
     )
 
     Path("haproxy.cfg").write_text(haproxy_cfg)
