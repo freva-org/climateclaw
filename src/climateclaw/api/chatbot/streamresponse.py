@@ -4,7 +4,8 @@ import json
 import time
 from collections.abc import Generator
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from climateclaw.core.available_chatbots import available_chatbots, default_chatbot
@@ -45,6 +46,13 @@ router = APIRouter()
 CHECK_INTERVAL = 3  # seconds, the interval to wait before check STOP request
 
 
+class StreamResponseRequest(BaseModel):
+    thread_id: str | None = None
+    input: str | None = None
+    chatbot: str | None = None
+    store_thread: bool = True
+
+
 def _sse_data(obj: SVDict) -> Generator[bytes]:
     if obj.get("variant") == IMAGE:
         image_b64 = obj.get("content")
@@ -60,12 +68,9 @@ def _sse_data(obj: SVDict) -> Generator[bytes]:
         yield f"{payload}\n".encode()
 
 
-@router.get("/streamresponse", dependencies=[AuthRequired])
+@router.post("/streamresponse", dependencies=[AuthRequired])
 async def streamresponse(
-    thread_id: str | None = Query(None),
-    input: str | None = Query(None),
-    chatbot: str | None = Query(None),
-    store_thread: bool = True,
+    request: StreamResponseRequest,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -120,15 +125,21 @@ async def streamresponse(
             - If stream preparation fails or an internal server error occurs
               before streaming begins.
     """
+
+    thread_id = request.thread_id
+    input = request.input
+    chatbot = request.chatbot
+    store_thread = request.store_thread
+
     logger = configure_logging(__name__)
 
-    if thread_id is None:
+    if not thread_id:
         raise HTTPException(
             status_code=422,
             detail="Thread-id not found. Please request a new thread-id and provide it in the query parameters, of type String.",
         )
 
-    if input is None:
+    if not input:
         raise HTTPException(
             status_code=422,
             detail="Input not found. Please provide a non-empty input in the query parameters, of type String.",
@@ -229,6 +240,8 @@ async def streamresponse(
                 thread_id, [hint_v], storage=storage, store_thread=store_thread
             )
 
+        stop_requested = False
+
         last_check = time.monotonic()
         async for variant in run_stream(
             model=model_name,
@@ -248,18 +261,22 @@ async def streamresponse(
                 last_check = now
                 state = await get_conversation_state(thread_id)
                 if state == ConversationState.STOPPING:
-                    end_v = SVStreamEnd(content="Stream is stopped by user.")
-                    for data in _sse_data(from_sv_to_json(end_v)):
-                        yield data
+                    stop_requested = True
+
                     await cancel_tool_tasks(thread_id)
-                    await end_and_save_conversation(
-                        thread_id, storage, store_thread=store_thread
-                    )
-                    logger.info(
-                        "Stopped streaming after client request",
-                        extra={"thread_id": thread_id, "user_id": user_name},
-                    )
-                    return
+
+        if stop_requested:
+            end_v = SVStreamEnd(content="Stream is stopped by user.")
+            for data in _sse_data(from_sv_to_json(end_v)):
+                yield data
+            await end_and_save_conversation(
+                thread_id, storage, store_thread=store_thread
+            )
+            logger.info(
+                "Stopped streaming after client request",
+                extra={"thread_id": thread_id, "user_id": user_name},
+            )
+            return
 
         await end_and_save_conversation(thread_id, storage, store_thread=store_thread)
         msg = (

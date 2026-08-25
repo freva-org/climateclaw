@@ -323,15 +323,24 @@ async def unregister_tool_task(thread_id: str, task: asyncio.Task) -> None:
 
 
 async def cancel_tool_tasks(thread_id: str) -> None:
-    """
-    Cancel all known tool tasks for this conversation.
-    """
     async with RegistryLock:
         conv = Registry.get(thread_id)
-        if conv:
-            tasks = conv.tool_tasks or ()
+        if conv is None:
+            return
+
+        tasks = list(conv.tool_tasks)
+        mcp = conv.mcp_manager
+
+    # First we interrupt the actual MCP execution
+    if mcp is not None:
+        await mcp.cancel_active_tool_calls(reason="User requested cancellation")
+
+    # Then we cancel the asyncio tasks.
     for t in tasks:
         t.cancel()
+
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def save_feedback_to_registry(thread_id: str, f_ind: int, feedback: str) -> None:

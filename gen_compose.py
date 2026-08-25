@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import os
 import sys
@@ -10,12 +10,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DEFAULT_MCP_PORTS = {
-    "rag-server": "8050",
-    "code-server": "8051",
-    "web-search-server": "8052",
+MCP_SERVER_CONFIG = {
+    "rag-server": {"env": "RAG_SERVER", "port": "8050"},
+    "code-server": {"env": "CODE_SERVER", "port": "8051"},
+    "web-search-server": {"env": "WEB_SEARCH_SERVER", "port": "8052"},
 }
-MCP_SERVICES = {"rag-server", "code-server", "web-search-server"}
+MCP_SERVICES = set(MCP_SERVER_CONFIG)
+
+DEV_MODE = os.environ.get("CLIMATECLAW_DEV", "0")
 
 # NOTE: freva-dev and nextgems currently share deployment instance
 # so we mount both their preview paths together
@@ -42,10 +44,6 @@ WEBSITES = {
     "regiklim-ces": ["https://www-regiklim.dkrz.de"],
     "xces": ["https://www.xces.dkrz.de"],
 }
-
-
-def env_name(name: str) -> str:
-    return name.replace("-", "_")
 
 
 def preview_paths_for_project(project: str | None) -> list[str] | None:
@@ -104,6 +102,20 @@ def expand_service(name, service, replicas, preview_paths=None):
     return services
 
 
+def expand_ollama_service(name, service, replicas):
+    services = expand_service(name, service, replicas)
+
+    if replicas == 1:
+        return services
+
+    if not DEV_MODE:
+        for i in range(1, replicas + 1):
+            replica_name = f"{name}-{i}"
+            services[replica_name]["devices"] = [f"nvidia.com/gpu={i - 1}"]
+
+    return services
+
+
 def expand_depends_on(depends_on, replica_counts):
     if isinstance(depends_on, dict):
         expanded = {}
@@ -153,6 +165,7 @@ def haproxy_dependencies(
     services,
     backend_n,
     litellm_n,
+    ollama_n,
     available_mcp_servers,
     mcp_replica_n,
 ):
@@ -165,7 +178,8 @@ def haproxy_dependencies(
         )
 
     dependencies.extend(service_instance_names("litellm", litellm_n, services))
-    dependencies.extend(["mongodb", "ollama"])
+    dependencies.append("mongodb")
+    dependencies.extend(service_instance_names("ollama", ollama_n, services))
 
     return [dependency for dependency in dependencies if dependency in services]
 
@@ -175,6 +189,7 @@ def haproxy_backend(name, port, service_names, sticky_mode=None):
     lines.append(f"backend be_{name}")
     if sticky_mode:
         lines.append(f"    balance {sticky_mode}")
+        lines.append("    hash-type consistent")
 
     for i, service_name in enumerate(service_names, start=1):
         lines.append(f"    server {name}{i} {service_name}:{port} check")
@@ -184,7 +199,15 @@ def haproxy_backend(name, port, service_names, sticky_mode=None):
 
 
 def generate_haproxy(
-    services, backend_n, backend_port, litellm_n, server_list, replica_dict, port_dict
+    services,
+    backend_n,
+    backend_port,
+    litellm_n,
+    ollama_n,
+    server_list,
+    replica_dict,
+    port_dict,
+    timeout,
 ):
     conf = []
 
@@ -192,14 +215,16 @@ def generate_haproxy(
         "global\n"
         "    daemon\n"
         "    maxconn 256\n"
-        "\n"
+        f"    log {os.environ.get('CLIMATECLAW_SYSLOG_TARGET', 'stdout')} format raw local0 info\n\n"
         "defaults\n"
         "    mode http\n"
         "    timeout connect 5s\n"
-        "    timeout client  60s\n"
-        "    timeout server  60s\n"
+        f"    timeout client {timeout}s\n"
+        f"    timeout server {timeout}s\n"
         "    default-server inter 3s fall 3 rise 2\n"
-        "\n"
+        "    log     global\n"
+        '    log-format "%ci:%cp %ft %b/%s Tq=%Tq Tw=%Tw Tc=%Tc Tr=%Tr Tt=%Tt '
+        'status=%ST bytes=%B term=%ts conn=%ac/%fc/%bc/%sc/%rc %{+Q}r"\n'
     )
 
     conf.append(
@@ -211,6 +236,10 @@ def generate_haproxy(
 
     conf.append(
         "frontend fe_litellm\n    bind *:4000\n    default_backend be_litellm\n\n"
+    )
+
+    conf.append(
+        "frontend fe_ollama\n    bind *:11434\n    default_backend be_ollama\n\n"
     )
 
     for s in server_list:
@@ -235,6 +264,15 @@ def generate_haproxy(
             "litellm",
             4000,
             service_instance_names("litellm", litellm_n, services),
+        )
+    )
+
+    conf.append(
+        haproxy_backend(
+            "ollama",
+            11434,
+            service_instance_names("ollama", ollama_n, services),
+            "leastconn",
         )
     )
 
@@ -271,6 +309,7 @@ def main():
     backend_target_port = os.environ.get("CLIMATECLAW_TARGET_PORT", "8502")
     backend_n = int(os.environ.get("CLIMATECLAW_BACKEND_REPLICAS", "1"))
     litellm_n = int(os.environ.get("CLIMATECLAW_LITELLM_REPLICAS", "1"))
+    ollama_n = int(os.environ.get("CLIMATECLAW_OLLAMA_REPLICAS", "1"))
 
     available_mcp_servers = [
         s
@@ -278,16 +317,19 @@ def main():
         if s.strip()
     ]
     mcp_replica_n = {
-        s: int(os.environ.get(f"CLIMATECLAW_{env_name(s).upper()}_REPLICAS", "1"))
+        s: int(
+            os.environ.get(f"CLIMATECLAW_{MCP_SERVER_CONFIG[s]['env']}_REPLICAS", "1")
+        )
         for s in available_mcp_servers
     }
     port_dict = {
         s: os.environ.get(
-            f"CLIMATECLAW_{env_name(s).upper()}_PORT",
-            DEFAULT_MCP_PORTS.get(env_name(s)),
+            f"CLIMATECLAW_{MCP_SERVER_CONFIG[s]['env']}_PORT",
+            MCP_SERVER_CONFIG[s]["port"],
         )
         for s in available_mcp_servers
     }
+    mcp_request_timeout = int(os.getenv("CLIMATECLAW_MCP_REQUEST_TIMEOUT_SEC", "600"))
 
     base = yaml.safe_load(open(compose_path))
 
@@ -296,6 +338,7 @@ def main():
     replica_counts = {
         "climateclaw": backend_n,
         "litellm": litellm_n,
+        "ollama": ollama_n,
         **mcp_replica_n,
     }
 
@@ -304,14 +347,21 @@ def main():
             new_services.update(expand_service(name, svc, backend_n))
         elif name == "litellm":
             new_services.update(expand_service(name, svc, litellm_n))
+        elif name == "ollama":
+            new_services.update(expand_ollama_service(name, svc, ollama_n))
         elif name in MCP_SERVICES:
             if name == "code-server":
                 new_services.update(expand_service(name, svc, backend_n, preview_paths))
             elif name in available_mcp_servers:
                 new_services.update(expand_service(name, svc, mcp_replica_n[name]))
         elif name == "freva-web":
-            svc.get("environment").remove("CHAT_BOT_URL=http://climateclaw:8502")
-            svc.get("environment").append("CHAT_BOT_URL=http://haproxy:8502")
+            env = [
+                e
+                for e in svc.get("environment", [])
+                if not e.startswith("CHAT_BOT_URL=")
+            ]
+            env.append(f"CHAT_BOT_URL=http://haproxy:{backend_port}")
+            svc["environment"] = env
             new_services[name] = svc
         else:
             new_services[name] = svc
@@ -329,18 +379,44 @@ def main():
 
     network_name = list(base["networks"].keys())[0]
 
+    haproxy_network = (
+        {
+            network_name: {
+                "aliases": ["ollama"],
+            }
+        }
+        if ollama_n > 1
+        else [network_name]
+    )
+
+    log_dir = (
+        "./logs/"
+        if "dev" in compose_path
+        else "/container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs"
+    )
+
     new_services["haproxy"] = {
         "image": "haproxy:3.0-alpine",
         "user": "0:0",
         "ports": dev_ports if "dev" in compose_path else prod_ports,
-        "volumes": ["./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro"],
-        "networks": [network_name],
+        "volumes": [
+            "./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro",
+            f"{log_dir}:/app/logs",
+        ],
+        "command": [
+            "sh",
+            "-c",
+            "haproxy -W -db -f /usr/local/etc/haproxy/haproxy.cfg "
+            ">> /app/logs/haproxy.log 2>&1",
+        ],
+        "networks": haproxy_network,
         "depends_on": haproxy_dependencies(
-            new_services,
-            backend_n,
-            litellm_n,
-            available_mcp_servers,
-            mcp_replica_n,
+            services=new_services,
+            backend_n=backend_n,
+            litellm_n=litellm_n,
+            ollama_n=ollama_n,
+            available_mcp_servers=available_mcp_servers,
+            mcp_replica_n=mcp_replica_n,
         ),
     }
 
@@ -353,13 +429,15 @@ def main():
     output_path.write_text(yaml.dump(out, sort_keys=False))
 
     haproxy_cfg = generate_haproxy(
-        new_services,
-        backend_n,
-        backend_port,
-        litellm_n,
-        available_mcp_servers,
-        mcp_replica_n,
-        port_dict,
+        services=new_services,
+        backend_n=backend_n,
+        backend_port=backend_port,
+        litellm_n=litellm_n,
+        ollama_n=ollama_n,
+        server_list=available_mcp_servers,
+        replica_dict=mcp_replica_n,
+        port_dict=port_dict,
+        mcp_request_timeout=mcp_request_timeout,
     )
 
     Path("haproxy.cfg").write_text(haproxy_cfg)

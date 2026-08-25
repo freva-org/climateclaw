@@ -18,10 +18,9 @@ from .code_execution import (
     cancel_code_request,
     cleanup_mcp_session,
     execute_code,
-    get_sid_lock,
 )
 from .helpers import sanitize_code, should_restart_after
-from .kernels import KERNEL_REGISTRY, shutdown_kernel
+from .kernels import KERNEL_REGISTRY, get_sid_lock, shutdown_kernel
 from .safety_check import check_code_safety
 
 SERVICE_NAME = os.getenv("HOSTNAME") or "code_server"

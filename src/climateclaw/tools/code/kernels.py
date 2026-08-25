@@ -15,11 +15,20 @@ logger = configure_logging(__name__, named_log=SERVICE_NAME)
 # ── Kernel persistence ───────────────────────────────────────────────────────
 
 KERNEL_REGISTRY: dict[str, KernelManager] = {}
-KERNEL_LOCKS: dict[str, threading.Lock] = {}
-KERNEL_LOCKS_GUARD = threading.Lock()
-# TODO use sid locks not single guard
+KERNEL_LOCKS: dict[str, threading.Lock] = {}  # per-session locks
+KERNEL_LOCKS_GUARD = threading.Lock()  # guard to safely create/lookup locks
 
 # ── Kernel lifecycle ─────────────────────────────────────────────────────────
+
+
+def get_sid_lock(sid: str) -> threading.Lock:
+    # Make lock creation thread-safe.
+    with KERNEL_LOCKS_GUARD:
+        lock = KERNEL_LOCKS.get(sid)
+        if lock is None:
+            lock = threading.Lock()
+            KERNEL_LOCKS[sid] = lock
+        return lock
 
 
 def _kernel_ready_handshake(km: KernelManager, timeout: int = 10) -> None:
@@ -53,6 +62,10 @@ def shutdown_kernel(km: KernelManager) -> None:
 
 
 def get_or_start_kernel(sid: str, cwd_str: str) -> KernelManager:
+    """Get an existing kernel or start a new one.
+
+    Caller must hold get_sid_lock(sid).
+    """
     km = KERNEL_REGISTRY.get(sid)
 
     # Check existing kernel state

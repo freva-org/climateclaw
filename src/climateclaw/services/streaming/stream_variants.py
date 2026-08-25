@@ -166,7 +166,10 @@ def cleanup_conversation(
         if pending_code_id is not None and not isinstance(v, SVCodeOutput):
             out.append(
                 SVCodeOutput(
-                    content=empty_code_interpreter_output(), id=pending_code_id
+                    content=empty_code_interpreter_output(
+                        error="No response was received from code-interpreter."
+                    ),
+                    id=pending_code_id,
                 )
             )
             pending_code_id = None
@@ -188,7 +191,12 @@ def cleanup_conversation(
     if pending_code_id is not None:
         # close dangling code with an empty output
         out.append(
-            SVCodeOutput(content=empty_code_interpreter_output(), id=pending_code_id)
+            SVCodeOutput(
+                content=empty_code_interpreter_output(
+                    error="No response was received from code-interpreter."
+                ),
+                id=pending_code_id,
+            )
         )
 
     # Ensure ends with StreamEnd (only if requested)
@@ -364,14 +372,21 @@ def parse_examples_jsonl(path: str | Path) -> list[StreamVariant]:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def empty_code_interpreter_output() -> dict[str, Any]:
+def empty_code_interpreter_output(
+    stdout: str = "",
+    stderr: str = "",
+    result_repr: str = "",
+    display_data: list = [],
+    error: str = "",
+    created_files: list = [],
+) -> dict[str, Any]:
     return {
-        "stdout": "",
-        "stderr": "",
-        "result_repr": "",
-        "display_data": [],
-        "error": "",
-        "created_files": [],
+        "stdout": stdout,
+        "stderr": stderr,
+        "result_repr": result_repr,
+        "display_data": display_data,
+        "error": error,
+        "created_files": created_files,
     }
 
 

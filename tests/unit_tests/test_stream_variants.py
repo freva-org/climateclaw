@@ -34,7 +34,7 @@ def test_cleanup_inserts_codeoutput_and_end():
     assert isinstance(out[2], SVCodeOutput)
     assert out[2].id == "call_1"
     assert isinstance(out[2].content, dict)
-    assert out[2].content["stdout"] == ""
+    assert out[2].content["error"] == "No response was received from code-interpreter."
 
 
 def test_cleanup_no_extra_end_if_existing():
