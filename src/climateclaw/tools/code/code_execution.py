@@ -18,6 +18,7 @@ from .kernels import (
     KERNEL_REGISTRY,
     drain_stale_messages,
     get_or_start_kernel,
+    get_sid_lock,
     shutdown_kernel,
 )
 
@@ -59,13 +60,18 @@ def cleanup_mcp_session(sid: str) -> None:
     if not sid:
         return
 
-    km = KERNEL_REGISTRY.pop(sid, None)
-    if km is not None:
-        logger.info("Cleaning up kernel for closed session sid=%s", sid)
-        shutdown_kernel(km)
+    lock = get_sid_lock(sid)
+    with lock:
+        km = KERNEL_REGISTRY.pop(sid, None)
+        if km is not None:
+            logger.info("Cleaning up kernel for closed session sid=%s", sid)
+            shutdown_kernel(km)
 
-    with KERNEL_LOCKS_GUARD:
-        KERNEL_LOCKS.pop(sid, None)
+        # Session close is terminal: the client sends DELETE only after inactivity,
+        # so no further requests should use this sid. Remove the lock to avoid
+        # retaining one lock per closed session.
+        with KERNEL_LOCKS_GUARD:
+            KERNEL_LOCKS.pop(sid, None)
 
 
 async def cancel_code_request(session_id: str, request_id: str) -> None:
@@ -103,16 +109,6 @@ async def cancel_code_request(session_id: str, request_id: str) -> None:
         logger.exception(
             f"Failed to interrupt kernel for sid={session_id} request_id={request_id}"
         )
-
-
-def get_sid_lock(sid: str) -> threading.Lock:
-    # Make lock creation thread-safe
-    with KERNEL_LOCKS_GUARD:
-        lock = KERNEL_LOCKS.get(sid)
-        if lock is None:
-            lock = threading.Lock()
-            KERNEL_LOCKS[sid] = lock
-        return lock
 
 
 def _run_shell(
@@ -302,7 +298,10 @@ def execute_code(
     cancel_event: threading.Event,
     active_request: ActiveRequest,
 ) -> dict:
-    """Execution wrapper with recovery"""
+    """Execution wrapper with recovery.
+
+    Caller must hold get_sid_lock(session_id).
+    """
     request_id = active_request.request_id
     if cancel_event.is_set():
         logger.info(

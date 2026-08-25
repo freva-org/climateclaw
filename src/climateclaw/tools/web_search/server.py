@@ -115,7 +115,30 @@ async def web_search(query: str) -> dict:
                 "include": ["web_search_call.action.sources"],
             }
 
-            resp = await client.responses.create(**kwargs)  # type: ignore[call-overload]
+            call = asyncio.create_task(
+                client.responses.create(**kwargs)  # type: ignore[call-overload]
+            )
+            waiter = asyncio.create_task(req.cancelled_async.wait())
+
+            try:
+                done, pending = await asyncio.wait(
+                    {call, waiter},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+
+                for task in pending:
+                    task.cancel()
+
+                if waiter in done:
+                    raise RequestCancelled("Web-search cancelled by client")
+
+                resp = call.result()
+
+            finally:
+                # defensive cleanup
+                for task in (call, waiter):
+                    if not task.done():
+                        task.cancel()
 
             req.raise_if_cancelled()
 

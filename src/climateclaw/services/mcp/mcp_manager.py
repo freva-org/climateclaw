@@ -166,13 +166,16 @@ class McpManager:
         # invalidate merged cache
         self._tools_cache = None
 
+    def _lookup_server_unlocked(self, tool_name: str) -> Target | None:
+        for tgt in self._servers:
+            for t in self._tools_by_target[tgt]:
+                if t.get("name") == tool_name:
+                    return tgt
+        return None
+
     async def get_server_from_tool(self, tool_name: str) -> Target | None:
         async with self._lock:
-            for tgt in self._servers:
-                for t in self._tools_by_target[tgt]:
-                    if t.get("name") == tool_name:
-                        return tgt
-        return None
+            return self._lookup_server_unlocked(tool_name)
 
     # ────────── tool export to LLM ──────────
 
@@ -200,41 +203,27 @@ class McpManager:
         extra_headers: dict | None = None,
     ) -> dict[str, Any]:
         """
-        Call a tool on the chosen target. If 'target' isn't in AVAILABLE_MCP_SERVERS,
-        all the available servers are called as best-effort.
+        Call a tool on the chosen target.
         """
         async with self._lock:
-            if target in self._servers:
-                client = self._clients.get(target)
-                if client is None:
-                    raise RuntimeError(
-                        f"MCP client not initialized for target={target}"
-                    )
-                return await client.call_tool(
-                    name=name, args=arguments, extra_headers=extra_headers
-                )
+            if target not in self._servers:
+                raise RuntimeError(f"Unknown MCP target={target} for tool={name}")
 
-            clients = [(tgt, self._clients.get(tgt)) for tgt in self._servers]
-
-        for tgt, client in clients:
+            client = self._clients.get(target)
             if client is None:
-                continue
-            try:
-                return await client.call_tool(
-                    name=name, args=arguments, extra_headers=extra_headers
-                )
-            except Exception as e:
-                self.log.debug("tool %s failed on %s: %s", name, tgt, e)
+                raise RuntimeError(f"MCP client not initialized for target={target}")
 
-        raise RuntimeError(f"Tool invocation failed on all targets: {name}")
+        return await client.call_tool(
+            name=name, args=arguments, extra_headers=extra_headers
+        )
 
-    async def cancel_tool_call(self, tool_name: str, reason: str | None = None) -> None:
-        client_name = self.get_server_from_tool(tool_name=tool_name)
-        client = self._clients.get(client_name)
-        if client is None:
-            return
-
-        await client.cancel_request(reason)
+    async def cancel_active_tool_calls(
+        self,
+        reason: str | None = None,
+    ) -> None:
+        for client in self._clients.values():
+            if client is not None:
+                await client.cancel_request(reason)
 
 
 # ──────────────────── Helper functions ──────────────────────────────

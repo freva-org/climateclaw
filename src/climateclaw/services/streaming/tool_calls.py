@@ -52,6 +52,9 @@ async def run_tool_via_mcp(
         args = {"_raw": arguments_json}
 
     server_name = await mcp.get_server_from_tool(tool_name)
+    if server_name is None:
+        log.error(f"No MCP server found for tool={tool_name}")
+        raise RuntimeError(f"No MCP server found for tool={tool_name}")
 
     log.info(f"Executing tool call:\nname : {tool_name}   arguments : {args}")
     res = await mcp.call_tool(
@@ -333,18 +336,19 @@ def parse_code_interpreter_result(result: dict, id: str, include_images: bool):
     # Code output: structured dict of displayed data, image or error
 
     # Printed/displayed output + error message if exists
-    out = (
-        ""
-        + (("\n" + result["stdout"]) if result["stdout"] else "")
-        + (("\n" + result["result_repr"]) if result["result_repr"] else "")
+    out = ("\n" + result.get("stdout", "") if result.get("stdout") else "") + (
+        "\n" + result.get("result_repr", "") if result.get("result_repr") else ""
     )
-    out_error = (("\n" + result["stderr"]) if result["stderr"] else "") + (
-        ("\n" + result["error"]) if result["error"] else ""
+    out_error = ("\n" + result.get("stderr", "") if result.get("stderr") else "") + (
+        "\n" + result.get("error", "") if result.get("error") else ""
     )
-    if out or out_error:
+
+    if out.strip() or out_error.strip():
         codeout = out + out_error
+
     else:
         codeout = "Execution completed successfully."  # We must send something here, the model expects it.
+
     codeout_v = SVCodeOutput(output=codeout, id=id)
     yield codeout_v
     code_block.append(codeout_v)

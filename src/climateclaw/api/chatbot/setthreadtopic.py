@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import (
@@ -14,10 +15,14 @@ from climateclaw.services.service_factory import (
 router = APIRouter()
 
 
-@router.get("/setthreadtopic", dependencies=[AuthRequired])
+class SetThreadTopicRequest(BaseModel):
+    thread_id: str
+    topic: str
+
+
+@router.post("/setthreadtopic", dependencies=[AuthRequired])
 async def set_thread_topic(
-    thread_id: str,
-    topic: str,
+    request: SetThreadTopicRequest,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -51,6 +56,10 @@ async def set_thread_topic(
         HTTPException (500):
             - If updating the thread topic fails due to an internal error.
     """
+
+    thread_id = request.thread_id
+    topic = request.topic
+
     if not thread_id:
         raise HTTPException(
             status_code=422,
