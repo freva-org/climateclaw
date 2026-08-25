@@ -73,7 +73,8 @@ class Authenticator:
 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Some necessary field weren't found, check whether the nginx proxy and sets the right headers.",
+            detail="Some necessary fields for authentication weren't found, "
+            "check whether the nginx proxy and sets the right headers.",
         )
 
     @classmethod

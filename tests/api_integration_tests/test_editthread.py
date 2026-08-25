@@ -21,9 +21,9 @@ async def test_editthread_success_path_trims_and_saves(
 
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/editthread",
-                params={"source_thread_id": "src-1", "user_index": 0},
+                json={"source_thread_id": "src-1", "user_index": 0},
                 headers=GOOD_HEADERS,
             )
     assert r.status_code == 200
@@ -58,9 +58,9 @@ async def test_editthread_rejects_out_of_range_index(
 ):
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/editthread",
-                params={"source_thread_id": "src-1", "user_index": 5},
+                json={"source_thread_id": "src-1", "user_index": 5},
                 headers=GOOD_HEADERS,
             )
     assert r.status_code == 422
