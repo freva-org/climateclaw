@@ -21,6 +21,8 @@ DEV_MODE = os.environ.get("CLIMATECLAW_DEV", "0")
 
 
 def expand_service(name, service, replicas):
+    """Add replicated services"""
+
     services = {}
 
     for i in range(1, replicas + 1):
@@ -55,6 +57,8 @@ def expand_ollama_service(name, service, replicas):
 
 
 def expand_depends_on(depends_on, replica_counts):
+    """Update the dependencies with names of replicated services"""
+
     if isinstance(depends_on, dict):
         expanded = {}
         for dependency, config in depends_on.items():
@@ -80,6 +84,8 @@ def expand_depends_on(depends_on, replica_counts):
 
 
 def update_service_dependencies(services, replica_counts):
+    """Update the service dependencies inhereted from the base compose"""
+
     for service in services.values():
         if "depends_on" in service:
             service["depends_on"] = expand_depends_on(
@@ -241,6 +247,7 @@ def main():
 
     compose_path = sys.argv[1]
 
+    # Read env variables
     backend_port = os.environ.get("CLIMATECLAW_BACKEND_PORT", "8502")
     backend_target_port = os.environ.get("CLIMATECLAW_TARGET_PORT", "8502")
     backend_n = int(os.environ.get("CLIMATECLAW_BACKEND_REPLICAS", "1"))
@@ -267,6 +274,8 @@ def main():
     }
     mcp_request_timeout = int(os.getenv("CLIMATECLAW_MCP_REQUEST_TIMEOUT_SEC", "600"))
 
+    DEV_MODE = True if "dev" in compose_path else False
+
     base = yaml.safe_load(open(compose_path))
 
     services = base["services"]
@@ -278,6 +287,7 @@ def main():
         **mcp_replica_n,
     }
 
+    # Replicate services
     for name, svc in services.items():
         if name == "climateclaw":
             new_services.update(expand_service(name, svc, backend_n))
@@ -291,13 +301,19 @@ def main():
         else:
             new_services[name] = svc
 
+    # Update service dependencies on replicated services
     update_service_dependencies(new_services, replica_counts)
 
+    ### Add HAProxy service to compose
+
+    # HAProxy exposed ports for DEV
     dev_ports = [
         f"{backend_target_port}:{backend_port}",
     ]
     if port_dict.get("code-server"):
         dev_ports.append(f"{port_dict['code-server']}:{port_dict['code-server']}")
+
+    # HAProxy exposed ports for production. We don't expose MCP server ports in prod.
     prod_ports = [
         f"{backend_target_port}:{backend_port}",
     ]
@@ -312,14 +328,14 @@ def main():
 
     log_dir = (
         "./logs/"
-        if "dev" in compose_path
+        if DEV_MODE
         else "/container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs"
     )
 
     new_services["haproxy"] = {
         "image": "haproxy:3.0-alpine",
         "user": "0:0",
-        "ports": dev_ports if "dev" in compose_path else prod_ports,
+        "ports": dev_ports if DEV_MODE else prod_ports,
         "volumes": [
             "./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro",
             f"{log_dir}:/app/logs",
@@ -349,6 +365,7 @@ def main():
 
     output_path.write_text(yaml.dump(out, sort_keys=False))
 
+    # Generate HAProxy config for node
     haproxy_cfg = generate_haproxy(
         services=new_services,
         backend_n=backend_n,
