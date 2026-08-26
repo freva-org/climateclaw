@@ -15,6 +15,7 @@ from climateclaw.services.service_factory import (
 from climateclaw.services.streaming.stream_variants import (
     StreamVariant,
     SVCode,
+    SVServerHint,
     from_json_to_sv,
     from_sv_to_json,
 )
@@ -35,6 +36,7 @@ class ActiveConversation:
     user_id: str
     state: ConversationState
     mcp_manager: McpManager | None
+    replay_task: asyncio.Task | None = None
     tool_tasks: set[asyncio.Task] = field(default_factory=set)
     messages: list[StreamVariant] = field(default_factory=list)
     last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -126,10 +128,11 @@ async def initialize_conversation(
     if mcp_mgr is not None and any(isinstance(v, SVCode) for v in messages):
         loop = asyncio.get_running_loop()
         task = loop.create_task(_replay_code_history(thread_id))
+        await set_replay_task(thread_id, task)
         await register_tool_task(thread_id, task)
         task.add_done_callback(
             # to be unregistered when done
-            lambda t: asyncio.create_task(unregister_tool_task(thread_id, t))
+            lambda t: asyncio.create_task(_cleanup_replay_task(thread_id, t))
         )
 
 
@@ -296,6 +299,55 @@ async def _replay_code_history(thread_id: str) -> None:
             )
             # break on first failure; might replace with `continue`
             break
+
+
+async def set_replay_task(thread_id: str, task: asyncio.Task) -> None:
+    """
+    Store the active replay task for this conversation so later code tool calls
+    can wait for kernel state restoration before using the same MCP client.
+    """
+    async with RegistryLock:
+        conv = Registry.get(thread_id)
+        if conv:
+            conv.replay_task = task
+
+
+async def get_replay_task(thread_id: str) -> asyncio.Task | None:
+    """
+    Return the replay task for this conversation if one is currently known.
+    """
+    async with RegistryLock:
+        conv = Registry.get(thread_id)
+        return conv.replay_task if conv else None
+
+
+async def clear_replay_task(thread_id: str, task: asyncio.Task) -> None:
+    """
+    Clear the replay task reference, but only if it still points at this task.
+    """
+    async with RegistryLock:
+        conv = Registry.get(thread_id)
+        if conv and conv.replay_task is task:
+            conv.replay_task = None
+
+
+async def _cleanup_replay_task(thread_id: str, task: asyncio.Task) -> None:
+    await unregister_tool_task(thread_id, task)
+    await clear_replay_task(thread_id, task)
+
+
+async def wait_for_replay_if_needed(thread_id: str):
+    """
+    Yield status hints and wait when code history replay is still restoring the
+    kernel state for this conversation.
+    """
+    task = await get_replay_task(thread_id)
+    if task is None or task.done():
+        return
+
+    yield SVServerHint(data={"status": "Executing previous code blocks..."})
+    await task
+    yield SVServerHint(data={"status": "Execution of previous code blocks is done."})
 
 
 async def register_tool_task(thread_id: str, task: asyncio.Task) -> None:
