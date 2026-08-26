@@ -328,8 +328,28 @@ async def stream_with_tools(
                 result_text = await tool_task
                 yield result_text
 
-            except asyncio.CancelledError:
+            except asyncio.CancelledError as e:
                 conv_state = await get_conversation_state(thread_id)
+                task = asyncio.current_task()
+
+                log.error(
+                    "RUN_WITH_HEARTBEAT CANCELLED: "
+                    "thread=%s state=%s tool=%s "
+                    "task=%r cancelling=%s "
+                    "error=%r args=%r "
+                    "tool_task=%r tool_task_done=%s tool_task_cancelled=%s",
+                    thread_id,
+                    conv_state,
+                    name,
+                    task,
+                    task.cancelling() if task else None,
+                    e,
+                    e.args,
+                    tool_task,
+                    tool_task.done(),
+                    tool_task.cancelled(),
+                )
+
                 if conv_state == ConversationState.STOPPING:
                     log.warning(
                         "Tool task cancelled; interrupting MCP execution for thread=%s",
@@ -472,8 +492,24 @@ async def run_stream(
             ):
                 yield piece
 
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as e:
             conv_state = await get_conversation_state(thread_id)
+
+            task = asyncio.current_task()
+
+            log.error(
+                "RUN_STREAM CANCELLED: "
+                "thread=%s state=%s "
+                "task=%r cancelling=%s "
+                "error=%r args=%r",
+                thread_id,
+                conv_state,
+                task,
+                task.cancelling() if task else None,
+                e,
+                e.args,
+            )
+
             if conv_state == ConversationState.STOPPING:
                 log.info(
                     "Stream cancelled after client stop request; thread=%s", thread_id
