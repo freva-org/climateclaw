@@ -17,12 +17,13 @@ from climateclaw.services.streaming.active_conversations import (
     get_conv_mcpmanager,
     get_conv_messages,
     get_conversation_state,
+    get_replay_task,
     initialize_conversation,
     register_tool_task,
     unregister_tool_task,
-    wait_for_replay_if_needed,
 )
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
+from climateclaw.services.streaming.replay_gate import ReplayGate
 from climateclaw.services.streaming.stream_variants import (
     OpenAIMessage,
     StreamVariant,
@@ -52,6 +53,7 @@ class StreamState:
     user_invoked: bool = True
     tool_call: dict[str, Any] | None = None
     finished: bool = False
+    replay_gate: ReplayGate | None = None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -83,6 +85,12 @@ async def stream_with_tools(
 
     # Get MCPManager of the conversation
     mcp = await get_conv_mcpmanager(thread_id)
+
+    if stream_state.replay_gate is None:
+        stream_state.replay_gate = ReplayGate(await get_replay_task(thread_id))
+
+    if hint := stream_state.replay_gate.start_hint():
+        yield hint
 
     # 1) First request
     tool_agg: dict[str, Any] = {}
@@ -147,6 +155,9 @@ async def stream_with_tools(
 
     # If no tool calls, wrap up everything and return
     if not tool_calls:
+        if hint := await stream_state.replay_gate.wait_done_hint():
+            yield hint
+
         end_v = SVStreamEnd(message="Stream ended.")
         yield end_v
         stream_state.finished = True
@@ -161,7 +172,7 @@ async def stream_with_tools(
         args_txt = (tc.get("function") or {}).get("arguments", "")
 
         if name == "code_interpreter":
-            async for hint in wait_for_replay_if_needed(thread_id):
+            if hint := await stream_state.replay_gate.wait_done_hint():
                 yield hint
 
             # accumulated code text to be appended to thread
@@ -287,6 +298,9 @@ async def stream_with_tools(
         await add_to_conversation(
             thread_id, tool_out_v, storage=storage, store_thread=store_thread
         )
+
+        if hint := stream_state.replay_gate.done_hint_if_ready():
+            yield hint
 
         if tool_msgs:
             messages.extend(tool_msgs)  # type: ignore[arg-type]
