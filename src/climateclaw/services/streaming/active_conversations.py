@@ -15,7 +15,6 @@ from climateclaw.services.service_factory import (
 from climateclaw.services.streaming.stream_variants import (
     StreamVariant,
     SVCode,
-    SVServerHint,
     from_json_to_sv,
     from_sv_to_json,
 )
@@ -314,11 +313,14 @@ async def set_replay_task(thread_id: str, task: asyncio.Task) -> None:
 
 async def get_replay_task(thread_id: str) -> asyncio.Task | None:
     """
-    Return the replay task for this conversation if one is currently known.
+    Return the active replay task for this conversation if one is currently known.
     """
     async with RegistryLock:
         conv = Registry.get(thread_id)
-        return conv.replay_task if conv else None
+        task = conv.replay_task if conv else None
+    if task is None or task.done():
+        return None
+    return task
 
 
 async def clear_replay_task(thread_id: str, task: asyncio.Task) -> None:
@@ -334,20 +336,6 @@ async def clear_replay_task(thread_id: str, task: asyncio.Task) -> None:
 async def _cleanup_replay_task(thread_id: str, task: asyncio.Task) -> None:
     await unregister_tool_task(thread_id, task)
     await clear_replay_task(thread_id, task)
-
-
-async def wait_for_replay_if_needed(thread_id: str):
-    """
-    Yield status hints and wait when code history replay is still restoring the
-    kernel state for this conversation.
-    """
-    task = await get_replay_task(thread_id)
-    if task is None or task.done():
-        return
-
-    yield SVServerHint(data={"status": "Executing previous code blocks..."})
-    await task
-    yield SVServerHint(data={"status": "Execution of previous code blocks is done."})
 
 
 async def register_tool_task(thread_id: str, task: asyncio.Task) -> None:
