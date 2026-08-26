@@ -20,6 +20,7 @@ from climateclaw.services.streaming.active_conversations import (
     initialize_conversation,
     register_tool_task,
     unregister_tool_task,
+    wait_for_replay_if_needed,
 )
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
 from climateclaw.services.streaming.stream_variants import (
@@ -160,6 +161,9 @@ async def stream_with_tools(
         args_txt = (tc.get("function") or {}).get("arguments", "")
 
         if name == "code_interpreter":
+            async for hint in wait_for_replay_if_needed(thread_id):
+                yield hint
+
             # accumulated code text to be appended to thread
             tool_v = SVCode(code=args_txt, id=id)
         else:
