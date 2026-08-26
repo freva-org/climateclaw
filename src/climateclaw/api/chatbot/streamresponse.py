@@ -236,7 +236,7 @@ async def streamresponse(
         try:
             if is_new_thread:
                 # Append ServerHint with thread_id
-                hint_v = SVServerHint(data={"thread_id": thread_id})
+                hint_v = SVServerHint(content={"thread_id": thread_id})
                 for data in _sse_data(from_sv_to_json(hint_v)):
                     yield data
                 await add_to_conversation(
@@ -269,7 +269,7 @@ async def streamresponse(
                         await cancel_tool_tasks(thread_id)
 
             if stop_requested:
-                end_v = SVStreamEnd(message="Stream is stopped by user.")
+                end_v = SVStreamEnd(content="Stream is stopped by user.")
                 for data in _sse_data(from_sv_to_json(end_v)):
                     yield data
                 await end_and_save_conversation(

@@ -23,9 +23,12 @@ from climateclaw.services.streaming.active_conversations import (
     unregister_tool_task,
 )
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
+from climateclaw.services.streaming.openai_helpers import (
+    OpenAIMessage,
+    help_convert_sv_ccrm,
+)
 from climateclaw.services.streaming.replay_gate import ReplayGate
 from climateclaw.services.streaming.stream_variants import (
-    OpenAIMessage,
     StreamVariant,
     SVAssistant,
     SVCode,
@@ -35,7 +38,6 @@ from climateclaw.services.streaming.stream_variants import (
     SVToolCall,
     SVUser,
     from_json_to_sv,
-    help_convert_sv_ccrm,
 )
 from climateclaw.services.streaming.tool_calls import (
     FinalSummary,
@@ -115,7 +117,7 @@ async def stream_with_tools(
             piece = delta.get("content") or ""
             if piece:
                 accumulated_asst_text.append(piece)
-                yield SVAssistant(text=piece)
+                yield SVAssistant(content=piece)
 
             # tool call: stream code chunks live and accumulate deltas
             tc_list = delta.get("tool_calls") or []
@@ -132,7 +134,7 @@ async def stream_with_tools(
                     args_chunk = fn.get("arguments", "")
                     if args_chunk and tool_name == "code_interpreter":
                         # stream arguments chunk immediately
-                        yield SVCode(code=args_chunk, id=call_id)
+                        yield SVCode(content=args_chunk, id=call_id)
 
             #  end-of-message
             if choice.get("finish_reason"):
@@ -142,13 +144,13 @@ async def stream_with_tools(
         for p in re.findall(r"\S+\s*", full_txt):
             if p:
                 accumulated_asst_text.append(full_txt)
-                yield SVAssistant(text=full_txt)
+                yield SVAssistant(content=full_txt)
 
     # 2) Any tool calls?
     tool_calls = finalize_tool_calls(tool_agg)
 
     if accumulated_asst_text:
-        asst_v = SVAssistant(text="".join(accumulated_asst_text))
+        asst_v = SVAssistant(content="".join(accumulated_asst_text))
         await add_to_conversation(
             thread_id, [asst_v], storage=storage, store_thread=store_thread
         )
@@ -158,7 +160,7 @@ async def stream_with_tools(
         if hint := await stream_state.replay_gate.wait_done_hint():
             yield hint
 
-        end_v = SVStreamEnd(message="Stream ended.")
+        end_v = SVStreamEnd(content="Stream ended.")
         yield end_v
         stream_state.finished = True
         return
@@ -176,9 +178,9 @@ async def stream_with_tools(
                 yield hint
 
             # accumulated code text to be appended to thread
-            tool_v = SVCode(code=args_txt, id=id)
+            tool_v = SVCode(content=args_txt, id=id)
         else:
-            tool_v = SVToolCall(arg=args_txt, id=id, tool_name=name)  # type: ignore[assignment]
+            tool_v = SVToolCall(content=args_txt, id=id, tool_name=name)  # type: ignore[assignment]
             # code is already streamed, we stream the other tool calls here too
             yield tool_v
 
@@ -330,7 +332,7 @@ async def run_stream(
     log = logger or DEFAULT_LOGGER
 
     # Append user content
-    user_v = SVUser(text=user_input or "")
+    user_v = SVUser(content=user_input or "")
     await add_to_conversation(
         thread_id, [user_v], storage=storage, store_thread=store_thread
     )
@@ -386,8 +388,8 @@ async def run_stream(
             stream_state.finished = True
         except Exception as e:
             log.exception("Stream error: %s", e)
-            err_v = SVServerError(message=str(e))
-            end_v = SVStreamEnd(message="Stream ended with an error.")
+            err_v = SVServerError(content=str(e))
+            end_v = SVStreamEnd(content="Stream ended with an error.")
             await add_to_conversation(
                 thread_id, [err_v], storage=storage, store_thread=store_thread
             )

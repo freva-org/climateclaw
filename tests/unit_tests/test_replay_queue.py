@@ -22,8 +22,8 @@ from climateclaw.services.streaming.stream_variants import (
 )
 from conftest import DummyMcpManager
 
-REPLAYING_HINT = SVServerHint(data={"status": REPLAYING_CODE_STATUS})
-REPLAY_DONE_HINT = SVServerHint(data={"status": REPLAY_DONE_STATUS})
+REPLAYING_HINT = SVServerHint(content={"status": REPLAYING_CODE_STATUS})
+REPLAY_DONE_HINT = SVServerHint(content={"status": REPLAY_DONE_STATUS})
 
 
 class ToolMcpManager(DummyMcpManager):
@@ -198,7 +198,7 @@ async def test_plain_answer_sends_replay_hints_without_blocking_answer(
     )
 
     assert await anext(stream) == REPLAYING_HINT
-    assert await anext(stream) == SVAssistant(text="plain answer")
+    assert await anext(stream) == SVAssistant(content="plain answer")
 
     waiting_for_done = asyncio.create_task(anext(stream))
     await asyncio.sleep(0)

@@ -18,14 +18,14 @@ class ReplayGate:
             return None
 
         self.start_sent = True
-        return SVServerHint(data={"status": REPLAYING_CODE_STATUS})
+        return SVServerHint(content={"status": REPLAYING_CODE_STATUS})
 
     def done_hint_if_ready(self) -> SVServerHint | None:
         if self.done_sent or self.task is None or not self.task.done():
             return None
 
         self.done_sent = True
-        return SVServerHint(data={"status": REPLAY_DONE_STATUS})
+        return SVServerHint(content={"status": REPLAY_DONE_STATUS})
 
     async def wait_done_hint(self) -> SVServerHint | None:
         if self.done_sent or self.task is None:
@@ -35,4 +35,4 @@ class ReplayGate:
             await self.task
 
         self.done_sent = True
-        return SVServerHint(data={"status": REPLAY_DONE_STATUS})
+        return SVServerHint(content={"status": REPLAY_DONE_STATUS})
