@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections.abc import Generator
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
@@ -71,6 +72,7 @@ def _sse_data(obj: SVDict) -> Generator[bytes]:
 @router.post("/streamresponse", dependencies=[AuthRequired])
 async def streamresponse(
     request: StreamResponseRequest,
+    http_request: Request,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -231,63 +233,89 @@ async def streamresponse(
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
 
     async def event_stream():
-        if is_new_thread:
-            # Append ServerHint with thread_id
-            hint_v = SVServerHint(content={"thread_id": thread_id})
-            for data in _sse_data(from_sv_to_json(hint_v)):
-                yield data
-            await add_to_conversation(
-                thread_id, [hint_v], storage=storage, store_thread=store_thread
-            )
+        try:
+            if is_new_thread:
+                # Append ServerHint with thread_id
+                hint_v = SVServerHint(content={"thread_id": thread_id})
+                for data in _sse_data(from_sv_to_json(hint_v)):
+                    yield data
+                await add_to_conversation(
+                    thread_id, [hint_v], storage=storage, store_thread=store_thread
+                )
 
-        stop_requested = False
+            stop_requested = False
 
-        last_check = time.monotonic()
-        async for variant in run_stream(
-            model=model_name,
-            thread_id=thread_id,
-            user_input=input,
-            system_prompt=system_prompt,
-            storage=storage,
-            store_thread=store_thread,
-            logger=logger,
-        ):
-            for data in _sse_data(from_sv_to_json(variant)):
-                yield data
+            last_check = time.monotonic()
+            async for variant in run_stream(
+                model=model_name,
+                thread_id=thread_id,
+                user_input=input,
+                system_prompt=system_prompt,
+                storage=storage,
+                store_thread=store_thread,
+                logger=logger,
+            ):
+                for data in _sse_data(from_sv_to_json(variant)):
+                    yield data
 
-            now = time.monotonic()
-            # Check if there is STOP request from
-            if now - last_check > CHECK_INTERVAL:
-                last_check = now
-                state = await get_conversation_state(thread_id)
-                if state == ConversationState.STOPPING:
-                    stop_requested = True
+                now = time.monotonic()
+                # Check if there is STOP request from
+                if now - last_check > CHECK_INTERVAL:
+                    last_check = now
+                    state = await get_conversation_state(thread_id)
+                    if state == ConversationState.STOPPING:
+                        stop_requested = True
 
-                    await cancel_tool_tasks(thread_id)
+                        await cancel_tool_tasks(thread_id)
 
-        if stop_requested:
-            end_v = SVStreamEnd(content="Stream is stopped by user.")
-            for data in _sse_data(from_sv_to_json(end_v)):
-                yield data
+            if stop_requested:
+                end_v = SVStreamEnd(content="Stream is stopped by user.")
+                for data in _sse_data(from_sv_to_json(end_v)):
+                    yield data
+                await end_and_save_conversation(
+                    thread_id, storage, store_thread=store_thread
+                )
+                logger.info(
+                    "Stopped streaming after client request",
+                    extra={"thread_id": thread_id, "user_id": user_name},
+                )
+                return
+
             await end_and_save_conversation(
                 thread_id, storage, store_thread=store_thread
             )
+            msg = (
+                "Completed streaming and saved conversation"
+                if store_thread
+                else "Completed streaming without saving the conversation"
+            )
             logger.info(
-                "Stopped streaming after client request",
+                msg,
                 extra={"thread_id": thread_id, "user_id": user_name},
             )
-            return
 
-        await end_and_save_conversation(thread_id, storage, store_thread=store_thread)
-        msg = (
-            "Completed streaming and saved conversation"
-            if store_thread
-            else "Completed streaming without saving the conversation"
-        )
-        logger.info(
-            msg,
-            extra={"thread_id": thread_id, "user_id": user_name},
-        )
+        except asyncio.CancelledError as e:
+            task = asyncio.current_task()
+            state = await get_conversation_state(thread_id)
+
+            try:
+                disconnected = await http_request.is_disconnected()
+            except Exception:
+                disconnected = None
+
+            logger.error(
+                "EVENT STREAM CANCELLED: "
+                "thread=%s conv_state=%s http_disconnected=%s "
+                "task=%r cancelling=%s error=%r args=%r",
+                thread_id,
+                state,
+                disconnected,
+                task,
+                task.cancelling() if task else None,
+                e,
+                e.args,
+                exc_info=True,
+            )
 
     return StreamingResponse(
         event_stream(),
