@@ -221,7 +221,7 @@ def generate_haproxy(
                 s,
                 port_dict[s],
                 service_instance_names(s, replica_dict[s], services),
-                "hdr(thread-id)",
+                "hdr(X-Freva-Thread-Id)",
             )
         )
 
