@@ -127,12 +127,7 @@ def haproxy_backend(name, port, service_names, sticky_mode=None):
     lines.append(f"backend be_{name}")
 
     if sticky_mode:
-        if sticky_mode == "json_thread_id":
-            lines.append("    option http-buffer-request")
-            lines.append("    balance hash req.body,json_query('$.thread_id')")
-        else:
-            lines.append(f"    balance {sticky_mode}")
-
+        lines.append(f"    balance {sticky_mode}")
         lines.append("    hash-type consistent")
 
     for i, service_name in enumerate(service_names, start=1):
@@ -199,7 +194,7 @@ def generate_haproxy(
             "climateclaw",
             backend_port,
             service_instance_names("climateclaw", backend_n, services),
-            "json_thread_id",
+            "hdr(X-Freva-Thread-Id)",
         )
     )
 
