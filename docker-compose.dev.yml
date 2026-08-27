@@ -109,15 +109,21 @@ services:
       start_period: 10s
 
   litellm:
-    image: ghcr.io/berriai/litellm:main-stable
+    image: ghcr.io/berriai/litellm:main-latest
     hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
       - ./litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
-    command: >
-      --config=/app/config.yaml
-      --port=4000
-      --num_workers=1
-      --run_gunicorn
+      - ./logs/:/app/logs
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        litellm
+        --config=/app/config.yaml
+        --port=4000
+        --num_workers=8
+        --run_gunicorn
+        --detailed_debug
+        2>&1 | tee -a /app/logs/litellm.log
     env_file: .env
     ports:
       - "4000:4000" # Expose LiteLLM port to the host machine for direct access if needed, e.g. local dev
