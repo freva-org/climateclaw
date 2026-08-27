@@ -35,6 +35,7 @@ class ActiveConversation:
     user_id: str
     state: ConversationState
     mcp_manager: McpManager | None
+    replay_task: asyncio.Task | None = None
     tool_tasks: set[asyncio.Task] = field(default_factory=set)
     messages: list[StreamVariant] = field(default_factory=list)
     last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -126,10 +127,11 @@ async def initialize_conversation(
     if mcp_mgr is not None and any(isinstance(v, SVCode) for v in messages):
         loop = asyncio.get_running_loop()
         task = loop.create_task(_replay_code_history(thread_id))
+        await set_replay_task(thread_id, task)
         await register_tool_task(thread_id, task)
         task.add_done_callback(
             # to be unregistered when done
-            lambda t: asyncio.create_task(unregister_tool_task(thread_id, t))
+            lambda t: asyncio.create_task(_cleanup_replay_task(thread_id, t))
         )
 
 
@@ -254,9 +256,9 @@ async def _replay_code_history(thread_id: str) -> None:
 
     # Extract all code blocks in chronological order
     code_blocks: list[str] = [
-        v.code
+        v.content
         for v in messages
-        if isinstance(v, SVCode) and isinstance(v.code, str) and v.code.strip()
+        if isinstance(v, SVCode) and isinstance(v.content, str) and v.content.strip()
     ]
 
     log = configure_logging(__name__, thread_id=thread_id)
@@ -296,6 +298,44 @@ async def _replay_code_history(thread_id: str) -> None:
             )
             # break on first failure; might replace with `continue`
             break
+
+
+async def set_replay_task(thread_id: str, task: asyncio.Task) -> None:
+    """
+    Store the active replay task for this conversation so later code tool calls
+    can wait for kernel state restoration before using the same MCP client.
+    """
+    async with RegistryLock:
+        conv = Registry.get(thread_id)
+        if conv:
+            conv.replay_task = task
+
+
+async def get_replay_task(thread_id: str) -> asyncio.Task | None:
+    """
+    Return the active replay task for this conversation if one is currently known.
+    """
+    async with RegistryLock:
+        conv = Registry.get(thread_id)
+        task = conv.replay_task if conv else None
+    if task is None or task.done():
+        return None
+    return task
+
+
+async def clear_replay_task(thread_id: str, task: asyncio.Task) -> None:
+    """
+    Clear the replay task reference, but only if it still points at this task.
+    """
+    async with RegistryLock:
+        conv = Registry.get(thread_id)
+        if conv and conv.replay_task is task:
+            conv.replay_task = None
+
+
+async def _cleanup_replay_task(thread_id: str, task: asyncio.Task) -> None:
+    await unregister_tool_task(thread_id, task)
+    await clear_replay_task(thread_id, task)
 
 
 async def register_tool_task(thread_id: str, task: asyncio.Task) -> None:

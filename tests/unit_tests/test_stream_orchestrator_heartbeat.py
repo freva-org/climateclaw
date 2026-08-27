@@ -9,7 +9,7 @@ from climateclaw.services.streaming.stream_variants import SVServerHint
 @pytest.mark.asyncio
 async def test_yield_heartbeats_until_emits_after_quiet_period(monkeypatch):
     async def fake_heartbeat_content():
-        return SVServerHint(data={"heartbeat": True})
+        return SVServerHint(content={"heartbeat": True})
 
     async def slow_task():
         await asyncio.sleep(0.03)

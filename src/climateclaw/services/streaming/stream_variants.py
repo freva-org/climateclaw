@@ -1,25 +1,26 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing_extensions import TypedDict
+
+from climateclaw.core.logging_setup import configure_logging
 
 """
 • Class-based StreamVariant models (discriminator: `variant`)
 • Conversation utilities: cleanup_conversation(), normalize_conv_for_prompt()
-• Conversion to OpenAI Chat messages: help_convert_sv_ccrm(...)
 • Json <-> class conversion helpers: from_json_to_sv(), from_sv_to_json(), parse_examples_jsonl()
 
 Notes
 -----
 • examples.jsonl is stored in wire shape; use parse_examples_jsonl(...) to read it as classes.
+• Pydantic model fields intentionally match the wire/json shape:
+    {"variant": "...", "content": ..., ...}
 """
 
-logger = logging.getLogger(__name__)
+logger = configure_logging(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Constants / Conventions
@@ -36,19 +37,8 @@ TOOL_OUTPUT = "ToolOutput"
 IMAGE = "Image"
 SERVER_ERROR = "ServerError"
 OPENAI_ERROR = "OpenAIError"
-CODE_ERROR = "CodeError"
 STREAM_END = "StreamEnd"
 SERVER_HINT = "ServerHint"
-
-# Roles (OpenAI Chat)
-ROLE_SYSTEM = "system"
-ROLE_USER = "user"
-ROLE_ASSISTANT = "assistant"
-ROLE_TOOL = "tool"
-
-# Conventions
-ASSISTANT_NAME = "ClimateClaw"
-TOOL_NAME_CODE = "code_interpreter"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -63,15 +53,13 @@ class _SVBase(BaseModel):
 
 
 class SVPrompt(_SVBase):
-    # IMPORTANT: use string literals inside Literal[...] to satisfy type-checkers
     variant: Literal["Prompt"] = Field(default="Prompt")
-    # JSON string representing a list of chat messages (OpenAI format).
-    payload: str = Field(..., description="JSON string of ChatCompletion messages")
+    content: str = Field(..., description="JSON string of ChatCompletion messages")
 
 
 class SVUser(_SVBase):
     variant: Literal["User"] = Field(default="User")
-    text: str
+    content: str
     model: str = Field(
         default="", description="Model used to respond to this user request"
     )
@@ -79,68 +67,62 @@ class SVUser(_SVBase):
 
 class SVAssistant(_SVBase):
     variant: Literal["Assistant"] = Field(default="Assistant")
-    text: str
-    name: str = Field(default=ASSISTANT_NAME, description="Assistant display name")
+    content: str
     feedback: str = Field(default="", description="User feedback")
 
 
 class SVCode(_SVBase):
     variant: Literal["Code"] = Field(default="Code")
-    code: str
+    content: str
     id: str
     feedback: str = Field(default="", description="User feedback")
 
 
 class SVCodeOutput(_SVBase):
     variant: Literal["CodeOutput"] = Field(default="CodeOutput")
-    output: str
+    content: str
     id: str
 
 
 class SVImage(_SVBase):
     variant: Literal["Image"] = Field(default="Image")
-    b64: str
+    content: str
     id: str
     mime: str = Field(default="image/png")
 
 
 class SVToolCall(_SVBase):
     variant: Literal["ToolCall"] = Field(default="ToolCall")
-    arg: str
+    content: str
     tool_name: str
     id: str
 
 
 class SVToolOutput(_SVBase):
     variant: Literal["ToolOutput"] = Field(default="ToolOutput")
-    output: str
+    content: str
     tool_name: str
     id: str
 
 
 class SVServerHint(_SVBase):
     variant: Literal["ServerHint"] = Field(default="ServerHint")
-    data: dict | str
+    content: dict | str
 
 
 class SVServerError(_SVBase):
     variant: Literal["ServerError"] = Field(default="ServerError")
-    message: str
+    content: str
 
 
 class SVOpenAIError(_SVBase):
     variant: Literal["OpenAIError"] = Field(default="OpenAIError")
-    message: str
-
-
-class SVCodeError(_SVBase):
-    variant: Literal["CodeError"] = Field(default="CodeError")
-    message: str
+    content: str
 
 
 class SVStreamEnd(_SVBase):
     variant: Literal["StreamEnd"] = Field(default="StreamEnd")
-    message: str
+    content: str
 
 
 # Discriminated union type for parsing
@@ -156,7 +138,6 @@ StreamVariant = Annotated[
     | SVServerHint
     | SVServerError
     | SVOpenAIError
-    | SVCodeError
     | SVStreamEnd,
     Field(discriminator="variant"),
 ]
@@ -176,8 +157,7 @@ def cleanup_conversation(
     conv: Conversation, append_stream_end: bool = False
 ) -> Conversation:
     """
-    Insert missing CodeOutput after Code and ensure StreamEnd at the end.
-    Mirrors the spirit of Rust's cleanup_conversation with class-based variants.
+    Insert missing CodeOutput after Code and optionally ensure StreamEnd at the end.
     """
     out: Conversation = []
     pending_code_id: str | None = None
@@ -188,7 +168,7 @@ def cleanup_conversation(
         if pending_code_id is not None and not isinstance(v, SVCodeOutput):
             out.append(
                 SVCodeOutput(
-                    output="No response was received from code-interpreter.",
+                    content="No response was received from code-interpreter.",
                     id=pending_code_id,
                 )
             )
@@ -211,7 +191,7 @@ def cleanup_conversation(
         # close dangling code with an empty output
         out.append(
             SVCodeOutput(
-                output="No response was received from code-interpreter.",
+                content="No response was received from code-interpreter.",
                 id=pending_code_id,
             )
         )
@@ -219,7 +199,7 @@ def cleanup_conversation(
     # Ensure ends with StreamEnd (only if requested)
     if append_stream_end:
         if not out or not isinstance(out[-1], SVStreamEnd):
-            out.append(SVStreamEnd(message="Stream ended in a very unexpected manner"))
+            out.append(SVStreamEnd(content="Stream ended in a very unexpected manner"))
 
     return out
 
@@ -238,9 +218,7 @@ def normalize_conv_for_prompt(
 
     filtered: Conversation = []
     for v in conv:
-        if isinstance(
-            v, (SVServerHint, SVServerError, SVOpenAIError, SVCodeError, SVStreamEnd)
-        ):
+        if isinstance(v, (SVServerHint, SVServerError, SVOpenAIError, SVStreamEnd)):
             # Drop meta if include_meta=False (Rust-like behavior)
             continue
         filtered.append(v)
@@ -248,221 +226,46 @@ def normalize_conv_for_prompt(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Conversion to OpenAI Chat messages
-# ──────────────────────────────────────────────────────────────────────────────
-
-
-class OpenAIMessage(TypedDict, total=False):
-    role: str
-    content: Any
-    name: str
-    tool_calls: list[dict]
-    tool_call_id: str  # for tool role
-
-
-def _as_system(name: str, content: str | dict | list) -> OpenAIMessage:
-    if not isinstance(content, str):
-        try:
-            content = json.dumps(content, ensure_ascii=False)
-        except Exception:
-            content = str(content)
-    return {"role": ROLE_SYSTEM, "name": name, "content": content}
-
-
-def _tool_call_message(args: str, call_id: str, tool_name: str) -> OpenAIMessage:
-    # Arguments should be a JSON string per OpenAI function-call schema.
-    return {
-        "role": ROLE_ASSISTANT,
-        "name": ASSISTANT_NAME,
-        "content": None,
-        "tool_calls": [
-            {
-                "id": call_id,
-                "type": "function",
-                "function": {"name": tool_name, "arguments": args},
-            }
-        ],
-    }
-
-
-def _tool_result_message(output: str, call_id: str, tool_name: str) -> OpenAIMessage:
-    return {
-        "role": ROLE_TOOL,
-        "name": tool_name,
-        "tool_call_id": call_id,
-        "content": output,
-    }
-
-
-def _image_user_message(b64: str, mime: str) -> OpenAIMessage:
-    return {
-        "role": ROLE_USER,
-        "content": [
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:{mime};base64,{b64}"},
-            }
-        ],
-    }
-
-
-def mcp_tool_to_openai_function(tool: dict[str, Any]) -> dict[str, Any]:
-    """
-    Convert an MCP tool descriptor to OpenAI-style tool schema:
-    MCP (typical):
-      {"name": "search", "description": "...", "input_schema": {...}}
-    OpenAI tool:
-      {"type":"function","function":{"name":"search","description":"...","parameters":{...}}}
-    Be permissive: fall back to {} if schema missing.
-    """
-    name = tool.get("name") or ""
-    desc = tool.get("description") or ""
-    params = tool.get("input_schema") or tool.get("parameters") or {}
-    return {
-        "type": "function",
-        "function": {
-            "name": name,
-            "description": desc,
-            "parameters": params if isinstance(params, dict) else {},
-        },
-    }
-
-
-def _extend_with_prompt_json(out: list[OpenAIMessage], json_str: str) -> None:
-    try:
-        data = json.loads(json_str)
-    except Exception as e:
-        logger.warning(
-            "Failed to parse Prompt JSON payload: %s; skipping this Prompt variant.", e
-        )
-        return
-
-    if not isinstance(data, list):
-        logger.warning("Prompt payload is not a list; skipping.")
-        return
-
-    for i, msg in enumerate(data):
-        if not isinstance(msg, dict):
-            logger.warning("Prompt message[%d] is not an object; skipping.", i)
-            continue
-        role = msg.get("role")
-        if role not in (ROLE_SYSTEM, ROLE_USER, ROLE_ASSISTANT, ROLE_TOOL):
-            logger.warning("Prompt message[%d] has invalid role=%r; skipping.", i, role)
-            continue
-        out.append(msg)  # type: ignore[arg-type] # trust caller for deeper schema (tool_calls etc.)
-
-
-def help_convert_sv_ccrm(
-    conversation: Conversation,
-    include_images: bool = False,
-    include_meta: bool = False,
-) -> list[OpenAIMessage]:
-    """
-    Convert a StreamVariant conversation to OpenAI ChatCompletion messages.
-    • include_images: whether to include Image variants (Rust passes false for prompting)
-    • include_meta: whether to include ServerHint/Errors/StreamEnd as system/tool messages
-    """
-    conv = normalize_conv_for_prompt(conversation, include_meta=include_meta)
-    out: list[OpenAIMessage] = []
-
-    for v in conv:
-        if isinstance(v, SVPrompt):
-            _extend_with_prompt_json(out, v.payload)
-
-        elif isinstance(v, SVUser):
-            out.append({"role": ROLE_USER, "content": v.text})
-
-        elif isinstance(v, SVAssistant):
-            out.append({"role": ROLE_ASSISTANT, "name": v.name, "content": v.text})
-
-        elif isinstance(v, SVCode):
-            out.append(_tool_call_message(v.code, v.id, tool_name=TOOL_NAME_CODE))
-
-        elif isinstance(v, SVCodeOutput):
-            out.append(_tool_result_message(v.output, v.id, tool_name=TOOL_NAME_CODE))
-
-        elif isinstance(v, SVToolCall):
-            out.append(_tool_call_message(v.arg, v.id, tool_name=v.tool_name))
-
-        elif isinstance(v, SVToolOutput):
-            out.append(_tool_result_message(v.output, v.id, tool_name=v.tool_name))
-
-        elif isinstance(v, SVImage):
-            if include_images:
-                out.append(_image_user_message(v.b64, v.mime))
-            else:
-                logger.debug("Dropping Image variant in prompt (include_images=False).")
-
-        elif isinstance(v, SVServerHint):
-            if include_meta:
-                out.append(_as_system("server_hint", v.data))
-
-        elif isinstance(v, SVServerError):
-            if include_meta:
-                out.append(_as_system("server_error", v.message))
-
-        elif isinstance(v, SVOpenAIError):
-            if include_meta:
-                out.append(_as_system("openai_error", v.message))
-
-        elif isinstance(v, SVCodeError):
-            # Code Errors do not have IDs, so we treat them as system messages rather than tool results.
-            if include_meta:
-                out.append(_as_system("code_error", v.message))
-
-        elif isinstance(v, SVStreamEnd):
-            if include_meta:
-                out.append(_as_system("stream_end", v.message))
-
-        else:
-            logger.warning("Unknown StreamVariant encountered: %r", v)
-
-    return out
-
-
-# ──────────────────────────────────────────────────────────────────────────────
 # JSON <-> Stream Variant class conversion + examples loader
 # ──────────────────────────────────────────────────────────────────────────────
+
+
+def _as_str(value: Any) -> str:
+    return "" if value is None else str(value)
 
 
 def from_json_to_sv(obj: dict) -> StreamVariant:
     """
     Convert a json/dict into class-based StreamVariant.
-    Json examples:
-      {"variant":"Assistant","content":"..."}
-      {"variant":"User","content":"..."}
-      {"variant":"Code","content":"...", "id": "call_ABC"}
-      {"variant":"CodeOutput","content":"...", "id": "call_ABC"}
-      {"variant":"Image","content":"..."}
+
+    This is the compatibility boundary. It accepts both current wire shape and
+    older examples.jsonl shapes, then returns normalized Pydantic variants whose
+    fields match the wire shape.
     """
     v = obj.get("variant")
     c = obj.get("content", "")
-    f = obj.get("feedback")
+    f = obj.get("feedback", "")
 
     if v == ASSISTANT:
-        return SVAssistant(
-            text="" if c is None else str(c), feedback="" if f is None else str(f)
-        )
+        return SVAssistant(content=_as_str(c), feedback=f)
     if v == USER:
         m = obj.get("model")
         return SVUser(
-            text="" if c is None else str(c),
-            model="" if m is None else str(m),
+            content=_as_str(c),
+            model=_as_str(m),
         )
     if v == PROMPT:
-        return SVPrompt(payload="" if c is None else str(c))
+        return SVPrompt(content=_as_str(c))
     if v == SERVER_HINT:
-        return SVServerHint(data=c if isinstance(c, dict) else json.loads(c))
+        return SVServerHint(content=c if isinstance(c, dict) else json.loads(c))
     if v == SERVER_ERROR:
-        return SVServerError(message="" if c is None else str(c))
-    if v == CODE_ERROR:
-        return SVCodeError(message="" if c is None else str(c))
+        return SVServerError(content=_as_str(c))
     if v == OPENAI_ERROR:
-        return SVOpenAIError(message="" if c is None else str(c))
+        return SVOpenAIError(content=_as_str(c))
     if v == STREAM_END:
-        return SVStreamEnd(message="" if c is None else str(c))
+        return SVStreamEnd(content=_as_str(c))
     if v == IMAGE:
-        return SVImage(b64="" if c is None else str(c), id=obj.get("id", ""))
+        return SVImage(content=_as_str(c), id=_as_str(obj.get("id")))
 
     if v == CODE:
         code_text, id = "", ""
@@ -482,7 +285,7 @@ def from_json_to_sv(obj: dict) -> StreamVariant:
         else:
             code_text = str(c)
             id = obj.get("id", "")
-        return SVCode(code=code_text, id=str(id), feedback="" if f is None else str(f))
+        return SVCode(content=code_text, id=str(id), feedback=f)
 
     if v == CODE_OUTPUT:
         if (
@@ -492,84 +295,30 @@ def from_json_to_sv(obj: dict) -> StreamVariant:
         else:
             output = c
             id = obj.get("id", "")
-        return SVCodeOutput(output=str(output), id=str(id))
+        return SVCodeOutput(content=str(output), id=str(id))
 
     if v == TOOL_CALL:
-        arg = c
-        id = obj.get("id", "")
-        tool_name = obj.get("tool_name", "")
-        return SVToolCall(arg=str(arg), id=str(id), tool_name=tool_name)
+        return SVToolCall(
+            content=_as_str(c),
+            id=_as_str(obj.get("id")),
+            tool_name=_as_str(obj.get("tool_name")),
+        )
 
     if v == TOOL_OUTPUT or v == TOOL_CALL:
-        output = c
-        id = obj.get("id", "")
-        tool_name = obj.get("tool_name", "")
-        return SVToolOutput(output=str(output), id=str(id), tool_name=tool_name)
+        return SVToolOutput(
+            content=_as_str(c),
+            id=_as_str(obj.get("id")),
+            tool_name=_as_str(obj.get("tool_name")),
+        )
 
     raise ValueError(f"unsupported variant: {obj!r}")
 
 
 def from_sv_to_json(v: StreamVariant) -> SVDict:
     """
-    Convert Pydantic class back to json/dict.
+    Convert Pydantic StreamVariant back to json/dict.
     """
-    d = v.model_dump()
-    kind = d["variant"]
-    if kind == USER:
-        out = {"variant": USER, "content": d["text"]}
-        if d.get("model"):
-            out["model"] = d["model"]
-        return out
-    if kind == ASSISTANT:
-        if d.get("feedback"):
-            return {
-                "variant": ASSISTANT,
-                "content": d["text"],
-                "feedback": d.get("feedback"),
-            }
-        else:
-            return {"variant": ASSISTANT, "content": d["text"]}
-    if kind == PROMPT:
-        return {"variant": PROMPT, "content": d["payload"]}
-    if kind == SERVER_HINT:
-        return {"variant": SERVER_HINT, "content": d["data"]}
-    if kind == SERVER_ERROR:
-        return {"variant": SERVER_ERROR, "content": d["message"]}
-    if kind == CODE_ERROR:
-        return {"variant": CODE_ERROR, "content": [d["message"]]}
-    if kind == OPENAI_ERROR:
-        return {"variant": OPENAI_ERROR, "content": d["message"]}
-    if kind == STREAM_END:
-        return {"variant": STREAM_END, "content": d["message"]}
-    if kind == IMAGE:
-        return {"variant": IMAGE, "content": d["b64"], "id": d["id"]}
-    if kind == CODE:
-        if d.get("feedback"):
-            return {
-                "variant": CODE,
-                "content": d["code"],
-                "id": d["id"],
-                "feedback": d.get("feedback", ""),
-            }
-        else:
-            return {"variant": CODE, "content": d["code"], "id": d["id"]}
-    if kind == CODE_OUTPUT:
-        return {"variant": CODE_OUTPUT, "content": d["output"], "id": d["id"]}
-    if kind == TOOL_CALL:
-        return {
-            "variant": TOOL_CALL,
-            "content": d["arg"],
-            "tool_name": d["tool_name"],
-            "id": d["id"],
-        }
-    if kind == TOOL_OUTPUT:
-        return {
-            "variant": TOOL_OUTPUT,
-            "content": d["output"],
-            "tool_name": d["tool_name"],
-            "id": d["id"],
-        }
-    return d
+    return v.model_dump(exclude_none=True)
 
 
 def parse_examples_jsonl(path: str | Path) -> list[StreamVariant]:
@@ -578,23 +327,29 @@ def parse_examples_jsonl(path: str | Path) -> list[StreamVariant]:
     """
     out: list[StreamVariant] = []
     p = Path(path)
+
     if not p.exists():
         return out
+
     for raw in p.read_text(encoding="utf-8", errors="ignore").splitlines():
         line = raw.strip()
+
         if not line or line.startswith("//"):
             continue
+
         try:
             obj = json.loads(line)
         except Exception:
             # keep quiet but skip — examples may include comments / non-json lines
             continue
+
         if isinstance(obj, dict) and "variant" in obj:
             try:
                 out.append(from_json_to_sv(obj))
             except Exception:
                 # skip unparseable lines
                 continue
+
     return out
 
 
@@ -650,7 +405,6 @@ __all__ = [
     "SVServerHint",
     "SVServerError",
     "SVOpenAIError",
-    "SVCodeError",
     "SVStreamEnd",
     # Constants / roles
     "PROMPT",
@@ -661,19 +415,11 @@ __all__ = [
     "IMAGE",
     "SERVER_ERROR",
     "OPENAI_ERROR",
-    "CODE_ERROR",
     "STREAM_END",
     "SERVER_HINT",
-    "ROLE_SYSTEM",
-    "ROLE_USER",
-    "ROLE_ASSISTANT",
-    "ROLE_TOOL",
-    "ASSISTANT_NAME",
-    "TOOL_NAME_CODE",
     # Functions
     "cleanup_conversation",
     "normalize_conv_for_prompt",
-    "help_convert_sv_ccrm",
     "is_prompt",
     "from_json_to_sv",
     "from_sv_to_json",
