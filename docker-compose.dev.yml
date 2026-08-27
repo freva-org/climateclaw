@@ -359,5 +359,3 @@ volumes:
   settings-data:
   certs-data:
   import-data:
-  web_django-static:
-  web_proxy-logs:
