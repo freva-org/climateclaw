@@ -173,9 +173,9 @@ def parse_code_interpreter_result(result: Dict, id: str, thread_id: str, logger=
     result["created_files"] = created_files
 
     codeout_v = SVCodeOutput(content=normalize_code_output(result), id=id)
-    yield codeout_v
-    code_block.append(codeout_v)
     code_msgs.extend(help_convert_sv_ccrm([codeout_v]))
+    code_block.append(codeout_v)
+    yield codeout_v
 
     # Get number of images in "display_data" - contains rich output, image/html/json
     num_display_data_with_png = sum(

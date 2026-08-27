@@ -99,8 +99,10 @@ def test_ccrm_codeoutput_conversion_does_not_mutate_preview_url():
     assert code_output.content["created_files"][0]["preview_url"] == (
         "http://localhost/plot.png"
     )
+    assert code_output.content["created_files"][0]["url_sent_to_model"] is True
     model_payload = json.loads(msgs[0]["content"])
     assert "preview_url" not in model_payload["created_files"][0]
+    assert "url_sent_to_model" not in model_payload["created_files"][0]
 
 
 def test_wire_roundtrip():
