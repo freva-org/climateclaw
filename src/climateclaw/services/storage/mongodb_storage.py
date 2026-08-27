@@ -354,7 +354,7 @@ def update_threadid_in_content(
     new_id: str, content: list[StreamVariant], logger
 ) -> list[StreamVariant]:
     if isinstance(content[0], SVServerHint):
-        content[0] = SVServerHint(data={"thread_id": new_id})
+        content[0] = SVServerHint(content={"thread_id": new_id})
         logger.info("Updated ServerHint with new thread-id.")
     else:
         if any(isinstance(c, SVServerHint) for c in content):
@@ -364,5 +364,5 @@ def update_threadid_in_content(
             logger.info(
                 "ServerHint is missing in the thread content. It is inserted with the new thread-id."
             )
-            content = [SVServerHint(data={"thread_id": new_id})] + content
+            content = [SVServerHint(content={"thread_id": new_id})] + content
     return content
