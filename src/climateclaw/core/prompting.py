@@ -7,10 +7,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 from climateclaw.core.available_chatbots import model_is_gpt_5, model_is_ollama
-from climateclaw.services.streaming.stream_variants import (
-    help_convert_sv_ccrm,
-    parse_examples_jsonl,
-)
+from climateclaw.services.streaming.openai_helpers import help_convert_sv_ccrm
+from climateclaw.services.streaming.stream_variants import parse_examples_jsonl
 
 """
 Prompt loading & assembly (non-streaming), single API for all models.

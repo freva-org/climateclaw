@@ -109,7 +109,7 @@ async def _run_turn(
             storage=storage,
         ):
             if isinstance(variant, SVAssistant):
-                txt = getattr(variant, "text", "") or ""
+                txt = variant.content or ""
                 if first_chunk:
                     # Print a header once per assistant message
                     print("\nAssistant:", end=" ", flush=True)
@@ -118,7 +118,7 @@ async def _run_turn(
                 chunk_count += 1
                 char_count += len(txt)
             elif isinstance(variant, SVCode):
-                txt = getattr(variant, "code", "") or ""
+                txt = variant.content or ""
                 if first_chunk:
                     # Print a header once per code variant
                     print("\nCode:", end=" ", flush=True)
