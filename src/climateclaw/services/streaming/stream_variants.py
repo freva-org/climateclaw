@@ -284,7 +284,7 @@ def from_json_to_sv(obj: dict) -> StreamVariant:
     """
     v = obj.get("variant")
     c = obj.get("content", "")
-    f = _as_str(obj.get("feedback"))
+    f = obj.get("feedback", "")
 
     if v == ASSISTANT:
         return SVAssistant(content=_as_str(c), feedback=f)
