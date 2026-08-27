@@ -29,20 +29,20 @@ async def test_save_and_read_thread(monkeypatch, patch_mongodb, GOOD_HEADERS):
     await storage.save_thread(
         thread_id=tid,
         user_id=user_id,
-        content=[SVPrompt(payload='[{"role":"system","content":"s"}]')],
+        content=[SVPrompt(content='[{"role":"system","content":"s"}]')],
         append_to_existing=True,
     )
     # write user + assistant + explicit end
     await storage.save_thread(
         thread_id=tid,
         user_id=user_id,
-        content=[SVUser(text="hi")],
+        content=[SVUser(content="hi")],
         append_to_existing=True,
     )
     await storage.save_thread(
         thread_id=tid,
         user_id=user_id,
-        content=[SVAssistant(text="hello"), SVStreamEnd(message="Done")],
+        content=[SVAssistant(content="hello"), SVStreamEnd(content="Done")],
         append_to_existing=True,
     )
 

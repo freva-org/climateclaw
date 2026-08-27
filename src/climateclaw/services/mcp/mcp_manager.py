@@ -9,7 +9,7 @@ from climateclaw.core.settings import get_settings
 from climateclaw.services.authentication.auth import Authenticator
 from climateclaw.services.mcp.client import McpClient
 from climateclaw.services.storage.helpers import get_mongodb_uri
-from climateclaw.services.streaming.stream_variants import mcp_tool_to_openai_function
+from climateclaw.services.streaming.openai_helpers import mcp_tool_to_openai_function
 
 settings = get_settings()
 DEFAULT_LOGGER = configure_logging(__name__)

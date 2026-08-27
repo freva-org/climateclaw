@@ -326,8 +326,8 @@ def patch_stream(monkeypatch):
             SVServerHint,
         )
 
-        yield SVServerHint(data={"thread_id": "t-abc"})
-        yield SVAssistant(text="hello")
+        yield SVServerHint(content={"thread_id": "t-abc"})
+        yield SVAssistant(content="hello")
         return
 
     monkeypatch.setattr(

@@ -6,14 +6,16 @@ from typing import Any
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import McpManager
-from climateclaw.services.streaming.stream_variants import (
+from climateclaw.services.streaming.openai_helpers import (
     OpenAIMessage,
+    help_convert_sv_ccrm,
+)
+from climateclaw.services.streaming.stream_variants import (
     StreamVariant,
     SVCodeOutput,
     SVImage,
     SVToolOutput,
     SVUser,
-    help_convert_sv_ccrm,
 )
 
 DEFAULT_LOGGER = configure_logging(__name__)
@@ -128,9 +130,9 @@ def parse_tool_result(resp_txt: str, tool_name: str, call_id: str):
         out_msg = f"{tool_name} error: {out}"
 
         if tool_name == "code_interpreter":
-            toolout_v = SVCodeOutput(output=out_msg, id=call_id)
+            toolout_v = SVCodeOutput(content=out_msg, id=call_id)
         else:
-            toolout_v = SVToolOutput(output=out_msg, tool_name=tool_name, id=call_id)  # type: ignore[assignment]
+            toolout_v = SVToolOutput(content=out_msg, tool_name=tool_name, id=call_id)  # type: ignore[assignment]
         yield toolout_v
         tool_msg = help_convert_sv_ccrm([toolout_v])
         isError = True
@@ -159,7 +161,7 @@ def parse_code_interpreter_result(result: dict, id: str):
     else:
         codeout = ""  # We must send something here, the model expects it.
 
-    codeout_v = SVCodeOutput(output=codeout, id=id)
+    codeout_v = SVCodeOutput(content=codeout, id=id)
     yield codeout_v
     code_block.append(codeout_v)
     code_msgs.extend(help_convert_sv_ccrm([codeout_v]))
@@ -169,14 +171,14 @@ def parse_code_interpreter_result(result: dict, id: str):
         if "image/png" in r.keys():
             base64_image = r["image/png"]
             image_id = id + f"_{i}"
-            image_v = SVImage(b64=base64_image, id=image_id)
+            image_v = SVImage(content=base64_image, id=image_id)
             yield image_v
             code_block.append(image_v)
             code_msgs.extend(
                 help_convert_sv_ccrm(
                     [
                         SVUser(
-                            text="Here is the image returned by the Code Interpreter."
+                            content="Here is the image returned by the Code Interpreter."
                         ),
                         image_v,
                     ],
@@ -185,7 +187,7 @@ def parse_code_interpreter_result(result: dict, id: str):
             )
 
         if "application/json" in r.keys():
-            json_v = SVCodeOutput(output=r["application/json"], id=f"{id}:json")
+            json_v = SVCodeOutput(content=r["application/json"], id=f"{id}:json")
             yield json_v
             code_block.append(json_v)
             code_msgs.extend(help_convert_sv_ccrm([json_v]))
@@ -200,6 +202,6 @@ def parse_generic_tool_result(result: dict, tool_name: str, id: str, logger=None
         out = result.get("error", "")
     else:
         out = "Unknown response."
-    web_sv = SVToolOutput(output=out, tool_name=tool_name, id=id)
+    web_sv = SVToolOutput(content=out, tool_name=tool_name, id=id)
     web_msg = help_convert_sv_ccrm([web_sv])
     yield FinalSummary(var_block=[web_sv], tool_messages=web_msg, is_error=False)
