@@ -197,8 +197,8 @@ def model_supports_images(model: str) -> bool:
     """
     True for names starting with the defined list.
     """
-    models = ("gpt", "qwen3.6", "gemma4", "mistral", "ministral")
-    return model.startswith(models)
+    vision_models = ("gpt", "qwen3.6", "gemma4", "mistral", "ministral")
+    return model.startswith(vision_models)
 
 
 def refresh_cache() -> None:

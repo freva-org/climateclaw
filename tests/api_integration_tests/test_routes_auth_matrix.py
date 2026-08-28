@@ -68,7 +68,7 @@ async def test_routes_succeed_with_auth_and_username_injection(
                 json={
                     "thread_id": "t-123",
                     "input": "hi there",
-                    "chatbot": "mistral-small3.2:24b",
+                    "chatbot": "gemma4:31b",
                 },
             )
             assert r.status_code == 200

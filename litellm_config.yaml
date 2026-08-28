@@ -50,10 +50,6 @@ model_list:
       api_base: "http://ollama:11434"
     model_info:
       supports_function_calling: true
-  - model_name: "mxbai-embed-large:latest"
-    litellm_params:
-      model: "ollama/mxbai-embed-large:latest"
-      api_base: "http://ollama:11434"
 
 litellm_settings:
   drop_params: true # If true, drop all parameters not in the model_list from the request
