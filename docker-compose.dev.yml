@@ -311,7 +311,7 @@ services:
 
   freva-rest-server:
     user: root
-    image: ghcr.io/freva-org/freva-rest-api:latest
+    image: ghcr.io/freva-org/freva-rest-api:2607.0.0
     hostname: restapi
     networks:
       - climateclaw
