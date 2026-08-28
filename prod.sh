@@ -88,6 +88,9 @@ for arg in "$@"; do
     fi
 done
 
+echo "[prod.sh] Building climateclaw-base from ${COMPOSE_FILE}"
+${COMPOSE} -f "${COMPOSE_FILE}" --profile build-only build climateclaw-base
+
 if [ "$do_build" = true ]; then
     echo "[prod.sh] Building images ..."
     ${COMPOSE} -f "${COMPOSE_FILE}" build
