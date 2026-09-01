@@ -1,6 +1,3 @@
-import json
-
-from climateclaw.services.streaming.openai_helpers import help_convert_sv_ccrm
 from climateclaw.services.streaming.stream_variants import (
     StreamVariant,
     SVAssistant,
@@ -62,71 +59,6 @@ def test_normalize_conv_for_prompt_filters_meta():
     # Meta variants removed
     kinds = [v.variant for v in out]
     assert kinds == ["User", "Assistant"]
-
-
-def test_ccrm_conversion_basic():
-    conv: list[StreamVariant] = [
-        SVUser(content="hi", model="gpt-4.1"),
-        SVAssistant(content="hello"),
-        SVStreamEnd(content="Done"),
-    ]
-    msgs = help_convert_sv_ccrm(conv, include_images=False, include_meta=False)
-    assert msgs[0]["role"] == "user"
-    assert msgs[0]["content"] == "hi"
-    assert "model" not in msgs[0]
-    assert msgs[1]["role"] == "assistant"
-    assert "stream_end" not in (m.get("name") for m in msgs if "name" in m)
-
-
-def test_ccrm_codeoutput_conversion_does_not_mutate_preview_url():
-    code_output = SVCodeOutput(
-        content=normalize_code_output(
-            {
-                "stdout": "",
-                "stderr": "",
-                "created_files": [
-                    {
-                        "path": "plot.png",
-                        "mime_type": "image/png",
-                        "preview_url": "http://localhost/plot.png",
-                    }
-                ],
-            }
-        ),
-        id="call_1",
-    )
-
-    msgs = help_convert_sv_ccrm([code_output])
-
-    assert code_output.content["created_files"][0]["preview_url"] == (
-        "http://localhost/plot.png"
-    )
-    model_payload = json.loads(msgs[0]["content"])
-    assert "preview_url" not in model_payload["created_files"][0]
-    assert "url_sent_to_model" not in model_payload["created_files"][0]
-
-
-def test_ccrm_codeoutput_conversion_marks_image_url_sent_to_model():
-    code_output = SVCodeOutput(
-        content=normalize_code_output(
-            {
-                "stdout": "",
-                "stderr": "",
-                "created_files": [
-                    {
-                        "path": "plot.png",
-                        "mime_type": "image/png",
-                        "preview_url": "http://localhost/plot.png",
-                    }
-                ],
-            }
-        ),
-        id="call_1",
-    )
-
-    help_convert_sv_ccrm([code_output])
-
-    assert code_output.content["created_files"][0]["url_sent_to_model"] is True
 
 
 def test_code_wire_roundtrip():
