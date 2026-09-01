@@ -1,29 +1,31 @@
 model_list:
-  - model_name: gpt-4.1 ### RECEIVED MODEL NAME ###
+  - model_name: gpt-4.1
     litellm_params: # all params accepted by litellm.completion() - https://docs.litellm.ai/docs/completion/input
       model: openai/gpt-4.1 ### MODEL NAME sent to `litellm.completion()` ###
       api_key: "os.environ/CLIMATECLAW_OPENAI_API_KEY"
       # temperature: 0.2
-  - model_name: gpt-4.1-mini ### RECEIVED MODEL NAME ###
-    litellm_params: # all params accepted by litellm.completion() - https://docs.litellm.ai/docs/completion/input
-      model: openai/gpt-4.1-mini ### MODEL NAME sent to `litellm.completion()` ###
+  - model_name: gpt-4.1-mini
+    litellm_params:
+      model: openai/gpt-4.1-mini
       api_key: "os.environ/CLIMATECLAW_OPENAI_API_KEY"
-  - model_name: "ministral-3:14b"
+  - model_name: "gemma4:31b"
     litellm_params:
-      model: "ollama_chat/ministral-3:14b"
+      model: "ollama_chat/gemma4:31b"
       api_base: "http://ollama:11434"
     model_info:
       supports_function_calling: true
-  - model_name: "qwen2.5:3b"
+  - model_name: "mistral-small3.2:24b"
     litellm_params:
-      model: "ollama_chat/qwen2.5:3b"
+      model: "ollama_chat/mistral-small3.2:24b"
       api_base: "http://ollama:11434"
     model_info:
       supports_function_calling: true
-  - model_name: "mxbai-embed-large:latest"
+  - model_name: "qwen3.6:35b"  # Mixture Of Experts (Number of Experts: 256) and 3B activated
     litellm_params:
-      model: "ollama/mxbai-embed-large:latest"
-      api_base: "http://ollama:11434" # Ollama API base URL
+      model: "ollama_chat/qwen3.6:35b"
+      api_base: "http://ollama:11434"
+    model_info:
+      supports_function_calling: true
 
 litellm_settings:
   drop_params: true # If true, drop all parameters not in the model_list from the request

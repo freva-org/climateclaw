@@ -22,8 +22,8 @@ from climateclaw.services.streaming.stream_variants import (
 )
 from conftest import DummyMcpManager
 
-REPLAYING_HINT = SVServerHint(content={"status": REPLAYING_CODE_STATUS})
-REPLAY_DONE_HINT = SVServerHint(content={"status": REPLAY_DONE_STATUS})
+REPLAYING_HINT = SVServerHint(content={"busy": True, "detail": REPLAYING_CODE_STATUS})
+REPLAY_DONE_HINT = SVServerHint(content={"busy": False, "detail": REPLAY_DONE_STATUS})
 
 
 class ToolMcpManager(DummyMcpManager):
