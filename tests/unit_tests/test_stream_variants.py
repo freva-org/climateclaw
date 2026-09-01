@@ -142,3 +142,39 @@ def test_legacy_codeoutput_string_normalizes_to_structured_content():
     back = from_json_to_sv(wire)
     assert isinstance(back, SVCodeOutput)
     assert back.content["stdout"] == "ok\n"
+
+
+def test_normalize_code_output_none_returns_empty_output():
+    output = normalize_code_output(None)
+
+    assert output == empty_code_interpreter_output()
+
+
+def test_legacy_codeoutput_list_normalizes_first_item_to_stdout():
+    legacy = {
+        "variant": "CodeOutput",
+        "content": ["legacy output", "call_1"],
+    }
+
+    codeoutput_v = from_json_to_sv(legacy)
+
+    assert isinstance(codeoutput_v, SVCodeOutput)
+    assert codeoutput_v.id == "call_1"
+    assert codeoutput_v.content == empty_code_interpreter_output(stdout="legacy output")
+
+
+def test_normalize_code_output_strips_png_from_display_data():
+    output = normalize_code_output(
+        {
+            "stdout": "",
+            "stderr": "",
+            "display_data": [
+                {
+                    "image/png": "base64-image",
+                    "text/plain": "<Figure size 640x480>",
+                }
+            ],
+        }
+    )
+
+    assert output["display_data"] == [{"text/plain": "<Figure size 640x480>"}]
