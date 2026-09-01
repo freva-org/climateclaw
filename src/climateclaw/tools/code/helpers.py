@@ -126,7 +126,7 @@ def detect_created_or_modified_files(
 
         created_files.append(
             {
-                "path": abs_path.name,
+                "path": rel_path,
                 "mime_type": mime_type or "application/octet-stream",
                 # "size": after_fp["size"],
                 # "status": "created" if is_new else "modified",
