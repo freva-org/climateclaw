@@ -52,7 +52,7 @@ from climateclaw.services.streaming.tool_calls import (
 )
 
 DEFAULT_LOGGER = configure_logging(__name__)
-HEARTBEAT_INTERVAL_SECONDS = 10
+HEARTBEAT_INTERVAL_SECONDS = 1
 
 
 @dataclass
