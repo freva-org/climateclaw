@@ -127,17 +127,6 @@ echo "[prod.sh] Using project: ${CLIMATECLAW_PROJECT_NAME}"
 # --- Tear down previous deployment ---
 ${COMPOSE} -f "${SCALED_FILE}" down
 
-# --- Handle --build: split it out so build and up are separate steps ---
-do_build=false
-args=()
-for arg in "$@"; do
-    if [ "$arg" = "--build" ]; then
-        do_build=true
-    else
-        args+=("$arg")
-    fi
-done
-
 echo "[prod.sh] Building climateclaw-base from ${COMPOSE_FILE}"
 ${COMPOSE} -f "${COMPOSE_FILE}" --profile build-only build climateclaw-base
 
