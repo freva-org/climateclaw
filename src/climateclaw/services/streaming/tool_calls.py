@@ -261,6 +261,7 @@ def code_variant_content(
     raw_arguments: str,
     normalized_arguments: str | None = None,
 ) -> str:
+    """Best-effort to send valid json string to client"""
     if normalized_arguments is not None:
         return normalized_arguments
 

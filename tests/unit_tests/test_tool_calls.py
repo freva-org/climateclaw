@@ -1,7 +1,10 @@
+import json
+
 import pytest
 
 from climateclaw.services.streaming.tool_calls import (
     InvalidToolArguments,
+    code_variant_content,
     normalize_tool_arguments,
 )
 
@@ -78,3 +81,40 @@ def test_normalize_tool_arguments_ignores_non_dict_wrappers_when_rejecting():
             raw_arguments='{"args": "print(1)", "tool": "code_interpreter"}',
             input_schema=CODE_SCHEMA,
         )
+
+
+def test_code_variant_content_prefers_normalized_arguments():
+    content = code_variant_content(
+        raw_arguments='{"args": {"code": "print(1)"}}',
+        normalized_arguments='{"code": "print(2)"}',
+    )
+
+    assert json.loads(content) == {"code": "print(2)"}
+
+
+def test_code_variant_content_extracts_top_level_code():
+    content = code_variant_content(raw_arguments='{"code": "print(1)"}')
+
+    assert json.loads(content) == {"code": "print(1)"}
+
+
+def test_code_variant_content_extracts_nested_code():
+    content = code_variant_content(
+        raw_arguments='{"args": {"code": "print(1)"}, "tool": "code_interpreter"}'
+    )
+
+    assert json.loads(content) == {"code": "print(1)"}
+
+
+@pytest.mark.parametrize(
+    "raw_arguments",
+    [
+        '{"code":',
+        '["print(1)"]',
+        '{"source": "print(1)"}',
+    ],
+)
+def test_code_variant_content_falls_back_to_empty_code(raw_arguments):
+    content = code_variant_content(raw_arguments=raw_arguments)
+
+    assert json.loads(content) == {"code": ""}

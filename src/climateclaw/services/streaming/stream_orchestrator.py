@@ -295,6 +295,7 @@ async def stream_with_tools(
         messages.append({"role": "assistant", "content": "", "tool_calls": [tc]})
 
         # Store valid, normalized arguments in MongoDB and stream them to the frontend.
+        # Otherwise some client may break.
         if name == "code_interpreter":
             if hint := await stream_state.replay_gate.wait_done_hint():
                 yield hint
