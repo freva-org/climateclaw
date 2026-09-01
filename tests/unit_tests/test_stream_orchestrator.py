@@ -76,6 +76,60 @@ async def fake_tool_call_stream(tool_name, arguments):
     }
 
 
+async def collect_stream_with_code_tool(
+    *,
+    patch_registry,
+    patch_thread_storage,
+    monkeypatch,
+    thread_id,
+    model,
+    raw_arguments,
+):
+    register_fake_mcp(
+        patch_registry,
+        thread_id,
+        DummyMcpManager(
+            [
+                tool_schema(
+                    "code_interpreter",
+                    {"code": {"type": "string"}},
+                    ["code"],
+                )
+            ]
+        ),
+    )
+    executed_arguments = None
+
+    async def fake_acomplete(**kwargs):
+        return fake_tool_call_stream("code_interpreter", raw_arguments)
+
+    async def fake_run_tool_via_mcp(**kwargs):
+        nonlocal executed_arguments
+        executed_arguments = kwargs["arguments_json"]
+        return json.dumps({"structuredContent": {"stdout": "ok"}})
+
+    monkeypatch.setattr(
+        stream_orchestrator,
+        "run_tool_via_mcp",
+        fake_run_tool_via_mcp,
+    )
+
+    items = [
+        item
+        async for item in stream_with_tools(
+            model=model,
+            thread_id=thread_id,
+            messages=[],
+            acomplete_func=fake_acomplete,
+            stream_state=StreamState(),
+            storage=patch_thread_storage,
+            store_thread=False,
+        )
+    ]
+
+    return items, executed_arguments
+
+
 @pytest.mark.asyncio
 async def test_stream_with_tools_consumes_async_iterator_response(
     patch_registry, patch_thread_storage
@@ -160,6 +214,68 @@ async def test_stream_with_tools_rejects_malformed_code_arguments_without_mcp_ca
     code_outputs = [item for item in items if isinstance(item, SVCodeOutput)]
     assert len(code_outputs) == 1
     assert "Invalid code_interpreter arguments" in code_outputs[0].content
+
+
+@pytest.mark.asyncio
+async def test_stream_with_tools_streams_raw_code_chunks_for_non_ollama_models(
+    patch_registry,
+    patch_thread_storage,
+    monkeypatch,
+):
+    # OpenAI models can stream tool-call arguments incrementally, so the backend
+    # forwards those raw chunks to the client as soon as they arrive. The arguments
+    # are still normalized later before tool execution for every model. In theory,
+    # if an OpenAI model streamed malformed arguments like in this test, the client
+    # could fail before normalization happens. However, we keep the existing streaming
+    # behavior because this has not occurred with OpenAI models in practice.
+
+    raw_arguments = '{"args": {"code": "print(1)"}, "tool": "code_interpreter"}'
+
+    items, executed_arguments = await collect_stream_with_code_tool(
+        patch_registry=patch_registry,
+        patch_thread_storage=patch_thread_storage,
+        monkeypatch=monkeypatch,
+        thread_id="t-non-ollama-code",
+        model="gpt-4.1",
+        raw_arguments=raw_arguments,
+    )
+
+    assert json.loads(executed_arguments) == {"code": "print(1)"}
+    assert [item for item in items if isinstance(item, SVCode)] == [
+        SVCode(content=raw_arguments, id="call_1")
+    ]
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gemma4:31b",
+        "qwen3.6:latest",
+        "mistral-small:latest",
+    ],
+)
+@pytest.mark.asyncio
+async def test_stream_with_tools_emits_normalized_code_later_for_ollama_models(
+    patch_registry,
+    patch_thread_storage,
+    monkeypatch,
+    model,
+):
+    raw_arguments = '{"args": {"code": "print(1)"}, "tool": "code_interpreter"}'
+
+    items, executed_arguments = await collect_stream_with_code_tool(
+        patch_registry=patch_registry,
+        patch_thread_storage=patch_thread_storage,
+        monkeypatch=monkeypatch,
+        thread_id=f"t-ollama-code-{model}",
+        model=model,
+        raw_arguments=raw_arguments,
+    )
+
+    assert json.loads(executed_arguments) == {"code": "print(1)"}
+    assert [item for item in items if isinstance(item, SVCode)] == [
+        SVCode(content='{"code": "print(1)"}', id="call_1")
+    ]
 
 
 @pytest.mark.asyncio
