@@ -51,7 +51,7 @@ class McpManager:
         self._tools_by_target: dict[Target, list[dict[str, Any]]] = {
             t: [] for t in self._servers
         }
-        self._openai_tools_cache: list[dict[str, Any]] | None = None
+        self._tools_cache: list[dict[str, Any]] | None = None
 
     # ────────── lifecycle ──────────
 
@@ -106,13 +106,13 @@ class McpManager:
                             "MCP tool discovery failed for %s: %s", s, e, exc_info=True
                         )
 
-                self._openai_tools_cache = []
+                self._tools_cache = []
                 for s in self._servers:
                     for t in self._tools_by_target[s]:
-                        self._openai_tools_cache.append(mcp_tool_to_openai_function(t))
+                        self._tools_cache.append(mcp_tool_to_openai_function(t))
 
             self.log.info(
-                f"MCP initialized. Tools discovered: total:{len(self._openai_tools_cache)} "
+                f"MCP initialized. Tools discovered: total:{len(self._tools_cache)} "
                 + " ".join(
                     [
                         s + ":" + str(len(self._tools_by_target[s]))
@@ -164,7 +164,7 @@ class McpManager:
 
         self._tools_by_target[target] = normalized
         # invalidate merged cache
-        self._openai_tools_cache = None
+        self._tools_cache = None
 
     def _lookup_server_unlocked(self, tool_name: str) -> Target | None:
         for tgt in self._servers:
@@ -179,18 +179,18 @@ class McpManager:
 
     # ────────── tool export to LLM ──────────
 
-    async def openai_tools(self) -> list[dict[str, Any]]:
+    async def available_tools(self) -> list[dict[str, Any]]:
         """
         Return cached OpenAI-style tool schemas. Empty list if discovery failed.
         """
         async with self._lock:
-            if self._openai_tools_cache is None:
+            if self._tools_cache is None:
                 merged: list[dict[str, Any]] = []
                 for tgt in self._servers:
                     for t in self._tools_by_target[tgt]:
                         merged.append(mcp_tool_to_openai_function(t))
-                self._openai_tools_cache = merged
-            return list(self._openai_tools_cache)
+                self._tools_cache = merged
+            return list(self._tools_cache)
 
     # ────────── calling tools ──────────
 
