@@ -59,6 +59,9 @@ class SVPrompt(_SVBase):
 class SVUser(_SVBase):
     variant: Literal["User"] = Field(default="User")
     content: str
+    model: str = Field(
+        default="", description="Model used to respond to this user request"
+    )
 
 
 class SVAssistant(_SVBase):
@@ -289,7 +292,11 @@ def from_json_to_sv(obj: dict) -> StreamVariant:
     if v == ASSISTANT:
         return SVAssistant(content=_as_str(c), feedback=f)
     if v == USER:
-        return SVUser(content=_as_str(c))
+        m = obj.get("model")
+        return SVUser(
+            content=_as_str(c),
+            model=_as_str(m),
+        )
     if v == PROMPT:
         return SVPrompt(content=_as_str(c))
     if v == SERVER_HINT:

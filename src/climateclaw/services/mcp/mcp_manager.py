@@ -152,7 +152,12 @@ class McpManager:
         for tool in tools:
             name = tool.get("name") or tool.get("tool_name") or ""
             desc = tool.get("description") or ""
-            schema = tool.get("input_schema") or tool.get("parameters") or {}
+            schema = (
+                tool.get("inputSchema")
+                or tool.get("input_schema")
+                or tool.get("parameters")
+                or {}
+            )
             normalized.append(
                 {"name": name, "description": desc, "input_schema": schema}
             )
