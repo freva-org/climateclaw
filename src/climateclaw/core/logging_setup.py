@@ -1,5 +1,6 @@
 import logging
 import os
+from contextvars import ContextVar
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -25,24 +26,49 @@ THREAD_BACKUP_COUNT = 3
 LOG_FORMAT = (
     "%(asctime)s %(levelname)s %(name)s "
     f"[service={SERVICE_NAME}]"
-    "[thread=%(thread_id)s user=%(user_id)s] %(message)s"
+    "[request=%(request_id)s thread=%(thread_id)s user=%(user_id)s] %(message)s"
 )
 LOG_FORMATTER = logging.Formatter(LOG_FORMAT)
+
+REQUEST_ID_HEADER = "X-Request-Id"
+REQUEST_ID_CONTEXT: ContextVar[str | None] = ContextVar(
+    "request_id_context", default=None
+)
+
+
+def get_request_id() -> str:
+    return REQUEST_ID_CONTEXT.get() or "-"
+
+
+def set_request_id(request_id: str | None):
+    return REQUEST_ID_CONTEXT.set(request_id or None)
+
+
+def reset_request_id(token) -> None:
+    REQUEST_ID_CONTEXT.reset(token)
 
 
 class ContextFilter(logging.Filter):
     """Ensures thread_id/user_id keys exist on log records."""
 
     def __init__(
-        self, thread_id: str | None = None, user_id: str | None = None
+        self,
+        thread_id: str | None = None,
+        user_id: str | None = None,
+        request_id: str | None = None,
     ) -> None:
         super().__init__()
         self.thread_id = thread_id or "-"
         self.user_id = user_id or "-"
+        self.request_id = request_id or "-"
 
     def filter(self, record: logging.LogRecord) -> bool:
         record.thread_id = getattr(record, "thread_id", self.thread_id) or "-"
         record.user_id = getattr(record, "user_id", self.user_id) or "-"
+        record_request_id = getattr(record, "request_id", None)
+        record.request_id = (
+            get_request_id() if record_request_id in (None, "-") else record_request_id
+        )
         return True
 
 
@@ -57,6 +83,10 @@ class ThreadFilter(ContextFilter):
         thread_id = getattr(record, "thread_id", self.thread_id) or "-"
         record.thread_id = thread_id
         record.user_id = getattr(record, "user_id", self.user_id) or "-"
+        record_request_id = getattr(record, "request_id", None)
+        record.request_id = (
+            get_request_id() if record_request_id in (None, "-") else record_request_id
+        )
         return thread_id == self.expected
 
 
@@ -83,6 +113,7 @@ def _ensure_base_logging() -> None:
         maxBytes=MAIN_MAX_BYTES,
         backupCount=MAIN_BACKUP_COUNT,
         encoding="utf-8",
+        delay=True,  # create file lazily on first emit
     )
     file_handler.setFormatter(LOG_FORMATTER)
     file_handler.addFilter(base_filter)
@@ -133,6 +164,7 @@ def configure_logging(
     logger_name: str | None = None,
     thread_id: str | None = None,
     user_id: str | None = None,
+    request_id: str | None = None,
     named_log: str | None = None,
 ) -> logging.LoggerAdapter:
     """
@@ -157,7 +189,12 @@ def configure_logging(
     logging.getLogger("pymongo").setLevel(logging.WARNING)
 
     return logging.LoggerAdapter(
-        logger, {"thread_id": thread_id or "-", "user_id": user_id or "-"}
+        logger,
+        {
+            "thread_id": thread_id or "-",
+            "user_id": user_id or "-",
+            "request_id": request_id or get_request_id(),
+        },
     )
 
 
