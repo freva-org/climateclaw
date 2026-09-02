@@ -149,7 +149,7 @@ def generate_haproxy(
 ):
     conf = []
     request_id_rules = (
-        "    http-request set-header X-Request-Id %[req.hdr(X-Request-Id),default(%[uuid()])]\n"
+        "    http-request set-header X-Request-Id %[uuid()] unless { req.hdr(X-Request-Id) -m found }\n"
         "    declare capture request len 64\n"
         "    http-request capture req.hdr(X-Request-Id) id 0\n"
     )
