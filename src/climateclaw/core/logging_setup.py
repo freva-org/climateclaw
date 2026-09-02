@@ -8,8 +8,6 @@ from climateclaw.core.settings import get_settings
 
 _SILENCED = False
 _CONFIGURED = False
-_THREAD_HANDLERS: dict[str, RotatingFileHandler] = {}
-_NAMED_HANDLERS: dict[str, RotatingFileHandler] = {}
 
 settings = get_settings()
 ENABLE_FILE_LOGGING = os.getenv("CLIMATECLAW_FILE_LOGGING", "1") == "1"
@@ -20,8 +18,6 @@ LOG_DIR = Path(__file__).resolve().parents[3] / "logs"
 MAIN_LOG = LOG_DIR / f"{SERVICE_NAME}.log"
 MAIN_MAX_BYTES = 5_000_000
 MAIN_BACKUP_COUNT = 5
-THREAD_MAX_BYTES = 1_000_000
-THREAD_BACKUP_COUNT = 3
 
 LOG_FORMAT = (
     "%(asctime)s %(levelname)s %(name)s "
@@ -72,24 +68,6 @@ class ContextFilter(logging.Filter):
         return True
 
 
-class ThreadFilter(ContextFilter):
-    """Only allow records for the given thread_id to reach a handler."""
-
-    def __init__(self, thread_id: str) -> None:
-        super().__init__(thread_id=thread_id)
-        self.expected = thread_id or "-"
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        thread_id = getattr(record, "thread_id", self.thread_id) or "-"
-        record.thread_id = thread_id
-        record.user_id = getattr(record, "user_id", self.user_id) or "-"
-        record_request_id = getattr(record, "request_id", None)
-        record.request_id = (
-            get_request_id() if record_request_id in (None, "-") else record_request_id
-        )
-        return thread_id == self.expected
-
-
 def _ensure_base_logging() -> None:
     global _CONFIGURED
     if _CONFIGURED or not ENABLE_FILE_LOGGING:
@@ -124,65 +102,19 @@ def _ensure_base_logging() -> None:
     _CONFIGURED = True
 
 
-def _get_thread_handler(thread_id: str) -> RotatingFileHandler:
-    if thread_id in _THREAD_HANDLERS:
-        return _THREAD_HANDLERS[thread_id]
-
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    handler = RotatingFileHandler(
-        LOG_DIR / f"{thread_id}.log",
-        maxBytes=THREAD_MAX_BYTES,
-        backupCount=THREAD_BACKUP_COUNT,
-        encoding="utf-8",
-        delay=True,  # create file lazily on first emit
-    )
-    handler.setFormatter(LOG_FORMATTER)
-    handler.addFilter(ThreadFilter(thread_id=thread_id))
-    _THREAD_HANDLERS[thread_id] = handler
-    return handler
-
-
-def _get_named_handler(log_name: str) -> RotatingFileHandler:
-    if log_name in _NAMED_HANDLERS:
-        return _NAMED_HANDLERS[log_name]
-
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    handler = RotatingFileHandler(
-        LOG_DIR / f"{log_name}.log",
-        maxBytes=THREAD_MAX_BYTES,
-        backupCount=THREAD_BACKUP_COUNT,
-        encoding="utf-8",
-        delay=True,  # create file lazily on first emit
-    )
-    handler.setFormatter(LOG_FORMATTER)
-    handler.addFilter(ContextFilter())
-    _NAMED_HANDLERS[log_name] = handler
-    return handler
-
-
 def configure_logging(
     logger_name: str | None = None,
     thread_id: str | None = None,
     user_id: str | None = None,
     request_id: str | None = None,
-    named_log: str | None = None,
 ) -> logging.LoggerAdapter:
     """
     Configure root logging once and return a logger adapter with optional context.
-    When thread_id is provided, logs are also written to logs/log_<thread_id>.txt.
-    When named_log is provided, logs are also written to logs/<named_log>.log.
+    When thread_id is provided, it is added as log context.
     """
     _ensure_base_logging()
 
     logger = logging.getLogger(logger_name)
-    if thread_id:
-        handler = _get_thread_handler(thread_id)
-        if handler not in logger.handlers:
-            logger.addHandler(handler)
-    if named_log:
-        handler = _get_named_handler(named_log)
-        if handler not in logger.handlers:
-            logger.addHandler(handler)
 
     logging.getLogger("fakeredis").setLevel(logging.WARNING)
     logging.getLogger("docket").setLevel(logging.WARNING)
