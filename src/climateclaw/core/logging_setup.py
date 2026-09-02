@@ -46,7 +46,9 @@ def reset_request_id(token) -> None:
     REQUEST_ID_CONTEXT.reset(token)
 
 
-def _parse_syslog_target(target: str) -> tuple[tuple[str, int], int] | None:
+def _parse_syslog_target(
+    target: str,
+) -> tuple[tuple[str, int], socket.SocketKind] | None:
     """
     Parse HAProxy-style syslog targets like tcp@host:1514.
     Returns the address and socket type expected by SysLogHandler.
@@ -64,7 +66,9 @@ def _parse_syslog_target(target: str) -> tuple[tuple[str, int], int] | None:
     except ValueError:
         return None
 
-    socket_type = socket.SOCK_STREAM if protocol == "tcp" else socket.SOCK_DGRAM
+    socket_type: socket.SocketKind = (
+        socket.SOCK_STREAM if protocol == "tcp" else socket.SOCK_DGRAM
+    )
     return (host, parsed_port), socket_type
 
 
