@@ -1,7 +1,8 @@
 import logging
 import os
+import socket
 from contextvars import ContextVar
-from logging.handlers import RotatingFileHandler
+from logging.handlers import RotatingFileHandler, SysLogHandler
 from pathlib import Path
 
 from climateclaw.core.settings import get_settings
@@ -11,6 +12,7 @@ _CONFIGURED = False
 
 settings = get_settings()
 ENABLE_FILE_LOGGING = os.getenv("CLIMATECLAW_FILE_LOGGING", "1") == "1"
+SYSLOG_TARGET = os.getenv("CLIMATECLAW_SYSLOG_TARGET")
 
 SERVICE_NAME = os.getenv("HOSTNAME") or "app"
 
@@ -42,6 +44,28 @@ def set_request_id(request_id: str | None):
 
 def reset_request_id(token) -> None:
     REQUEST_ID_CONTEXT.reset(token)
+
+
+def _parse_syslog_target(target: str) -> tuple[tuple[str, int], int] | None:
+    """
+    Parse HAProxy-style syslog targets like tcp@host:1514.
+    Returns the address and socket type expected by SysLogHandler.
+    """
+    protocol, separator, address = target.partition("@")
+    if separator != "@" or protocol not in {"tcp", "udp"}:
+        return None
+
+    host, separator, port = address.rpartition(":")
+    if separator != ":" or not host:
+        return None
+
+    try:
+        parsed_port = int(port)
+    except ValueError:
+        return None
+
+    socket_type = socket.SOCK_STREAM if protocol == "tcp" else socket.SOCK_DGRAM
+    return (host, parsed_port), socket_type
 
 
 class ContextFilter(logging.Filter):
@@ -96,6 +120,27 @@ def _ensure_base_logging() -> None:
     file_handler.setFormatter(LOG_FORMATTER)
     file_handler.addFilter(base_filter)
     root.addHandler(file_handler)
+
+    if (not settings.DEV) and SYSLOG_TARGET:
+        parsed_target = _parse_syslog_target(SYSLOG_TARGET)
+        if parsed_target:
+            address, socket_type = parsed_target
+            try:
+                syslog_handler = SysLogHandler(
+                    address=address,
+                    facility=SysLogHandler.LOG_LOCAL0,
+                    socktype=socket_type,
+                )
+                syslog_handler.setFormatter(LOG_FORMATTER)
+                syslog_handler.addFilter(base_filter)
+                root.addHandler(syslog_handler)
+            except OSError as e:
+                root.warning("Failed to configure remote syslog logging: %s", e)
+        else:
+            root.warning(
+                "Invalid CLIMATECLAW_SYSLOG_TARGET=%r; expected tcp@host:port or udp@host:port",
+                SYSLOG_TARGET,
+            )
 
     logging.getLogger("uvicorn").setLevel(logging.WARNING)
 
