@@ -4,12 +4,17 @@ import asyncio
 from contextlib import asynccontextmanager
 from datetime import timedelta
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from .api import chatbot, static
-from .core.logging_setup import configure_logging
+from .core.logging_setup import (
+    REQUEST_ID_HEADER,
+    configure_logging,
+    reset_request_id,
+    set_request_id,
+)
 from .core.runtime_checks import run_startup_checks
 from .core.settings import get_settings
 from .services.storage.mongodb_storage import ThreadStorage
@@ -87,6 +92,11 @@ def custom_openapi():
         "in": "header",
         "name": "x-freva-rest-url",
     }
+    security_schemes["RequestId"] = {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Request-Id",
+    }
 
     for path, path_item in openapi_schema.get("paths", {}).items():
         if not path.startswith("/api/chatbot/"):
@@ -96,7 +106,11 @@ def custom_openapi():
             if not isinstance(operation, dict):
                 continue
             operation.setdefault("security", []).append(
-                {"BearerAuth": [], "FrevaRestUrl": []}
+                {
+                    "BearerAuth": [],
+                    "FrevaRestUrl": [],
+                    "RequestId": [],
+                }
             )
 
     app.openapi_schema = openapi_schema
@@ -114,6 +128,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    token = set_request_id(request.headers.get(REQUEST_ID_HEADER))
+    try:
+        # Handover the request ti the rest of FastAPI, continue request
+        return await call_next(request)
+    finally:
+        # Reset to prev value (token) to prevent leaking, clean-up
+        reset_request_id(token)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Route registry
