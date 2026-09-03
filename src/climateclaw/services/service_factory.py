@@ -2,11 +2,7 @@ from pathlib import Path
 
 from fastapi import Depends, HTTPException, Request
 
-from climateclaw.core.logging_setup import (
-    REQUEST_ID_HEADER,
-    configure_logging,
-    get_request_id,
-)
+from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.settings import get_server_url_dict, get_settings
 
 from .authentication.auth import Authenticator
@@ -54,7 +50,6 @@ async def get_mcp_manager(
     # Defaults to send; per-call headers (rest) are added at call time.
     default_headers: dict[str, str] = {
         "thread-id": thread_id,
-        REQUEST_ID_HEADER: get_request_id(),
     }
 
     logger = configure_logging(
