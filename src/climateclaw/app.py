@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from contextlib import asynccontextmanager
 from datetime import timedelta
+from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +24,7 @@ from .services.streaming.active_conversations import cleanup_idle
 
 settings = get_settings()
 logger = configure_logging(__name__)
+REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # FastAPI app (skeleton)
@@ -132,10 +135,16 @@ app.add_middleware(
 
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
-    token = set_request_id(request.headers.get(REQUEST_ID_HEADER))
+    request_id = request.headers.get(REQUEST_ID_HEADER)
+    if not request_id or not REQUEST_ID_PATTERN.fullmatch(request_id):
+        request_id = str(uuid4())
+
+    token = set_request_id(request_id)
     try:
         # Handover the request to the rest of FastAPI, continue request
-        return await call_next(request)
+        response = await call_next(request)
+        response.headers[REQUEST_ID_HEADER] = request_id
+        return response
     finally:
         # Reset to prev value (token) to prevent leaking, clean-up
         reset_request_id(token)
