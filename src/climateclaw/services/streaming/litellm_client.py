@@ -35,8 +35,7 @@ def _passthrough_params(params: dict[str, Any] | None) -> dict[str, Any]:
 def _headers() -> dict[str, str]:
     h = {"Content-Type": "application/json"}
     request_id = get_request_id()
-    if request_id != "-":
-        h[REQUEST_ID_HEADER] = request_id
+    h[REQUEST_ID_HEADER] = request_id
     # Authorization header is not required for Ollama models,
     # but sending it (when available) doesn’t hurt and satisfies OpenAI-routed calls.
     if AUTH_TOKEN:
@@ -94,13 +93,12 @@ async def acomplete(
         payload.update(_passthrough_params(request_params))
 
     request_id = get_request_id()
-    if request_id != "-":
-        metadata = payload.get("metadata")
-        if isinstance(metadata, dict):
-            metadata = {**metadata, "request_id": request_id}
-        else:
-            metadata = {"request_id": request_id}
-        payload["metadata"] = metadata
+    metadata = payload.get("metadata")
+    if isinstance(metadata, dict):
+        metadata = {**metadata, "request_id": request_id}
+    else:
+        metadata = {"request_id": request_id}
+    payload["metadata"] = metadata
 
     if not stream:
         return await _post_json(url, payload)
