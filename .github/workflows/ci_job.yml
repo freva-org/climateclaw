@@ -102,6 +102,7 @@ jobs:
           CLIMATECLAW_MONGODB_PASSWORD=ci-psswrd
           CLIMATECLAW_MONGODB_DATABASE_NAME=ci-db
           CLIMATECLAW_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          CLIMATECLAW_SYSLOG_ADDRESS=tcp@localhost:1514
           EOF
 
       - name: Build production base image
