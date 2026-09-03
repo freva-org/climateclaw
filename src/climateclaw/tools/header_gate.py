@@ -4,6 +4,9 @@ from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from typing import Any, Optional
 
+from mcp.server.streamable_http import ServerMessageMetadata
+from mcp.shared.session import RequestResponder
+
 from climateclaw.core.logging_setup import (
     REQUEST_ID_HEADER,
     configure_logging,
@@ -13,6 +16,53 @@ from climateclaw.core.logging_setup import (
 
 log = logging.getLogger(__name__)
 configure_logging()
+
+_MCP_REQUEST_ID_CONTEXT_PATCHED = False
+
+
+def _debug_request_id_from_mcp_message(message) -> str | None:
+    if not isinstance(message, RequestResponder):
+        return None
+
+    metadata = getattr(message, "message_metadata", None)
+    if not isinstance(metadata, ServerMessageMetadata):
+        return None
+
+    request = getattr(metadata, "request_context", None)
+    headers = getattr(request, "headers", None)
+    if headers is None:
+        return None
+
+    return headers.get(REQUEST_ID_HEADER)
+
+
+def _patch_debug_request_id_context() -> None:
+    """
+    Restore X-Request-Id per MCP JSON-RPC message.
+
+    Streamable HTTP keeps one server task per stateful MCP session. That task is
+    created when the session is initialized, so task-local ContextVars otherwise
+    keep the request id from session creation for later tool calls.
+    """
+    global _MCP_REQUEST_ID_CONTEXT_PATCHED
+    if _MCP_REQUEST_ID_CONTEXT_PATCHED:
+        return
+
+    from mcp.server.lowlevel.server import Server
+
+    original_handle_message = Server._handle_message
+
+    async def handle_message_with_request_id_context(self, message, *args, **kwargs):
+        request_id = _debug_request_id_from_mcp_message(message)
+        token = set_request_id(request_id) if request_id else None
+        try:
+            return await original_handle_message(self, message, *args, **kwargs)
+        finally:
+            if token is not None:
+                reset_request_id(token)
+
+    setattr(Server, "_handle_message", handle_message_with_request_id_context)
+    _MCP_REQUEST_ID_CONTEXT_PATCHED = True
 
 
 async def _send_response(
@@ -92,6 +142,7 @@ def make_header_gate(
       - sets ContextVars for downstream code.
       - (optional) cleans up on DELETE {mcp_path} using Mcp-Session-Id.
     """
+    _patch_debug_request_id_context()
     log = logger or logging.getLogger("header_gate")
 
     class HeaderCaptureASGI:
