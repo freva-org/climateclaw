@@ -134,7 +134,7 @@ app.add_middleware(
 async def request_id_middleware(request: Request, call_next):
     token = set_request_id(request.headers.get(REQUEST_ID_HEADER))
     try:
-        # Handover the request ti the rest of FastAPI, continue request
+        # Handover the request to the rest of FastAPI, continue request
         return await call_next(request)
     finally:
         # Reset to prev value (token) to prevent leaking, clean-up
