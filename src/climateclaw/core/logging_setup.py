@@ -12,7 +12,6 @@ _CONFIGURED = False
 
 settings = get_settings()
 ENABLE_FILE_LOGGING = os.getenv("CLIMATECLAW_FILE_LOGGING", "1") == "1"
-SYSLOG_TARGET = os.getenv("CLIMATECLAW_SYSLOG_TARGET")
 
 SERVICE_NAME = os.getenv("HOSTNAME") or "app"
 
@@ -125,8 +124,8 @@ def _ensure_base_logging() -> None:
     file_handler.addFilter(base_filter)
     root.addHandler(file_handler)
 
-    if (not settings.DEV) and SYSLOG_TARGET:
-        parsed_target = _parse_syslog_target(SYSLOG_TARGET)
+    if (not settings.DEV) and settings.SYSLOG_TARGET:
+        parsed_target = _parse_syslog_target(settings.SYSLOG_TARGET)
         if parsed_target:
             address, socket_type = parsed_target
             try:
@@ -136,6 +135,7 @@ def _ensure_base_logging() -> None:
                     socktype=socket_type,
                 )
                 syslog_handler.setFormatter(LOG_FORMATTER)
+                syslog_handler.ident = f"{SERVICE_NAME}"
                 syslog_handler.addFilter(base_filter)
                 root.addHandler(syslog_handler)
             except OSError as e:
@@ -143,7 +143,7 @@ def _ensure_base_logging() -> None:
         else:
             root.warning(
                 "Invalid CLIMATECLAW_SYSLOG_TARGET=%r; expected tcp@host:port or udp@host:port",
-                SYSLOG_TARGET,
+                settings.SYSLOG_TARGET,
             )
 
     logging.getLogger("uvicorn").setLevel(logging.WARNING)
