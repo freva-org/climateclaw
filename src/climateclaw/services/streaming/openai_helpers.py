@@ -199,7 +199,7 @@ def help_convert_sv_ccrm(
                         image_msgs.append(_image_user_url_message(url=image_url))
                         original_files[i]["url_sent_to_model"] = True
                 # The URL is removed from the code output, before we send it to the model.
-                # Reasons: 1. Sending the URL here doesn't give model access to the model
+                # Reasons: 1. Sending the URL here doesn't give model access to the image
                 # in a meaningful way, see above. 2. We don't want the model to repeat the URL
                 # to the user in its text answer.
                 file.pop("preview_url", None)
