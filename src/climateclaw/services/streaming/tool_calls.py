@@ -33,6 +33,7 @@ async def run_tool_via_mcp(
     mcp: McpManager,
     tool_name: str,
     arguments_json: str,
+    model: str = "",
     logger=None,
 ) -> str:
     log = logger or DEFAULT_LOGGER
@@ -47,10 +48,14 @@ async def run_tool_via_mcp(
         raise RuntimeError(f"No MCP server found for tool={tool_name}")
 
     log.info(f"Executing tool call:\nname : {tool_name}   arguments : {args}")
+
+    extra_headers = {"climateclaw-model": model} if model else {}
+
     res = await mcp.call_tool(
         server_name,
         name=tool_name,
         arguments=args,
+        extra_headers=extra_headers,
     )
 
     return json.dumps(res)

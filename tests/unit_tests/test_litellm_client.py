@@ -3,7 +3,12 @@ from unittest.mock import patch
 import pytest
 import requests
 
-from climateclaw.services.streaming.litellm_client import acomplete, first_text
+from climateclaw.services.streaming.litellm_client import (
+    acomplete,
+    first_message,
+    first_text,
+    tool_calls,
+)
 
 
 class FakeResp:
@@ -49,6 +54,124 @@ async def test_acomplete_success_roundtrip(monkeypatch):
         )
 
     assert first_text(result) == "hello world"
+
+
+@pytest.mark.asyncio
+async def test_acomplete_responses_accepts_messages_and_translates_payload():
+    fake = FakeResp(
+        status_code=200,
+        json_body={"output_text": "hello from responses"},
+        text='{"output_text":"hello from responses"}',
+    )
+    captured = {}
+
+    async def fake_post(self, *args, **kwargs):
+        captured["url"] = args[0]
+        captured["json"] = kwargs["json"]
+        return fake
+
+    with patch(
+        "climateclaw.services.streaming.litellm_client.httpx.AsyncClient.post",
+        new=fake_post,
+    ):
+        result = await acomplete(
+            model="gpt-4.1-mini",
+            endpoint="/v1/responses",
+            messages=[{"role": "user", "content": "hi"}],
+            max_tokens=25,
+            temperature=0.2,
+        )
+
+    assert captured["url"].endswith("/v1/responses")
+    assert captured["json"] == {
+        "model": "gpt-4.1-mini",
+        "stream": False,
+        "input": [{"role": "user", "content": "hi"}],
+        "temperature": 0.2,
+        "max_output_tokens": 25,
+    }
+    assert first_text(result) == "hello from responses"
+
+
+@pytest.mark.asyncio
+async def test_acomplete_responses_prefers_explicit_input():
+    fake = FakeResp(status_code=200, json_body={"output_text": "ok"}, text="")
+    captured = {}
+
+    async def fake_post(self, *args, **kwargs):
+        captured["json"] = kwargs["json"]
+        return fake
+
+    with patch(
+        "climateclaw.services.streaming.litellm_client.httpx.AsyncClient.post",
+        new=fake_post,
+    ):
+        await acomplete(
+            model="gpt-4.1-mini",
+            endpoint="v1/responses",
+            messages=[{"role": "user", "content": "ignored"}],
+            input=[
+                {
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "used"}],
+                }
+            ],
+        )
+
+    assert captured["json"]["input"] == [
+        {
+            "role": "user",
+            "content": [{"type": "input_text", "text": "used"}],
+        }
+    ]
+
+
+def test_responses_helpers_extract_text_message_and_tool_calls():
+    resp = {
+        "output": [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [
+                    {"type": "output_text", "text": "hello "},
+                    {"type": "output_text", "text": "world"},
+                ],
+            },
+            {
+                "type": "function_call",
+                "id": "fc_1",
+                "call_id": "call_1",
+                "name": "lookup_reference",
+                "arguments": '{"topic":"ice"}',
+            },
+        ]
+    }
+
+    assert first_text(resp) == "hello world"
+    assert tool_calls(resp) == [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": "lookup_reference",
+                "arguments": '{"topic":"ice"}',
+            },
+        }
+    ]
+    assert first_message(resp) == {
+        "role": "assistant",
+        "content": "hello world",
+        "tool_calls": [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                    "name": "lookup_reference",
+                    "arguments": '{"topic":"ice"}',
+                },
+            }
+        ],
+    }
 
 
 @pytest.mark.asyncio

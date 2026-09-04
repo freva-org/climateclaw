@@ -244,6 +244,7 @@ async def stream_with_tools(
                     mcp=mcp,
                     tool_name=name,
                     arguments_json=args_txt,
+                    model=model,
                     logger=log,
                 )
             )
