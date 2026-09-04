@@ -108,6 +108,29 @@ services:
       retries: 3
       start_period: 10s
 
+  reference-server:
+    image: reference-server-${CLIMATECLAW_INSTANCE_NAME}
+    build:
+      context: .
+      dockerfile: docker/reference-server/Dockerfile
+    env_file: .env
+    hostname: reference-server-${CLIMATECLAW_INSTANCE_NAME}
+    environment:
+      CLIMATECLAW_MCP_HOST: 0.0.0.0
+      CLIMATECLAW_MCP_PORT: 8053
+    ports:
+      - 8053:8053
+    networks:
+      - climateclaw
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8053/healthz')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
@@ -122,7 +145,6 @@ services:
         --port=4000
         --num_workers=8
         --run_gunicorn
-        --detailed_debug
         2>&1 | tee -a /app/logs/litellm.log
     env_file: .env
     ports:

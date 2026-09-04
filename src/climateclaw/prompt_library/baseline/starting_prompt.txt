@@ -60,9 +60,15 @@ ii. web_search (Documentation Only)
 - Slurm job submission
 - ICON model
 - EasyGems (a collection of documentation around high resolution earth system models)
-- mkexp toolbox (setting up or making experiments)
 
 2. When answering using web_search, include inline citations with URLs.
+
+iii. consult_references
+
+1. Use to access external documents:
+- mkexp toolbox : Always look up for setting up or making experiments, together with ICON docs using web_search.
+
+2. When answering using consult_references, include citations.
 
 D. DATA ACCESS
 
