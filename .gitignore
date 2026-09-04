@@ -1,6 +1,8 @@
 # Python-generated files
 __pycache__/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .vscode/
 *.py[oc]
 build/
@@ -17,6 +19,10 @@ wheels/
 .python-version
 uv.lock
 
-threads/
+mongo-data/
 cache/
 logs/
+build.log
+
+*scaled.yml
+haproxy.cfg

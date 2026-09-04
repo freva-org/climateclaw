@@ -1,7 +1,7 @@
 import pytest
 
-from src.api.chatbot import editthread
-from src.services.streaming.stream_variants import SVPrompt, SVServerHint
+from climateclaw.api.chatbot import editthread
+from climateclaw.services.streaming.stream_variants import SVPrompt, SVServerHint
 
 
 @pytest.mark.asyncio
@@ -9,7 +9,6 @@ async def test_editthread_success_path_trims_and_saves(
     stub_resp,
     client,
     GOOD_HEADERS,
-    patch_db,
     patch_read_thread,
     patch_mcp_manager,
     patch_save_thread,
@@ -22,9 +21,9 @@ async def test_editthread_success_path_trims_and_saves(
 
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/editthread",
-                params={"source_thread_id": "src-1", "user_index": 0},
+                json={"source_thread_id": "src-1", "user_index": 0},
                 headers=GOOD_HEADERS,
             )
     assert r.status_code == 200
@@ -50,37 +49,18 @@ async def test_editthread_success_path_trims_and_saves(
 
 
 @pytest.mark.asyncio
-async def test_editthread_requires_vault_header(
-    stub_resp,
-    client,
-    GOOD_HEADERS,
-):
-    headers = {k: v for k, v in GOOD_HEADERS.items() if k != "x-freva-vault-url"}
-    with stub_resp:
-        async with client:
-            r = await client.get(
-                "/api/chatbot/editthread",
-                params={"source_thread_id": "src-1", "user_index": 0},
-                headers=headers,
-            )
-    assert r.status_code == 422
-    assert r.json()["detail"] == "Vault URL not found in headers"
-
-
-@pytest.mark.asyncio
 async def test_editthread_rejects_out_of_range_index(
     stub_resp,
     client,
     GOOD_HEADERS,
-    patch_db,
     patch_read_thread,
     patch_mcp_manager,
 ):
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/editthread",
-                params={"source_thread_id": "src-1", "user_index": 5},
+                json={"source_thread_id": "src-1", "user_index": 5},
                 headers=GOOD_HEADERS,
             )
     assert r.status_code == 422

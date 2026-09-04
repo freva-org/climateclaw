@@ -5,8 +5,6 @@ import pytest
 async def test_streamresponse_returns_500_on_prepare_failure(
     stub_resp,
     client,
-    patch_db,
-    patch_mongo_uri,
     GOOD_HEADERS,
     monkeypatch,
 ):
@@ -14,17 +12,17 @@ async def test_streamresponse_returns_500_on_prepare_failure(
         raise RuntimeError("prep failed")
 
     monkeypatch.setattr(
-        "src.api.chatbot.streamresponse.prepare_for_stream",
+        "climateclaw.api.chatbot.streamresponse.prepare_for_stream",
         _raise_error,
         raising=True,
     )
 
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/streamresponse",
-                params={"thread_id": "t-err", "input": "hi", "user_id": "alice"},
-                headers={**GOOD_HEADERS, "x-freva-config-path": "/tmp/config.yml"},
+                json={"thread_id": "t-err", "input": "hi", "user_id": "alice"},
+                headers={**GOOD_HEADERS},
             )
 
             assert r.status_code == 500
