@@ -40,7 +40,6 @@ OPENAI_ERROR = "OpenAIError"
 STREAM_END = "StreamEnd"
 SERVER_HINT = "ServerHint"
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # StreamVariant classes (Pydantic v2, discriminated by `variant`)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -80,7 +79,7 @@ class SVCode(_SVBase):
 
 class SVCodeOutput(_SVBase):
     variant: Literal["CodeOutput"] = Field(default="CodeOutput")
-    content: str
+    content: dict[str, Any]
     id: str
 
 
@@ -145,8 +144,9 @@ StreamVariant = Annotated[
 Conversation = list[StreamVariant]
 
 SVDict = dict[
-    str, str | list[str]
+    str, str | list[str] | dict[str, Any]
 ]  # for when handling variants as dicts (e.g. from JSON)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers: conversation normalization
@@ -154,7 +154,8 @@ SVDict = dict[
 
 
 def cleanup_conversation(
-    conv: Conversation, append_stream_end: bool = False
+    conv: Conversation,
+    append_stream_end: bool = False,
 ) -> Conversation:
     """
     Insert missing CodeOutput after Code and optionally ensure StreamEnd at the end.
@@ -168,7 +169,9 @@ def cleanup_conversation(
         if pending_code_id is not None and not isinstance(v, SVCodeOutput):
             out.append(
                 SVCodeOutput(
-                    content="No response was received from code-interpreter.",
+                    content=empty_code_interpreter_output(
+                        error="No response was received from code-interpreter."
+                    ),
                     id=pending_code_id,
                 )
             )
@@ -176,6 +179,7 @@ def cleanup_conversation(
 
         if isinstance(v, SVCode):
             pending_code_id = v.id
+
         elif isinstance(v, SVCodeOutput):
             if pending_code_id is not None and v.id != pending_code_id:
                 logger.warning(
@@ -191,7 +195,9 @@ def cleanup_conversation(
         # close dangling code with an empty output
         out.append(
             SVCodeOutput(
-                content="No response was received from code-interpreter.",
+                content=empty_code_interpreter_output(
+                    error="No response was received from code-interpreter."
+                ),
                 id=pending_code_id,
             )
         )
@@ -213,6 +219,7 @@ def normalize_conv_for_prompt(
     - Optionally filters out meta variants if include_meta=False
     """
     conv = cleanup_conversation(conv)
+
     if include_meta:
         return conv
 
@@ -222,6 +229,7 @@ def normalize_conv_for_prompt(
             # Drop meta if include_meta=False (Rust-like behavior)
             continue
         filtered.append(v)
+
     return filtered
 
 
@@ -232,6 +240,41 @@ def normalize_conv_for_prompt(
 
 def _as_str(value: Any) -> str:
     return "" if value is None else str(value)
+
+
+def _parse_code_content(
+    content: Any,
+    id_from_obj: Any,
+) -> tuple[str, str]:
+    """
+    Supports:
+        {"variant": "Code", "content": "...", "id": "..."}
+        {"variant": "Code", "content": ["...", "..."]}
+        {"variant": "Code", "content": [{"code": "..."}, "..."]}
+    """
+    if isinstance(content, list) and len(content) >= 2:
+        # Legacy {"variant":"Code","content":["{\"code\":\"...\"}", "call_ABC"]}
+        payload, call_id = content[0], content[1]
+        return str(payload), call_id
+
+    return _as_str(content), _as_str(id_from_obj)
+
+
+def _parse_code_output_content(
+    content: Any,
+    id_from_obj: Any,
+) -> tuple[Any, str]:
+    """
+    Supports:
+        {"variant": "CodeOutput", "content": {...}, "id": "..."}
+        {"variant": "CodeOutput", "content": "...", "id": "..."}
+        {"variant": "CodeOutput", "content": ["...", "..."]}
+    """
+    if isinstance(content, list) and len(content) >= 2:
+        # Legacy {"variant":"CodeOutput","content":["<repr>", "call_ABC"]}
+        return content[0], _as_str(content[1])
+
+    return content, _as_str(id_from_obj)
 
 
 def from_json_to_sv(obj: dict) -> StreamVariant:
@@ -268,34 +311,12 @@ def from_json_to_sv(obj: dict) -> StreamVariant:
         return SVImage(content=_as_str(c), id=_as_str(obj.get("id")))
 
     if v == CODE:
-        code_text, id = "", ""
-        if (
-            isinstance(c, list) and len(c) >= 2
-        ):  # Legacy {"variant":"Code","content":["{\"code\":\"...\"}", "call_ABC"]}
-            payload, id = c[0], c[1]
-            if isinstance(payload, dict):
-                code_text = (
-                    payload.get("code")
-                    or payload.get("python")
-                    or payload.get("text")
-                    or ""
-                )
-            else:
-                code_text = str(payload)
-        else:
-            code_text = str(c)
-            id = obj.get("id", "")
-        return SVCode(content=code_text, id=str(id), feedback=f)
+        code_content, call_id = _parse_code_content(c, obj.get("id", ""))
+        return SVCode(content=code_content, id=call_id, feedback=f)
 
     if v == CODE_OUTPUT:
-        if (
-            isinstance(c, list) and len(c) >= 2
-        ):  # Legacy {"variant":"CodeOutput","content":["<repr>", "call_ABC"]}
-            output, id = c[0], c[1]
-        else:
-            output = c
-            id = obj.get("id", "")
-        return SVCodeOutput(content=str(output), id=str(id))
+        output, call_id = _parse_code_output_content(c, obj.get("id", ""))
+        return SVCodeOutput(content=normalize_code_output(output), id=_as_str(call_id))
 
     if v == TOOL_CALL:
         return SVToolCall(
@@ -351,6 +372,88 @@ def parse_examples_jsonl(path: str | Path) -> list[StreamVariant]:
                 continue
 
     return out
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Code interpreter output shape
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def empty_code_interpreter_output(
+    stdout: str = "",
+    stderr: str = "",
+    result_repr: str = "",
+    display_data: list = [],
+    error: str = "",
+    created_files: list = [],
+) -> dict[str, Any]:
+    return {
+        "stdout": stdout,
+        "stderr": stderr,
+        "result_repr": result_repr,
+        "display_data": display_data,
+        "error": error,
+        "created_files": created_files,
+    }
+
+
+def _normalize_display_data(value: Any) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+
+    if isinstance(value, list):
+        return [
+            (
+                {k: v for k, v in item.items() if k != "image/png"}
+                if isinstance(item, dict)
+                else {"text/plain": str(item)}
+            )
+            for item in value
+        ]
+
+    return [{"text/plain": str(value)}]
+
+
+def normalize_code_output(out: Any) -> dict[str, Any]:
+    """
+    Normalize current and legacy CodeOutput payloads into the actual
+    code_interpreter output shape:
+
+    Accepted inputs:
+    - current code_interpreter dict
+    - legacy flattened string
+    - legacy list forms
+    - None
+    """
+    if out is None:
+        return empty_code_interpreter_output()
+
+    if isinstance(out, dict):
+        norm_out = out | {
+            "display_data": _normalize_display_data(out.get("display_data"))
+        }
+        return norm_out
+
+    if isinstance(out, list):
+        text = out[0]
+    else:
+        try:
+            out_json = json.loads(out)
+            norm_out = out_json | {
+                "display_data": _normalize_display_data(out_json.get("display_data"))
+            }
+            return norm_out
+        except (TypeError, json.JSONDecodeError):
+            text = str(out)
+
+    return {
+        "stdout": text,
+        "stderr": "",
+        "result_repr": "",
+        "display_data": [],
+        "error": "",
+        "created_files": [],
+    }
 
 
 # ──────────────────────────────────────────────────────────────────────────────

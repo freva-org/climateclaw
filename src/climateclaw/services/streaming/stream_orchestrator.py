@@ -317,7 +317,7 @@ async def stream_with_tools(
                 await unregister_tool_task(thread_id, tool_task)
 
         try:
-            result_text = None
+            result_text = ""
             heartbeats_v: list[StreamVariant] = []
             async for item in run_with_heartbeat():
                 if isinstance(item, SVServerHint):
@@ -333,7 +333,9 @@ async def stream_with_tools(
         tool_out_v: list[StreamVariant] = []
         tool_msgs: list[OpenAIMessage] = []
         # Parsing tool call output as StreamVariants and messages to model
-        for r in parse_tool_result(result_text, tool_name=name, call_id=id):  # type: ignore[arg-type]
+        for r in parse_tool_result(
+            result_text, tool_name=name, call_id=id, thread_id=thread_id
+        ):
             if isinstance(r, FinalSummary):
                 (
                     tool_out_v,
