@@ -30,8 +30,6 @@ ALLOWED_DOMAINS = [
     "easy.gems.dkrz.de",
 ]
 
-MKEXP_PDF_URL = "https://gitlab.dkrz.de/esmenv/mkexp/-/raw/master/doc/mkexp.pdf"
-
 HOST = os.getenv("CLIMATECLAW_MCP_HOST", "0.0.0.0")
 PORT = int(os.getenv("CLIMATECLAW_MCP_PORT", "8052"))
 PATH = os.getenv("CLIMATECLAW_MCP_PATH", "/mcp")  # standard path
@@ -55,30 +53,6 @@ client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 # ─── Tool ───────────────────────────────────────────────────────────────────
 
 
-def should_attach_mkexp_pdf(query: str) -> bool:
-    q = (query or "").lower()
-    keywords = [
-        "mkexp",
-        "experiment",
-        "set up an experiment",
-        "setup an experiment",
-        "make an experiment",
-        "run_start",
-        # mkexp-specific terminology
-        ".config",
-        "experiment config",
-        "cpexp",
-        "diffexp",
-        "namelist",
-        "master namelist",
-        "yaml namelist",
-        "fortran namelist",
-        "runscript",
-        "reinitialization",
-    ]
-    return any(k in q for k in keywords)
-
-
 @mcp.tool()
 async def web_search(query: str) -> dict:
     """
@@ -100,28 +74,18 @@ async def web_search(query: str) -> dict:
             req.raise_if_cancelled()
 
             system_prompt = (
-                "You are a web-search agent that can search documentations for ICON model, EASYGEMS, "
-                "DKRZ/HPC and mkexp toolbox. Use the documentation websites for searching and creating "
+                "You are a web-search agent that can search documentations for ICON model, EASYGEMS "
+                "and DKRZ/HPC. Use the documentation websites for searching and creating "
                 "answers. Make sure the information provided is accurate and up-to-date. "
                 "DKRZ/HPC doc 'https://docs.dkrz.de/search.html?q=SEARCHTERM1+SEARCHTERM2'. "
                 "ICON doc 'https://docs.icon-model.org/search.html?q=SEARCHTERM1+SEARCHTERM2'. "
                 "EasyGems doc 'https://easy.gems.dkrz.de/search.html?q=SEARCHTERM1+SEARCHTERM2'."
-                "To search docs, use SEARCHTERM 1 and 2 to find relevant information. Only answer questions "
-                "When asked about mkexp or seting up an experiment, consult BOTH ICON docs AND 'mkexp.pdf'."
-                "Cite the PDF using: 'https://gitlab.dkrz.de/esmenv/mkexp/-/raw/master/doc/mkexp.pdf'."
-                "Only answer questions if claims can be supported by web citations. Include inline citations "
-                f"for URLs found in the web search results.\n\n User query:\n{(query or '')}"
+                "Use SEARCHTERM 1 and 2 to find relevant information. Only answer questions "
+                "if claims can be supported by web citations. Include inline citations for "
+                "URLs found in the web search results."
             )
 
             user_content = [{"type": "input_text", "text": query or ""}]
-
-            if should_attach_mkexp_pdf(query):
-                user_content.append(
-                    {
-                        "type": "input_file",
-                        "file_url": MKEXP_PDF_URL,
-                    }
-                )
 
             kwargs = {
                 "model": WEB_SEARCH_MODEL,
