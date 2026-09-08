@@ -112,7 +112,9 @@ def test_ccrm_codeoutput_conversion_omits_image_url_in_dev_mode(monkeypatch):
     msgs = help_convert_sv_ccrm([code_output])
 
     assert len(msgs) == 1
-    assert "url_sent_to_model" not in code_output.content.created_files[0]
+    model_payload = json.loads(msgs[0]["content"])
+    assert code_output.content.created_files[0].url_sent_to_model is False
+    assert "url_sent_to_model" not in model_payload["created_files"][0]
 
 
 def test_ccrm_codeoutput_conversion_omits_image_url_for_non_image_file(monkeypatch):
@@ -122,4 +124,6 @@ def test_ccrm_codeoutput_conversion_omits_image_url_for_non_image_file(monkeypat
     msgs = help_convert_sv_ccrm([code_output])
 
     assert len(msgs) == 1
-    assert "url_sent_to_model" not in code_output.content.created_files[0]
+    model_payload = json.loads(msgs[0]["content"])
+    assert code_output.content.created_files[0].url_sent_to_model is False
+    assert "url_sent_to_model" not in model_payload["created_files"][0]
