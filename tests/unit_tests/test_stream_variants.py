@@ -8,12 +8,14 @@ from climateclaw.services.streaming.stream_variants import (
     SVStreamEnd,
     SVUser,
     cleanup_conversation,
-    empty_code_interpreter_output,
+    create_code_interpreter_output,
     from_json_to_sv,
     from_sv_to_json,
     normalize_code_output,
     normalize_conv_for_prompt,
+    normalize_generic_tool_output,
 )
+from climateclaw.tools.models import CodeInterpreterResult, GenericToolResult
 
 
 def test_cleanup_inserts_codeoutput_and_end():
@@ -30,15 +32,15 @@ def test_cleanup_inserts_codeoutput_and_end():
     assert kinds == ["User", "Code", "CodeOutput", "StreamEnd"]
     assert isinstance(out[2], SVCodeOutput)
     assert out[2].id == "call_1"
-    assert isinstance(out[2].content, dict)
-    assert out[2].content["error"] == "No response was received from code-interpreter."
+    assert isinstance(out[2].content, CodeInterpreterResult)
+    assert out[2].content.error == "No response was received from code-interpreter."
 
 
 def test_cleanup_no_extra_end_if_existing():
     conv: list[StreamVariant] = [
         SVUser(content="hi"),
         SVCode(content="print(1)", id="call_1"),
-        SVCodeOutput(content=empty_code_interpreter_output(), id="call_1"),
+        SVCodeOutput(content=create_code_interpreter_output(), id="call_1"),
         SVStreamEnd(content="Done"),
     ]
     out = cleanup_conversation(conv, append_stream_end=True)
@@ -95,13 +97,39 @@ def test_legacy_codeoutput_string_normalizes_to_structured_content():
     }
     back = from_json_to_sv(wire)
     assert isinstance(back, SVCodeOutput)
-    assert back.content["stdout"] == "ok\n"
+    assert back.content.stdout == "ok\n"
 
 
 def test_normalize_code_output_none_returns_empty_output():
     output = normalize_code_output(None)
 
-    assert output == empty_code_interpreter_output()
+    assert output == create_code_interpreter_output()
+
+
+def test_normalize_code_output_dict_returns_code_interpreter_result():
+    output = normalize_code_output({"stdout": "ok\n", "stderr": ""})
+
+    assert isinstance(output, CodeInterpreterResult)
+    assert output.stdout == "ok\n"
+
+
+def test_normalize_code_output_json_string_returns_code_interpreter_result():
+    output = normalize_code_output('{"stdout": "ok\\n", "stderr": ""}')
+
+    assert isinstance(output, CodeInterpreterResult)
+    assert output.stdout == "ok\n"
+
+
+def test_normalize_generic_tool_output_string_returns_generic_tool_result():
+    output = normalize_generic_tool_output("legacy text")
+
+    assert output == GenericToolResult(result="legacy text")
+
+
+def test_normalize_generic_tool_output_error_dict_returns_generic_tool_result():
+    output = normalize_generic_tool_output({"error": "boom"})
+
+    assert output == GenericToolResult(error="boom")
 
 
 def test_legacy_codeoutput_list_normalizes_first_item_to_stdout():
@@ -114,7 +142,9 @@ def test_legacy_codeoutput_list_normalizes_first_item_to_stdout():
 
     assert isinstance(codeoutput_v, SVCodeOutput)
     assert codeoutput_v.id == "call_1"
-    assert codeoutput_v.content == empty_code_interpreter_output(stdout="legacy output")
+    assert codeoutput_v.content == create_code_interpreter_output(
+        stdout="legacy output"
+    )
 
 
 def test_normalize_code_output_strips_png_from_display_data():
@@ -131,4 +161,4 @@ def test_normalize_code_output_strips_png_from_display_data():
         }
     )
 
-    assert output["display_data"] == [{"text/plain": "<Figure size 640x480>"}]
+    assert output.display_data == [{"text/plain": "<Figure size 640x480>"}]

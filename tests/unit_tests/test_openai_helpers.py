@@ -7,9 +7,11 @@ from climateclaw.services.streaming.stream_variants import (
     SVAssistant,
     SVCodeOutput,
     SVStreamEnd,
+    SVToolOutput,
     SVUser,
     normalize_code_output,
 )
+from climateclaw.tools.models import GenericToolResult
 
 
 def _code_output_with_created_file(mime_type="image/png") -> SVCodeOutput:
@@ -52,7 +54,7 @@ def test_ccrm_codeoutput_conversion_does_not_remove_original_preview_url():
 
     msgs = help_convert_sv_ccrm([code_output])
 
-    assert code_output.content["created_files"][0]["preview_url"] == (
+    assert code_output.content.created_files[0].preview_url == (
         "http://localhost/plot.png"
     )
     model_payload = json.loads(msgs[0]["content"])
@@ -70,7 +72,37 @@ def test_ccrm_codeoutput_conversion_adds_image_url_in_prod_mode(monkeypatch):
     assert msgs[1]["role"] == "user"
     assert msgs[1]["content"][1]["type"] == "image_url"
     assert msgs[1]["content"][1]["image_url"]["url"] == "http://localhost/plot.png"
-    assert code_output.content["created_files"][0]["url_sent_to_model"] is True
+    assert code_output.content.created_files[0].url_sent_to_model is True
+
+
+def test_ccrm_codeoutput_conversion_sends_image_url_only_once(monkeypatch):
+    monkeypatch.setattr(openai_helpers, "settings", SimpleNamespace(DEV=False))
+    code_output = _code_output_with_created_file()
+
+    first_msgs = help_convert_sv_ccrm([code_output])
+    second_msgs = help_convert_sv_ccrm([code_output])
+
+    assert len(first_msgs) == 2
+    assert (
+        first_msgs[1]["content"][1]["image_url"]["url"] == "http://localhost/plot.png"
+    )
+    assert len(second_msgs) == 1
+    assert code_output.content.created_files[0].url_sent_to_model is True
+
+
+def test_ccrm_tooloutput_conversion_serializes_generic_tool_result():
+    tool_output = SVToolOutput(
+        content=GenericToolResult(result="ok"),
+        tool_name="web_search",
+        id="call_1",
+    )
+
+    msgs = help_convert_sv_ccrm([tool_output])
+
+    assert msgs[0]["role"] == "tool"
+    assert msgs[0]["tool_call_id"] == "call_1"
+    assert msgs[0]["name"] == "web_search"
+    assert json.loads(msgs[0]["content"]) == {"result": "ok", "error": ""}
 
 
 def test_ccrm_codeoutput_conversion_omits_image_url_in_dev_mode(monkeypatch):
@@ -80,7 +112,7 @@ def test_ccrm_codeoutput_conversion_omits_image_url_in_dev_mode(monkeypatch):
     msgs = help_convert_sv_ccrm([code_output])
 
     assert len(msgs) == 1
-    assert "url_sent_to_model" not in code_output.content["created_files"][0]
+    assert "url_sent_to_model" not in code_output.content.created_files[0]
 
 
 def test_ccrm_codeoutput_conversion_omits_image_url_for_non_image_file(monkeypatch):
@@ -90,4 +122,4 @@ def test_ccrm_codeoutput_conversion_omits_image_url_for_non_image_file(monkeypat
     msgs = help_convert_sv_ccrm([code_output])
 
     assert len(msgs) == 1
-    assert "url_sent_to_model" not in code_output.content["created_files"][0]
+    assert "url_sent_to_model" not in code_output.content.created_files[0]

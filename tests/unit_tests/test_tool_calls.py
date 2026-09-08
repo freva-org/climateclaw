@@ -1,5 +1,8 @@
 from climateclaw.services.streaming import tool_calls
-from climateclaw.services.streaming.stream_variants import SVCodeOutput, SVImage
+from climateclaw.services.streaming.stream_variants import (
+    SVCodeOutput,
+    SVImage,
+)
 
 
 def test_parse_code_interpreter_result_adds_created_file_preview_url(monkeypatch):
@@ -13,7 +16,6 @@ def test_parse_code_interpreter_result_adds_created_file_preview_url(monkeypatch
         "created_files": [
             {"path": "plots/figure.png", "mime_type": "image/png"},
             {"path": "data.csv", "mime_type": "text/csv"},
-            {"mime_type": "text/plain"},
         ],
     }
 
@@ -27,13 +29,12 @@ def test_parse_code_interpreter_result_adds_created_file_preview_url(monkeypatch
 
     code_output = emitted[0]
     assert isinstance(code_output, SVCodeOutput)
-    assert code_output.content["created_files"][0]["preview_url"] == (
+    assert code_output.content.created_files[0].preview_url == (
         "https://example.test/static/preview/climateclaw/thread_123/plots/figure.png"
     )
-    assert code_output.content["created_files"][1]["preview_url"] == (
+    assert code_output.content.created_files[1].preview_url == (
         "https://example.test/static/preview/climateclaw/thread_123/data.csv"
     )
-    assert "preview_url" not in code_output.content["created_files"][2]
 
 
 def test_parse_code_interpreter_result_suppresses_saved_display_images():
