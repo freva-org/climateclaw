@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from copy import deepcopy
 from typing import Any, Dict, List, Union, cast
 
 from typing_extensions import TypedDict
@@ -183,30 +182,35 @@ def help_convert_sv_ccrm(
             out.append(_tool_call_message(v.content, v.id, tool_name=TOOL_NAME_CODE))
 
         elif isinstance(v, SVCodeOutput):
-            code_result = deepcopy(v.content)
+            code_result = v.content.model_copy(deep=True)
             image_msgs = []
 
-            original_files = v.content.get("created_files", [])
-            for i, file in enumerate(code_result.get("created_files", [])):
+            for i, file in enumerate(code_result.created_files):
+                original_file = v.content.created_files[i]
+
                 # Send the image-url to the model, only if it not already sent
-                if not file.get("url_sent_to_model"):
-                    file_type = file.get("mime_type")
+                if not file.url_sent_to_model:
+                    file_type = file.mime_type
                     if ("image" in file_type) and (not settings.DEV):
                         # In local dev, the image URL is "localhost:...". Since it is unreachable
                         # for the model, it causes LiteLLM 400 Bad Request.
                         # So we send the URL to the model only on production.
-                        image_url = file.get("preview_url")
+                        image_url = file.preview_url
                         image_msgs.append(_image_user_url_message(url=image_url))
-                        original_files[i]["url_sent_to_model"] = True
+                        original_file.url_sent_to_model = True
                 # The URL is removed from the code output, before we send it to the model.
                 # Reasons: 1. Sending the URL here doesn't give model access to the image
                 # in a meaningful way, see above. 2. We don't want the model to repeat the URL
                 # to the user in its text answer.
-                file.pop("preview_url", None)
+                file.preview_url = None
 
             out.append(
                 _tool_result_message(
-                    json.dumps(code_result), v.id, tool_name=TOOL_NAME_CODE
+                    code_result.model_dump_json(
+                        exclude_none=True, exclude_defaults=True
+                    ),
+                    v.id,
+                    tool_name=TOOL_NAME_CODE,
                 )
             )
             out.extend(image_msgs)
@@ -215,7 +219,11 @@ def help_convert_sv_ccrm(
             out.append(_tool_call_message(v.content, v.id, tool_name=v.tool_name))
 
         elif isinstance(v, SVToolOutput):
-            out.append(_tool_result_message(v.content, v.id, tool_name=v.tool_name))
+            out.append(
+                _tool_result_message(
+                    v.content.model_dump_json(), v.id, tool_name=v.tool_name
+                )
+            )
 
         elif isinstance(v, SVImage):
             if include_images:
