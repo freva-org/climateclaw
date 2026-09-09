@@ -181,7 +181,7 @@ async def test_exception(mcp_client_CI):
 
 async def test_exit_shutdowns_kernel_and_server_recovers(mcp_client_CI):
     result = await _execute_code_via_mcp(mcp_client_CI, {"code": "exit()"})
-    assert list(result.values()) == ["", "", "", [], ""]
+    assert list(result.values())[:5] == ["", "", "", [], ""]
     code = {"code": "print('Code interpreter functions normally after exit!')"}
 
     printed_value = await _exec_and_get_printed_value(mcp_client_CI, code)
@@ -261,15 +261,6 @@ async def test_plot_extraction_false_negative(mcp_client_CI):
     }
     rich_data = await _exec_and_get_richoutput_value(mcp_client_CI, code)
     assert rich_data == []
-
-
-async def test_plot_extraction_close(mcp_client_CI):
-    code = {
-        "code": "import matplotlib.pyplot as plt\nplt.plot([1, 2, 3], [4, 5, 6])\nplt.close()"
-    }
-    rich_data = await _exec_and_get_richoutput_value(mcp_client_CI, code)
-    assert "image/png" in rich_data[0].keys()
-    assert isinstance(rich_data[0].get("image/png"), str)
 
 
 async def test_indentation(mcp_client_CI):

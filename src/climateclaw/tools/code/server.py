@@ -119,6 +119,8 @@ async def code_interpreter(code: str) -> dict:
     Returns a structured dict with all outputs (stdout, stderr, result_rep, display_data, error)
     """
     working_dir = get_cwd() or os.getcwd()
+    os.makedirs(working_dir, exist_ok=True)
+
     session_id, request_id = current_ids()
 
     logger.debug(

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Any, Dict, List, Union, cast
 
 from typing_extensions import TypedDict
 
 from climateclaw.core.logging_setup import configure_logging
+from climateclaw.core.settings import get_settings
 
 from .stream_variants import (
     Conversation,
@@ -25,7 +27,7 @@ from .stream_variants import (
 )
 
 logger = configure_logging(__name__)
-
+settings = get_settings()
 
 # Roles (OpenAI Chat)
 ROLE_SYSTEM = "system"
@@ -86,6 +88,22 @@ def _image_user_message(b64: str, mime: str) -> OpenAIMessage:
                 "type": "image_url",
                 "image_url": {"url": f"data:{mime};base64,{b64}"},
             }
+        ],
+    }
+
+
+def _image_user_url_message(url: str) -> OpenAIMessage:
+    return {
+        "role": ROLE_USER,
+        "content": [
+            {
+                "type": "text",
+                "text": "Here is the image returned by the Code Interpreter.",
+            },
+            {
+                "type": "image_url",
+                "image_url": {"url": url},
+            },
         ],
     }
 
@@ -165,7 +183,33 @@ def help_convert_sv_ccrm(
             out.append(_tool_call_message(v.content, v.id, tool_name=TOOL_NAME_CODE))
 
         elif isinstance(v, SVCodeOutput):
-            out.append(_tool_result_message(v.content, v.id, tool_name=TOOL_NAME_CODE))
+            code_result = deepcopy(v.content)
+            image_msgs = []
+
+            original_files = v.content.get("created_files", [])
+            for i, file in enumerate(code_result.get("created_files", [])):
+                # Send the image-url to the model, only if it not already sent
+                if not file.get("url_sent_to_model"):
+                    file_type = file.get("mime_type")
+                    if ("image" in file_type) and (not settings.DEV):
+                        # In local dev, the image URL is "localhost:...". Since it is unreachable
+                        # for the model, it causes LiteLLM 400 Bad Request.
+                        # So we send the URL to the model only on production.
+                        image_url = file.get("preview_url")
+                        image_msgs.append(_image_user_url_message(url=image_url))
+                        original_files[i]["url_sent_to_model"] = True
+                # The URL is removed from the code output, before we send it to the model.
+                # Reasons: 1. Sending the URL here doesn't give model access to the image
+                # in a meaningful way, see above. 2. We don't want the model to repeat the URL
+                # to the user in its text answer.
+                file.pop("preview_url", None)
+
+            out.append(
+                _tool_result_message(
+                    json.dumps(code_result), v.id, tool_name=TOOL_NAME_CODE
+                )
+            )
+            out.extend(image_msgs)
 
         elif isinstance(v, SVToolCall):
             out.append(_tool_call_message(v.content, v.id, tool_name=v.tool_name))
