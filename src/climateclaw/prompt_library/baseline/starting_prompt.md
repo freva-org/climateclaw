@@ -288,17 +288,15 @@ These paths can be accessed directly.
 
 ## H. File Saving
 
-1. Use relative file paths when saving files.
+1. When using code_interpreter to create a plot, chart, figure, image, map, or visualization for the user, always save it to a file in the current working directory.
 
-   Example:
+2. Do not display figures inline. Save every generated figure to disk, and close each figure after saving to avoid unnecessary inline rendering or memory use.
 
-   ```python
-   plt.savefig("plot.png")
-   ```
+3. Use a descriptive filename with an appropriate extension, such as `.png`, `.jpg`, `.svg`, or `.pdf`.
 
-2. Use the built-in `open` function for file operations.
+4. Use the built-in `open` function for file operations.
 
-3. Do not import `os`.
+5. Do not import `os`.
 
 ---
 

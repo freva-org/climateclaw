@@ -213,7 +213,7 @@ async def test_stream_with_tools_rejects_malformed_code_arguments_without_mcp_ca
     assert SVCode(content='{"code": ""}', id="call_1") in items
     code_outputs = [item for item in items if isinstance(item, SVCodeOutput)]
     assert len(code_outputs) == 1
-    assert "Invalid code_interpreter arguments" in code_outputs[0].content
+    assert "Invalid code_interpreter arguments" in str(code_outputs[0].content)
 
 
 @pytest.mark.asyncio

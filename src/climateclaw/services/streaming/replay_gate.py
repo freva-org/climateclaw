@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from climateclaw.services.streaming.stream_variants import SVServerHint
 
-REPLAYING_CODE_STATUS = "Executing previous code blocks..."
+REPLAYING_CODE_STATUS = "Executing previous code blocks... Please wait a moment."
 REPLAY_DONE_STATUS = "Execution of previous code blocks is done."
 
 

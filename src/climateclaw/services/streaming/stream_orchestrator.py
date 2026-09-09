@@ -442,6 +442,7 @@ async def stream_with_tools(
             result_text,
             tool_name=name,
             call_id=id,
+            thread_id=thread_id,
             include_images=model_supports_images(model),
         ):
             if isinstance(r, FinalSummary):
