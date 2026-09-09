@@ -162,7 +162,7 @@ def help_convert_sv_ccrm(
 ) -> List[OpenAIMessage]:
     """
     Convert a StreamVariant conversation to OpenAI ChatCompletion messages.
-    • include_images: whether to include Image variants (Rust passes false for prompting)
+    • include_images: whether to include Image variants
     • include_meta: whether to include ServerHint/Errors/StreamEnd as system/tool messages
     """
     conv = normalize_conv_for_prompt(conversation, include_meta=include_meta)

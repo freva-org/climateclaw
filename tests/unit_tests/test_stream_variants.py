@@ -135,7 +135,7 @@ def test_codeoutput_wire_includes_url_sent_to_model_for_created_files():
     }
 
 
-def test_code_interpreter_result_llm_payload_str_omits_llm_private_file_fields():
+def test_code_interpreter_result_llm_payload_omits_llm_private_file_fields():
     output = normalize_code_output(
         {
             "stdout": "ok\n",
@@ -156,7 +156,7 @@ def test_code_interpreter_result_llm_payload_str_omits_llm_private_file_fields()
     }
 
 
-def test_legacy_codeoutput_string_normalizes_to_structured_content():
+def test_codeoutput_wire_normalizes_to_structured_content():
     wire = {
         "variant": "CodeOutput",
         "content": '{"stdout": "ok\\n", "stderr": "", "display_data": []}',
@@ -167,36 +167,43 @@ def test_legacy_codeoutput_string_normalizes_to_structured_content():
     assert back.content.stdout == "ok\n"
 
 
-def test_normalize_code_output_none_returns_empty_output():
+def test_legacy_codeoutput_string_normalizes_to_structured_content():
+    wire = {
+        "variant": "CodeOutput",
+        "content": "ok\n",
+        "id": "call_1",
+    }
+    back = from_json_to_sv(wire)
+    assert isinstance(back, SVCodeOutput)
+    assert back.content.stdout == "ok\n"
+
+
+def test_legacy_codeoutput_list_normalizes_to_structured_content():
+    wire = {"variant": "CodeOutput", "content": ["ok\n", "call_1"]}
+    back = from_json_to_sv(wire)
+    assert isinstance(back, SVCodeOutput)
+    assert back.content.stdout == "ok\n"
+    assert back.id == "call_1"
+
+
+def test_normalize_codeoutput_none_returns_empty_output():
     output = normalize_code_output(None)
 
     assert output == create_code_interpreter_output()
 
 
-def test_normalize_code_output_dict_returns_code_interpreter_result():
+def test_normalize_codeoutput_dict_returns_code_interpreter_result():
     output = normalize_code_output({"stdout": "ok\n", "stderr": ""})
 
     assert isinstance(output, CodeInterpreterResult)
     assert output.stdout == "ok\n"
 
 
-def test_normalize_code_output_json_string_returns_code_interpreter_result():
+def test_normalize_codeoutput_json_string_returns_code_interpreter_result():
     output = normalize_code_output('{"stdout": "ok\\n", "stderr": ""}')
 
     assert isinstance(output, CodeInterpreterResult)
     assert output.stdout == "ok\n"
-
-
-def test_normalize_generic_tool_output_string_returns_generic_tool_result():
-    output = normalize_generic_tool_output("legacy text")
-
-    assert output == GenericToolResult(result="legacy text")
-
-
-def test_normalize_generic_tool_output_error_dict_returns_generic_tool_result():
-    output = normalize_generic_tool_output({"error": "boom"})
-
-    assert output == GenericToolResult(error="boom")
 
 
 def test_legacy_codeoutput_list_normalizes_first_item_to_stdout():
@@ -214,7 +221,7 @@ def test_legacy_codeoutput_list_normalizes_first_item_to_stdout():
     )
 
 
-def test_normalize_code_output_strips_png_from_display_data():
+def test_normalize_codeoutput_strips_png_from_display_data():
     output = normalize_code_output(
         {
             "stdout": "",
@@ -229,3 +236,15 @@ def test_normalize_code_output_strips_png_from_display_data():
     )
 
     assert output.display_data == [{"text/plain": "<Figure size 640x480>"}]
+
+
+def test_normalize_generic_tool_output_string_returns_generic_tool_result():
+    output = normalize_generic_tool_output("legacy text")
+
+    assert output == GenericToolResult(result="legacy text")
+
+
+def test_normalize_generic_tool_output_error_dict_returns_generic_tool_result():
+    output = normalize_generic_tool_output({"error": "boom"})
+
+    assert output == GenericToolResult(error="boom")

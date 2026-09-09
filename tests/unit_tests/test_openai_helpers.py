@@ -52,14 +52,11 @@ def test_ccrm_conversion_basic():
 def test_ccrm_codeoutput_conversion_does_not_remove_original_preview_url():
     code_output = _code_output_with_created_file()
 
-    msgs = help_convert_sv_ccrm([code_output])
+    _ = help_convert_sv_ccrm([code_output])
 
     assert code_output.content.created_files[0].preview_url == (
         "http://localhost/plot.png"
     )
-    model_payload = json.loads(msgs[0]["content"])
-    assert "preview_url" not in model_payload["created_files"][0]
-    assert "url_sent_to_model" not in model_payload["created_files"][0]
 
 
 def test_ccrm_codeoutput_conversion_omits_preview_url_from_model_payload():
@@ -68,16 +65,25 @@ def test_ccrm_codeoutput_conversion_omits_preview_url_from_model_payload():
     msgs = help_convert_sv_ccrm([code_output])
 
     model_payload = json.loads(msgs[0]["content"])
-    assert code_output.content.created_files[0].preview_url == (
-        "http://localhost/plot.png"
-    )
     assert model_payload["created_files"][0] == {
         "path": "plot.png",
         "mime_type": "image/png",
     }
+    assert "preview_url" not in model_payload["created_files"][0]
+    assert "url_sent_to_model" not in model_payload["created_files"][0]
 
 
-def test_ccrm_codeoutput_conversion_adds_image_url_in_prod_mode(monkeypatch):
+def test_ccrm_codeoutput_conversion_omits_image_url_in_dev_mode(monkeypatch):
+    monkeypatch.setattr(openai_helpers, "settings", SimpleNamespace(DEV=True))
+    code_output = _code_output_with_created_file()
+
+    msgs = help_convert_sv_ccrm([code_output])
+
+    assert len(msgs) == 1
+    assert code_output.content.created_files[0].url_sent_to_model is False
+
+
+def test_ccrm_codeoutput_conversion_sends_image_url_in_prod_mode(monkeypatch):
     monkeypatch.setattr(openai_helpers, "settings", SimpleNamespace(DEV=False))
     code_output = _code_output_with_created_file()
 
@@ -110,6 +116,16 @@ def test_ccrm_codeoutput_conversion_sends_image_url_only_once(monkeypatch):
     assert "url_sent_to_model" not in second_model_payload["created_files"][0]
 
 
+def test_ccrm_codeoutput_conversion_omits_image_url_for_non_image_file(monkeypatch):
+    monkeypatch.setattr(openai_helpers, "settings", SimpleNamespace(DEV=False))
+    code_output = _code_output_with_created_file(mime_type="text/csv")
+
+    msgs = help_convert_sv_ccrm([code_output])
+
+    assert len(msgs) == 1
+    assert code_output.content.created_files[0].url_sent_to_model is False
+
+
 def test_ccrm_tooloutput_conversion_serializes_generic_tool_result():
     tool_output = SVToolOutput(
         content=GenericToolResult(result="ok"),
@@ -123,23 +139,3 @@ def test_ccrm_tooloutput_conversion_serializes_generic_tool_result():
     assert msgs[0]["tool_call_id"] == "call_1"
     assert msgs[0]["name"] == "web_search"
     assert json.loads(msgs[0]["content"]) == {"result": "ok", "error": ""}
-
-
-def test_ccrm_codeoutput_conversion_omits_image_url_in_dev_mode(monkeypatch):
-    monkeypatch.setattr(openai_helpers, "settings", SimpleNamespace(DEV=True))
-    code_output = _code_output_with_created_file()
-
-    msgs = help_convert_sv_ccrm([code_output])
-
-    assert len(msgs) == 1
-    assert code_output.content.created_files[0].url_sent_to_model is False
-
-
-def test_ccrm_codeoutput_conversion_omits_image_url_for_non_image_file(monkeypatch):
-    monkeypatch.setattr(openai_helpers, "settings", SimpleNamespace(DEV=False))
-    code_output = _code_output_with_created_file(mime_type="text/csv")
-
-    msgs = help_convert_sv_ccrm([code_output])
-
-    assert len(msgs) == 1
-    assert code_output.content.created_files[0].url_sent_to_model is False
