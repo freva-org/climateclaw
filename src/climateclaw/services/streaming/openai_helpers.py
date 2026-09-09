@@ -182,12 +182,9 @@ def help_convert_sv_ccrm(
             out.append(_tool_call_message(v.content, v.id, tool_name=TOOL_NAME_CODE))
 
         elif isinstance(v, SVCodeOutput):
-            code_result = v.content.model_copy(deep=True)
             image_msgs = []
 
-            for i, file in enumerate(code_result.created_files):
-                original_file = v.content.created_files[i]
-
+            for i, file in enumerate(v.content.created_files):
                 # Send the image-url to the model, only if it not already sent
                 if not file.url_sent_to_model:
                     file_type = file.mime_type
@@ -197,18 +194,11 @@ def help_convert_sv_ccrm(
                         # So we send the URL to the model only on production.
                         image_url = file.preview_url
                         image_msgs.append(_image_user_url_message(url=image_url))
-                        original_file.url_sent_to_model = True
-                # The URL is removed from the code output, before we send it to the model.
-                # Reasons: 1. Sending the URL here doesn't give model access to the image
-                # in a meaningful way, see above. 2. We don't want the model to repeat the URL
-                # to the user in its text answer.
-                file.preview_url = None
+                        file.url_sent_to_model = True
 
             out.append(
                 _tool_result_message(
-                    code_result.model_dump_json(
-                        exclude_none=True, exclude_defaults=True
-                    ),
+                    v.content.llm_payload,
                     v.id,
                     tool_name=TOOL_NAME_CODE,
                 )

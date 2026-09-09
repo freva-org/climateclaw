@@ -1,3 +1,5 @@
+import json
+
 from climateclaw.services.streaming.stream_variants import (
     StreamVariant,
     SVAssistant,
@@ -87,6 +89,71 @@ def test_codeoutput_wire_content_is_structured():
     wire = from_sv_to_json(original)
     assert wire["content"]["stdout"] == "ok\n"
     assert isinstance(wire["content"], dict)
+
+
+def test_codeoutput_wire_includes_url_sent_to_model_for_created_files():
+    unsent = SVCodeOutput(
+        content=normalize_code_output(
+            {
+                "created_files": [
+                    {
+                        "path": "unsent.png",
+                        "mime_type": "image/png",
+                    }
+                ]
+            }
+        ),
+        id="call_1",
+    )
+    sent = SVCodeOutput(
+        content=normalize_code_output(
+            {
+                "created_files": [
+                    {
+                        "path": "sent.png",
+                        "mime_type": "image/png",
+                        "url_sent_to_model": True,
+                    }
+                ]
+            }
+        ),
+        id="call_2",
+    )
+
+    unsent_wire = from_sv_to_json(unsent)
+    sent_wire = from_sv_to_json(sent)
+
+    assert unsent_wire["content"]["created_files"][0] == {
+        "path": "unsent.png",
+        "mime_type": "image/png",
+        "url_sent_to_model": False,
+    }
+    assert sent_wire["content"]["created_files"][0] == {
+        "path": "sent.png",
+        "mime_type": "image/png",
+        "url_sent_to_model": True,
+    }
+
+
+def test_code_interpreter_result_llm_payload_str_omits_llm_private_file_fields():
+    output = normalize_code_output(
+        {
+            "stdout": "ok\n",
+            "created_files": [
+                {
+                    "path": "plot.png",
+                    "mime_type": "image/png",
+                    "preview_url": "http://localhost/plot.png",
+                    "url_sent_to_model": True,
+                }
+            ],
+        }
+    )
+
+    assert json.loads(output.llm_payload_str) == {
+        "stdout": "ok\n",
+        "created_files": [{"path": "plot.png", "mime_type": "image/png"}],
+    }
 
 
 def test_legacy_codeoutput_string_normalizes_to_structured_content():
