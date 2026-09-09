@@ -19,7 +19,11 @@ class CodeInterpreterResult(BaseModel):
     created_files: list[CreatedFile] = Field(default_factory=list)
 
     @property
-    def is_error(self) -> bool:
+    def has_output(self) -> bool:
+        return bool(self.stdout or self.result_repr)
+
+    @property
+    def has_error(self) -> bool:
         return bool(self.stderr or self.error)
 
     @property

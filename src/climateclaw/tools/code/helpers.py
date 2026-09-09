@@ -111,7 +111,7 @@ def detect_created_or_modified_files(
     root: Path,
     before: dict[str, dict],
     after: dict[str, dict],
-) -> list[dict]:
+) -> list[CreatedFile]:
     created_files = []
 
     for rel_path, after_fp in after.items():

@@ -193,8 +193,9 @@ def help_convert_sv_ccrm(
                         # for the model, it causes LiteLLM 400 Bad Request.
                         # So we send the URL to the model only on production.
                         image_url = file.preview_url
-                        image_msgs.append(_image_user_url_message(url=image_url))
-                        file.url_sent_to_model = True
+                        if image_url is not None:
+                            image_msgs.append(_image_user_url_message(url=image_url))
+                            file.url_sent_to_model = True
 
             out.append(
                 _tool_result_message(

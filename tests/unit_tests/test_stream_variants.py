@@ -150,7 +150,7 @@ def test_code_interpreter_result_llm_payload_str_omits_llm_private_file_fields()
         }
     )
 
-    assert json.loads(output.llm_payload_str) == {
+    assert json.loads(output.llm_payload) == {
         "stdout": "ok\n",
         "created_files": [{"path": "plot.png", "mime_type": "image/png"}],
     }

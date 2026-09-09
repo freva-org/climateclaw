@@ -430,25 +430,27 @@ def normalize_code_output(out: Any) -> CodeInterpreterResult:
         return create_code_interpreter_output()
 
     if isinstance(out, CodeInterpreterResult):
-        norm_out = out.model_copy(deep=True)
-        norm_out.display_data = _normalize_display_data(norm_out.display_data)
-        return norm_out
+        norm_model = out.model_copy(deep=True)
+        norm_model.display_data = _normalize_display_data(norm_model.display_data)
+        return norm_model
 
     if isinstance(out, dict):
-        norm_out = out | {
-            "display_data": _normalize_display_data(out.get("display_data"))
+        norm_dict: dict[str, Any] = {
+            **out,
+            "display_data": _normalize_display_data(out.get("display_data")),
         }
-        return CodeInterpreterResult.model_validate(norm_out)
+        return CodeInterpreterResult.model_validate(norm_dict)
 
     if isinstance(out, list):
         text = out[0]
     else:
         try:
             out_json = json.loads(out)
-            norm_out = out_json | {
-                "display_data": _normalize_display_data(out_json.get("display_data"))
+            norm_json: dict[str, Any] = {
+                **out_json,
+                "display_data": _normalize_display_data(out_json.get("display_data")),
             }
-            return CodeInterpreterResult.model_validate(norm_out)
+            return CodeInterpreterResult.model_validate(norm_json)
         except (TypeError, json.JSONDecodeError):
             text = str(out)
 
