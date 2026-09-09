@@ -313,6 +313,11 @@ def patch_registry(monkeypatch):
     act_conv.Registry.clear()
 
 
+def register_fake_mcp(patch_registry, thread_id, fake_mcp):
+    patch_registry({thread_id: []})
+    act_conv.Registry[thread_id].mcp_manager = fake_mcp
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # STREAM PATCH
 # ──────────────────────────────────────────────────────────────────────────────
@@ -344,6 +349,12 @@ def patch_stream(monkeypatch):
 
 
 class DummyMcpManager:
+    def __init__(self, tools=None):
+        self._tools = tools or []
+
+    async def available_tools(self):
+        return self._tools
+
     async def close(self) -> None:
         pass
 

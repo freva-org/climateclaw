@@ -26,9 +26,27 @@ model_list:
       api_base: "http://ollama:11434"
     model_info:
       supports_function_calling: true
+  - model_name: "gemma4:26b"
+    litellm_params:
+      model: "ollama_chat/gemma4:26b"
+      api_base: "http://ollama:11434"
+    model_info:
+      supports_function_calling: true
+  - model_name: "ministral-3:8b"
+    litellm_params:
+      model: "ollama_chat/ministral-3:8b"
+      api_base: "http://ollama:11434"
+    model_info:
+      supports_function_calling: true
   - model_name: "mistral-small3.2:24b"
     litellm_params:
       model: "ollama_chat/mistral-small3.2:24b"
+      api_base: "http://ollama:11434"
+    model_info:
+      supports_function_calling: true
+  - model_name: "mistral-medium-3.5:128b"  # only available size, experimental
+    litellm_params:
+      model: "ollama_chat/mistral-medium-3.5:128b"
       api_base: "http://ollama:11434"
     model_info:
       supports_function_calling: true
