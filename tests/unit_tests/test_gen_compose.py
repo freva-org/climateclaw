@@ -17,7 +17,6 @@ spec.loader.exec_module(gen_compose)
 
 def test_project_mapping_returns_preview_mounts_and_website():
     assert gen_compose.preview_paths_for_project("nextgems") == [
-        "/work/ch1187/clint/freva-dev/share/preview/climateclaw",
         "/work/ch1187/clint/nextgems/share/preview/climateclaw",
     ]
     assert gen_compose.website_for_project("nextgems") == "https://gems.dkrz.de"

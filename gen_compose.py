@@ -24,14 +24,8 @@ DEV_MODE = os.environ.get("CLIMATECLAW_DEV", "0")
 PREVIEW_MOUNTS = {
     "codes": ["/work/kd1418/codes/work/share/preview/climateclaw"],
     "eve": ["/work/ch1187/clint/freva-dev/share/preview/climateclaw"],
-    "freva-dev": [
-        "/work/ch1187/clint/freva-dev/share/preview/climateclaw",
-        "/work/ch1187/clint/nextgems/share/preview/climateclaw",
-    ],
-    "nextgems": [
-        "/work/ch1187/clint/freva-dev/share/preview/climateclaw",
-        "/work/ch1187/clint/nextgems/share/preview/climateclaw",
-    ],
+    "freva-dev": ["/work/ch1187/clint/freva-dev/share/preview/climateclaw"],
+    "nextgems": ["/work/ch1187/clint/nextgems/share/preview/climateclaw"],
     "regiklim-ces": ["/work/ch1187/regiklim-work/share/preview/climateclaw"],
     "xces": ["/work/bm1159/XCES/xces-work/share/preview/climateclaw"],
 }
