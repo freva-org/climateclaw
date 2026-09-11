@@ -98,7 +98,10 @@ def _image_user_url_message(url: str) -> OpenAIMessage:
         "content": [
             {
                 "type": "text",
-                "text": "Here is the image returned by the Code Interpreter.",
+                "text": "The code interpreter executed successfully and generated "
+                "the requested image. Inspect the image and provide the final "
+                "answer to the user. Do not call the code interpreter again "
+                "unless the image shows that the task failed.",
             },
             {
                 "type": "image_url",
