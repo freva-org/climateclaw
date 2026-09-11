@@ -87,6 +87,7 @@ def stub_resp(respx_mock):
 class DummyCollection:
     def __init__(self):
         self.storage = {}
+        self._next_id = 0
 
     class _Cursor:
         def __init__(self, docs):
@@ -113,7 +114,11 @@ class DummyCollection:
         return self._Cursor(self.storage)
 
     async def insert_one(self, doc):
-        self.storage[doc["thread_id"]] = doc
+        key = doc.get("thread_id")
+        if key is None:
+            self._next_id += 1
+            key = self._next_id
+        self.storage[key] = doc
         return None
 
     async def update_one(self, query, update, upsert=False):

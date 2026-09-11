@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from .api import chatbot, static
+from .core.heartbeat import collect_performance_metrics
 from .core.logging_setup import configure_logging
 from .core.runtime_checks import run_startup_checks
 from .core.settings import get_settings
@@ -17,6 +18,8 @@ from .services.streaming.active_conversations import cleanup_idle
 
 settings = get_settings()
 logger = configure_logging(__name__)
+RUNTIME_METRICS_INTERVAL_SECONDS = 10
+CLEANUP_INTERVAL_MINS = 30
 
 # ──────────────────────────────────────────────────────────────────────────────
 # FastAPI app (skeleton)
@@ -35,23 +38,47 @@ async def lifespan(app: FastAPI):
             try:
                 await asyncio.sleep(60)  # check every min
                 # Storage is not needed here, conversation must have been saved when it was last used
-                evicted = await cleanup_idle(max_idle=timedelta(minutes=30))
+                evicted = await cleanup_idle(
+                    max_idle=timedelta(minutes=CLEANUP_INTERVAL_MINS)
+                )
                 if evicted:
-                    logger.info(f"Evicted idle > 30 mins: {evicted}")
+                    logger.info(
+                        f"Evicted idle > {CLEANUP_INTERVAL_MINS} mins: {evicted}"
+                    )
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 # Don’t crash the task; log and continue
                 logger.warning(f"Daily cleanup failed: {e}")
 
+    async def performance_snapshot_task():
+        while True:
+            try:
+                await app.state.thread_storage.save_performance_snapshot(
+                    collect_performance_metrics()
+                )
+                await asyncio.sleep(RUNTIME_METRICS_INTERVAL_SECONDS)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"Performance snapshot failed: {e}")
+                await asyncio.sleep(RUNTIME_METRICS_INTERVAL_SECONDS)
+
     # Launch background task
     app.state.periodic_cleanup = asyncio.create_task(periodic_cleanup_task())
+    app.state.runtime_metrics = asyncio.create_task(performance_snapshot_task())
 
     try:
         yield
     finally:
         # Shutdown
         app.state.periodic_cleanup.cancel()
+        app.state.runtime_metrics.cancel()
+        await asyncio.gather(
+            app.state.periodic_cleanup,
+            app.state.runtime_metrics,
+            return_exceptions=True,
+        )
         await app.state.thread_storage.close()
 
 

@@ -1,8 +1,11 @@
+from datetime import datetime
+
 import pytest
 
 import climateclaw.services.storage.mongodb_storage as mongo_storage
 from climateclaw.services.storage.mongodb_storage import (
     MONGODB_COLLECTION_NAME,
+    MONGODB_COLLECTION_NAME_PERFORMANCE,
     ThreadStorage,
 )
 from climateclaw.services.streaming.stream_variants import (
@@ -54,7 +57,10 @@ async def test_save_and_read_thread(monkeypatch, patch_mongodb, GOOD_HEADERS):
     kinds = [v.get("variant") for v in conv]
     # Prompt, User, Assistant, StreamEnd (no unexpected extra StreamEnd)
     assert kinds == ["Prompt", "User", "Assistant", "StreamEnd"]
-    assert conv[1] == {"variant": "User", "content": "hi", "model": "gpt-4.1"}
+    assert conv[1]["variant"] == "User"
+    assert conv[1]["content"] == "hi"
+    assert conv[1]["model"] == "gpt-4.1"
+    assert isinstance(conv[1]["timestamp"], datetime)
     assert coll.storage[tid]["content"] == conv
 
     # Check the user_id is stored correctly
@@ -63,3 +69,18 @@ async def test_save_and_read_thread(monkeypatch, patch_mongodb, GOOD_HEADERS):
         == user_id
         == await storage.get_user_id_for_thread(tid)
     )
+
+
+@pytest.mark.asyncio
+async def test_save_performance_snapshot(patch_mongodb):
+    storage = await ThreadStorage.create()
+    metrics = {
+        "timestamp": datetime(2026, 9, 11, 12, 0),
+        "hostname": "worker-1",
+        "cpu_usage": 12.5,
+    }
+
+    await storage.save_performance_snapshot(metrics)
+
+    coll = patch_mongodb[MONGODB_COLLECTION_NAME_PERFORMANCE]
+    assert list(coll.storage.values()) == [metrics]
