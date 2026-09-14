@@ -32,8 +32,6 @@ services:
       retries: 20
       start_period: 10s
     depends_on:
-      mongodb:
-        condition: service_healthy
       litellm:
         condition: service_healthy
 
@@ -96,17 +94,52 @@ services:
         --port=4000
         --num_workers=8
         --run_gunicorn
-        --detailed_debug
         2>&1 | tee -a /app/logs/litellm.log
     env_file: .env
     networks:
       - climateclaw
+    depends_on:
+      vllm:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  vllm:
+    image: docker.io/vllm/vllm-openai:latest
+    hostname: vllm-${CLIMATECLAW_INSTANCE_NAME}
+    volumes:
+      - /container/da/climateclaw-vllm-models:/root/.cache/huggingface
+    networks:
+      - climateclaw
+    devices:
+      - nvidia.com/gpu=all
+    shm_size: "2gb"
+    command:
+      - ${CLIMATECLAW_VLLM_MODEL_ID:-nvidia/Gemma-4-31B-IT-NVFP4}
+      - --quantization
+      - modelopt
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      # Four complete model replicas:
+      - --data-parallel-size
+      - "4"
+      - --max-model-len
+      - "131072" # vLLM 0.29 has prefix caching enabled by default. vLLM can reuse the cached KV for system prompt (~20-25k)
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - gemma4
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/models')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 600s
 
   ollama: # Ollama is only for the backend and not accessible from the outside. Port 11434 is not exposed.
     image: ollama/ollama:latest
@@ -119,29 +152,6 @@ services:
       - climateclaw
     devices:
       - nvidia.com/gpu=all
-
-  mongodb:
-    user: 0:0
-    image: ghcr.io/freva-org/freva-mongo:latest
-    hostname: mongodb-${CLIMATECLAW_INSTANCE_NAME}
-    environment:
-      - API_MONGO_USER=${CLIMATECLAW_MONGODB_USER:?MongoDB user and password must be set in the .env file. See .env.example.}
-      - API_MONGO_PASSWORD=${CLIMATECLAW_MONGODB_PASSWORD}
-      - API_MONGO_DB=${CLIMATECLAW_MONGODB_DATABASE_NAME}
-    ports:
-      - 27017:27017
-    volumes:
-      - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/mongo-data:/data/db:z
-      - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/mongo-logs:/data/logs:z
-    networks:
-      - climateclaw
-    healthcheck:
-      test: ["CMD", "healthchecks", "-s", "mongo"]
-      interval: 35s
-      timeout: 2s
-      retries: 3
-      start_period: 15s
-
 
 networks:
   climateclaw:

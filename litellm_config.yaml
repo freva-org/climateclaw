@@ -22,8 +22,8 @@ model_list:
       api_key: "os.environ/CLIMATECLAW_OPENAI_API_KEY"
   - model_name: "gemma4:31b"
     litellm_params:
-      model: "ollama_chat/gemma4:31b"
-      api_base: "http://ollama:11434"
+      model: "hosted_vllm/nvidia/Gemma-4-31B-IT-NVFP4"
+      api_base: "http://vllm:8000/v1"
     model_info:
       supports_function_calling: true
   - model_name: "gemma4:26b"
