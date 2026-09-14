@@ -194,7 +194,11 @@ def help_convert_sv_ccrm(
                 # Send the image-url to the model, only if it not already sent
                 if not file.get("url_sent_to_model"):
                     file_type = file.get("mime_type")
-                    if ("image" in file_type) and (not settings.DEV):
+                    if (
+                        ("image" in file_type)
+                        and (not settings.DEV)
+                        and (include_images)
+                    ):
                         # In local dev, the image URL is "localhost:...". Since it is unreachable
                         # for the model, it causes LiteLLM 400 Bad Request.
                         # So we send the URL to the model only on production.
