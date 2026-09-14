@@ -118,6 +118,8 @@ services:
     devices:
       - nvidia.com/gpu=all
     shm_size: "2gb"
+    environment:
+      VLLM_LOGGING_LEVEL: DEBUG
     command:
       - ${CLIMATECLAW_VLLM_MODEL_ID:-nvidia/Gemma-4-31B-IT-NVFP4}
       - --quantization
@@ -126,14 +128,22 @@ services:
       - "0.0.0.0"
       - --port
       - "8000"
-      # Four complete model replicas:
+      - "8000"
       - --data-parallel-size
-      - "4"
+      - "4"  # Four complete model replicas
       - --max-model-len
       - "131072" # vLLM 0.29 has prefix caching enabled by default. vLLM can reuse the cached KV for system prompt (~20-25k)
+      # - --kv-cache-dtype  # memory vs precision but the model weights are alread FP4
+      # - fp8  # model default BF16
       - --enable-auto-tool-choice
       - --tool-call-parser
       - gemma4
+      - --reasoning-parser
+      - gemma4
+      - --chat-template
+      - examples/tool_chat_template_gemma4.jinja
+      - --enable-log-requests
+      - --enable-log-outputs
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/models')\""]
       interval: 10s
