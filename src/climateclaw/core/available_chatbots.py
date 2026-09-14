@@ -200,7 +200,7 @@ def model_supports_images(model: str) -> bool:
     vision_models = (
         "gpt",
         # "qwen3.6",
-        # "gemma4",
+        "gemma4",
         # "mistral",
         # "ministral"
     )
