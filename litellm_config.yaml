@@ -22,7 +22,7 @@ model_list:
       api_key: "os.environ/CLIMATECLAW_OPENAI_API_KEY"
   - model_name: "gemma4:31b"
     litellm_params:
-      model: "hosted_vllm/nvidia/Gemma-4-31B-IT-NVFP4"
+      model: "os.environ/CLIMATECLAW_VLLM_LITELLM_MODEL"
       api_base: "http://vllm:8000/v1"
     model_info:
       supports_function_calling: true

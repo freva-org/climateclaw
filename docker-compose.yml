@@ -96,6 +96,8 @@ services:
         --run_gunicorn
         2>&1 | tee -a /app/logs/litellm.log
     env_file: .env
+    environment:
+      CLIMATECLAW_VLLM_LITELLM_MODEL: "hosted_vllm/${CLIMATECLAW_VLLM_MODEL_ID:-nvidia/Gemma-4-31B-IT-NVFP4}"
     networks:
       - climateclaw
     depends_on:
@@ -122,8 +124,8 @@ services:
       VLLM_LOGGING_LEVEL: DEBUG
     command:
       - ${CLIMATECLAW_VLLM_MODEL_ID:-nvidia/Gemma-4-31B-IT-NVFP4}
-      - --quantization
-      - modelopt
+      # - --quantization
+      # - modelopt
       - --host
       - "0.0.0.0"
       - --port
@@ -132,8 +134,8 @@ services:
       - "4"  # Four complete model replicas
       - --max-model-len
       - "131072" # vLLM 0.29 has prefix caching enabled by default. vLLM can reuse the cached KV for system prompt (~20-25k)
-      # - --kv-cache-dtype  # memory vs precision but the model weights are alread FP4
-      # - fp8  # model default BF16
+      - --kv-cache-dtype  # memory vs precision but the model weights are alread FP4
+      - fp8  # model default BF16
       - --enable-auto-tool-choice
       - --tool-call-parser
       - gemma4
