@@ -376,7 +376,9 @@ def main():
             new_services.update(expand_ollama_service(name, svc, ollama_n))
         elif name in MCP_SERVICES:
             if name == "code-server":
-                new_services.update(expand_service(name, svc, backend_n, preview_paths))
+                new_services.update(
+                    expand_service(name, svc, mcp_replica_n[name], preview_paths)
+                )
             elif name in available_mcp_servers:
                 new_services.update(expand_service(name, svc, mcp_replica_n[name]))
         elif name == "freva-web":
