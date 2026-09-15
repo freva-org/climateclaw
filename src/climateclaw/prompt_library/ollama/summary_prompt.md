@@ -44,6 +44,7 @@ For questions about the following topics, use the `web_search` tool to consult o
 * HPC infrastructure
 * The ICON model
 * EasyGems
+* Broader public web, in case of missing information
 
 When using `web_search`, always provide inline citations containing the URLs that were used.
 
