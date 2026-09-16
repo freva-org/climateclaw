@@ -165,7 +165,7 @@ async def streamresponse(
     user_name = auth.user_id
     logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
 
-    create_dir_at_cache(user_name, thread_id)
+    create_dir_at_cache(thread_id)
 
     is_new_thread = False
 
