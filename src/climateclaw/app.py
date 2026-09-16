@@ -18,8 +18,6 @@ from .services.streaming.active_conversations import cleanup_idle
 
 settings = get_settings()
 logger = configure_logging(__name__)
-RUNTIME_METRICS_INTERVAL_SECONDS = 10
-CLEANUP_INTERVAL_MINS = 30
 
 # ──────────────────────────────────────────────────────────────────────────────
 # FastAPI app (skeleton)
@@ -39,11 +37,11 @@ async def lifespan(app: FastAPI):
                 await asyncio.sleep(60)  # check every min
                 # Storage is not needed here, conversation must have been saved when it was last used
                 evicted = await cleanup_idle(
-                    max_idle=timedelta(minutes=CLEANUP_INTERVAL_MINS)
+                    max_idle=timedelta(minutes=settings.CLEANUP_INTERVAL_MINS)
                 )
                 if evicted:
                     logger.info(
-                        f"Evicted idle > {CLEANUP_INTERVAL_MINS} mins: {evicted}"
+                        f"Evicted idle > {settings.CLEANUP_INTERVAL_MINS} mins: {evicted}"
                     )
             except asyncio.CancelledError:
                 break
@@ -57,12 +55,12 @@ async def lifespan(app: FastAPI):
                 await app.state.thread_storage.save_performance_snapshot(
                     collect_performance_metrics()
                 )
-                await asyncio.sleep(RUNTIME_METRICS_INTERVAL_SECONDS)
+                await asyncio.sleep(settings.RUNTIME_METRICS_INTERVAL_SECONDS)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.warning(f"Performance snapshot failed: {e}")
-                await asyncio.sleep(RUNTIME_METRICS_INTERVAL_SECONDS)
+                await asyncio.sleep(settings.RUNTIME_METRICS_INTERVAL_SECONDS)
 
     # Launch background task
     app.state.periodic_cleanup = asyncio.create_task(periodic_cleanup_task())
