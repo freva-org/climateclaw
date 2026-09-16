@@ -1,18 +1,21 @@
 import os
 import socket
 from datetime import UTC, datetime
+from typing import TypeAlias
 
 import psutil
 
 from climateclaw.services.streaming.stream_variants import SVServerHint
 
+MetricValue: TypeAlias = str | int | float
 
-def collect_performance_metrics() -> dict:
+
+def collect_performance_metrics() -> dict[str, MetricValue]:
     """
     Collect system heartbeat info: CPU, memory, process stats, and host identity.
     """
-    metrics = {
-        "timestamp": datetime.now(UTC),
+    metrics: dict[str, MetricValue] = {
+        "timestamp": datetime.now(UTC).isoformat(),
         "hostname": socket.gethostname(),
     }
 
