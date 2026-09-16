@@ -48,7 +48,7 @@ class ThreadStorage:
         coll = db[MONGODB_COLLECTION_NAME]
         await coll.create_index("thread_id", unique=True)
         await coll.create_index(
-            [("user_id", pymongo.ASCENDING), ("date", pymongo.DESCENDING)]
+            [("user_id", pymongo.ASCENDING), ("last_activity", pymongo.DESCENDING)]
         )
         perf_coll = db[MONGODB_COLLECTION_NAME_PERFORMANCE]
         await perf_coll.create_index(
@@ -112,7 +112,7 @@ class ThreadStorage:
         doc = {
             "user_id": user_id,
             "thread_id": thread_id,
-            "date": datetime.now(UTC),
+            "last_activity": datetime.now(UTC),
             "topic": topic,
             "content": all_stream,
             "root_thread_id": root_thread_id,
@@ -144,7 +144,7 @@ class ThreadStorage:
         n_threads = await coll.count_documents({"user_id": user_id})
         cursor = (
             coll.find({"user_id": user_id})
-            .sort([("date", -1)])
+            .sort([("last_activity", -1)])
             .skip(page * limit)
             .limit(limit)
         )
@@ -153,7 +153,7 @@ class ThreadStorage:
             Thread(
                 user_id=d["user_id"],
                 thread_id=d["thread_id"],
-                date=d["date"],
+                last_activity=d["last_activity"],
                 topic=d.get("topic", ""),
                 content=d.get("content", []),
             )
@@ -211,7 +211,7 @@ class ThreadStorage:
         new_doc = {
             "user_id": user_id,
             "thread_id": new_thread_id,
-            "date": datetime.now(timezone.utc),
+            "last_activity": datetime.now(timezone.utc),
             "topic": doc.get("topic", ""),
             "content": content,
         }
@@ -340,14 +340,17 @@ class ThreadStorage:
 
         total = await coll.count_documents(filt)
         cursor = (
-            coll.find(filt).sort("date", -1).skip(page * num_threads).limit(num_threads)
+            coll.find(filt)
+            .sort("last_activity", -1)
+            .skip(page * num_threads)
+            .limit(num_threads)
         )
         docs = await cursor.to_list(length=num_threads)
         threads = [
             Thread(
                 user_id=d["user_id"],
                 thread_id=d["thread_id"],
-                date=d["date"],
+                last_activity=d["last_activity"],
                 topic=d.get("topic", ""),
                 content=d.get("content", []),
             )
