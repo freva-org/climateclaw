@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -61,6 +62,10 @@ class SVUser(_SVBase):
     content: str
     model: str = Field(
         default="", description="Model used to respond to this user request"
+    )
+    timestamp: datetime | None = Field(
+        default_factory=lambda: datetime.now(UTC),
+        description="UTC timestamp assigned when a new user request is created",
     )
 
 
@@ -144,7 +149,7 @@ StreamVariant = Annotated[
 Conversation = list[StreamVariant]
 
 SVDict = dict[
-    str, str | list[str] | dict[str, Any]
+    str, str | datetime | None | list[str] | dict[str, Any]
 ]  # for when handling variants as dicts (e.g. from JSON)
 
 
@@ -242,6 +247,14 @@ def _as_str(value: Any) -> str:
     return "" if value is None else str(value)
 
 
+def _as_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        return datetime.fromisoformat(value)
+    return datetime.now(UTC)
+
+
 def _parse_code_content(
     content: Any,
     id_from_obj: Any,
@@ -293,9 +306,17 @@ def from_json_to_sv(obj: dict) -> StreamVariant:
         return SVAssistant(content=_as_str(c), feedback=f)
     if v == USER:
         m = obj.get("model")
-        return SVUser(
+        if "timestamp" in obj:
+            return SVUser(
+                content=_as_str(c),
+                model=_as_str(m),
+                timestamp=_as_datetime(obj.get("timestamp")),
+            )
+        return SVUser.model_construct(
+            variant="User",
             content=_as_str(c),
             model=_as_str(m),
+            timestamp=None,
         )
     if v == PROMPT:
         return SVPrompt(content=_as_str(c))

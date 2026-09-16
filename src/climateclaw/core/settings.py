@@ -36,6 +36,12 @@ class Settings:
         os.getenv("CLIMATECLAW_MCP_REQUEST_TIMEOUT_SEC", "600")
     )
     DEV: bool = os.getenv("CLIMATECLAW_DEV", "").lower() in {"1", "true", "yes"}
+    RUNTIME_METRICS_INTERVAL_SECONDS: int = int(
+        os.getenv("CLIMATECLAW_RUNTIME_METRICS_INTERVAL_SECONDS", "60")
+    )
+    CLEANUP_INTERVAL_MINS: int = int(
+        os.getenv("CLIMATECLAW_CLEANUP_INTERVAL_MINS", "30")
+    )
 
 
 # Simple singleton-style accessor
