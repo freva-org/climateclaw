@@ -249,7 +249,9 @@ def patch_save_thread(monkeypatch):
 
 @pytest.fixture
 def patch_user_threads(monkeypatch):
-    async def fake_get_user_threads(self, user_id: str, limit: int = 20, page: int = 0):
+    async def fake_get_user_threads(
+        self, user_id: str, username=None, limit: int = 20, page: int = 0
+    ):
         threads = [
             SimpleNamespace(
                 user_id=user_id,
