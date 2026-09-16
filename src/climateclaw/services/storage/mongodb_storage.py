@@ -136,14 +136,24 @@ class ThreadStorage:
     async def list_recent_threads(
         self,
         user_id: str,
+        username: str | None = None,
         limit: int = 20,
         page: int = 0,
     ) -> tuple[list[Thread], int]:
         logger = configure_logging(__name__, user_id=user_id)
         coll = self.db[MONGODB_COLLECTION_NAME]
-        n_threads = await coll.count_documents({"user_id": user_id})
+        ownership_filter: dict = {"user_id": user_id}
+        if username:
+            ownership_filter = {
+                "$or": [
+                    {"user_id": user_id},
+                    {"user_id": username},
+                ]
+            }
+
+        n_threads = await coll.count_documents(ownership_filter)
         cursor = (
-            coll.find({"user_id": user_id})
+            coll.find(ownership_filter)
             .sort([("date", -1)])
             .skip(page * limit)
             .limit(limit)
@@ -151,7 +161,7 @@ class ThreadStorage:
         docs = await cursor.to_list(length=limit)
         threads = [
             Thread(
-                user_id=d["user_id"],
+                user_id=d.get("user_id") or d.get("username") or user_id,
                 thread_id=d["thread_id"],
                 date=d["date"],
                 topic=d.get("topic", ""),

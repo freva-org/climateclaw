@@ -76,7 +76,7 @@ async def get_user_threads(
 
     try:
         threads, total_num_threads = await storage.list_recent_threads(
-            auth.user_id, limit=num_threads, page=page
+            auth.user_id, username=auth.username, limit=num_threads, page=page
         )
 
         logger.info(
