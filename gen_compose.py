@@ -17,7 +17,7 @@ MCP_SERVER_CONFIG = {
 }
 MCP_SERVICES = set(MCP_SERVER_CONFIG)
 
-DEV_MODE = os.environ.get("CLIMATECLAW_DEV", "0")
+DEV_MODE = os.environ.get("CLIMATECLAW_DEV", "").lower() in {"1", "true", "yes"}
 
 # NOTE: freva-dev and nextgems currently share deployment instance
 # so we mount both their preview paths together
@@ -374,8 +374,6 @@ def main():
         for s in available_mcp_servers
     }
     mcp_request_timeout = int(os.getenv("CLIMATECLAW_MCP_REQUEST_TIMEOUT_SEC", "600"))
-
-    DEV_MODE = True if "dev" in compose_path else False
 
     base = yaml.safe_load(open(compose_path))
 
