@@ -112,7 +112,7 @@ class ThreadStorage:
         doc = {
             "user_id": user_id,
             "thread_id": thread_id,
-            "last_activity": datetime.now(UTC),
+            "date": datetime.now(UTC),
             "topic": topic,
             "content": all_stream,
             "root_thread_id": root_thread_id,
@@ -340,10 +340,7 @@ class ThreadStorage:
 
         total = await coll.count_documents(filt)
         cursor = (
-            coll.find(filt)
-            .sort("updated_at", -1)
-            .skip(page * num_threads)
-            .limit(num_threads)
+            coll.find(filt).sort("date", -1).skip(page * num_threads).limit(num_threads)
         )
         docs = await cursor.to_list(length=num_threads)
         threads = [
