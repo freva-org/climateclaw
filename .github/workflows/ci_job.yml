@@ -102,22 +102,16 @@ jobs:
           CLIMATECLAW_MONGODB_PASSWORD=ci-psswrd
           CLIMATECLAW_MONGODB_DATABASE_NAME=ci-db
           CLIMATECLAW_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          CLIMATECLAW_SYSLOG_ADDRESS=tcp@localhost:1514
           EOF
 
       - name: Build production base image
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile build-only build climateclaw-base
+        run: docker compose --profile build-only build climateclaw-base
 
       - name: Start production stack
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml up climateclaw code-server web-search-server -d --wait --build --remove-orphans || {
+          docker compose up climateclaw code-server web-search-server -d --wait --build --remove-orphans || {
             docker ps -a
-
-            docker compose \
-              -f docker-compose.yml \
-              -f docker-compose.ci.yml \
-              logs climateclaw mongodb code-server web-search-server litellm
-
+            docker compose logs climateclaw mongodb code-server web-search-server litellm
             exit 1
           }
 
@@ -130,4 +124,4 @@ jobs:
 
       - name: Tear down production stack
         if: always()
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
+        run: docker compose -f docker-compose.yml down -v
