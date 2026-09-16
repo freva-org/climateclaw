@@ -45,30 +45,12 @@ def reset_request_id(token) -> None:
     REQUEST_ID_CONTEXT.reset(token)
 
 
-def _parse_syslog_target(
-    target: str,
-) -> tuple[tuple[str, int], socket.SocketKind] | None:
-    """
-    Parse HAProxy-style syslog targets like tcp@host:1514.
-    Returns the address and socket type expected by SysLogHandler.
-    """
-    protocol, separator, address = target.partition("@")
-    if separator != "@" or protocol not in {"tcp", "udp"}:
-        return None
-
-    host, separator, port = address.rpartition(":")
-    if separator != ":" or not host:
-        return None
-
-    try:
-        parsed_port = int(port)
-    except ValueError:
-        return None
-
-    socket_type: socket.SocketKind = (
-        socket.SOCK_STREAM if protocol == "tcp" else socket.SOCK_DGRAM
-    )
-    return (host, parsed_port), socket_type
+def _syslog_socket_type(protocol: str) -> socket.SocketKind | None:
+    if protocol == "tcp":
+        return socket.SOCK_STREAM
+    if protocol == "udp":
+        return socket.SOCK_DGRAM
+    return None
 
 
 class ContextFilter(logging.Filter):
@@ -124,13 +106,19 @@ def _ensure_base_logging() -> None:
     file_handler.addFilter(base_filter)
     root.addHandler(file_handler)
 
-    if (not settings.DEV) and settings.SYSLOG_TARGET:
-        parsed_target = _parse_syslog_target(settings.SYSLOG_TARGET)
-        if parsed_target:
-            address, socket_type = parsed_target
+    if not settings.DEV:
+        if settings.SYSLOG_HOST:
+            socket_type = _syslog_socket_type(settings.SYSLOG_PROTOCOL)
+            if socket_type is None:
+                root.warning(
+                    "Invalid CLIMATECLAW_SYSLOG_PROTOCOL=%r; expected tcp or udp",
+                    settings.SYSLOG_PROTOCOL,
+                )
+                return
+
             try:
                 syslog_handler = SysLogHandler(
-                    address=address,
+                    address=(settings.SYSLOG_HOST, settings.SYSLOG_PORT),
                     facility=SysLogHandler.LOG_LOCAL0,
                     socktype=socket_type,
                 )
@@ -141,9 +129,9 @@ def _ensure_base_logging() -> None:
             except OSError as e:
                 root.warning("Failed to configure remote syslog logging: %s", e)
         else:
+            # Missing syslog host disables remote syslog for the app but does not stop startup.
             root.warning(
-                "Invalid CLIMATECLAW_SYSLOG_TARGET=%r; expected tcp@host:port or udp@host:port",
-                settings.SYSLOG_TARGET,
+                "Missing CLIMATECLAW_SYSLOG_HOST; remote syslog logging disabled"
             )
 
     logging.getLogger("uvicorn").setLevel(logging.WARNING)

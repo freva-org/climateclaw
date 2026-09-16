@@ -2,6 +2,7 @@
 
 import os
 import sys
+import warnings
 from copy import deepcopy
 from pathlib import Path
 
@@ -17,7 +18,65 @@ MCP_SERVER_CONFIG = {
 }
 MCP_SERVICES = set(MCP_SERVER_CONFIG)
 
-DEV_MODE = os.environ.get("CLIMATECLAW_DEV", "0")
+DEV_MODE = os.environ.get("CLIMATECLAW_DEV", "").lower() in {"1", "true", "yes"}
+
+
+def validate_syslog_protocol(protocol: str) -> str | None:
+    if protocol not in {"tcp", "udp"}:
+        warnings.warn(
+            f"Invalid CLIMATECLAW_SYSLOG_PROTOCOL={protocol!r}; remote syslog disabled",
+            stacklevel=2,
+        )
+        return None
+    return protocol
+
+
+def read_syslog_variables() -> tuple[str, str, str] | None:
+    host = os.getenv("CLIMATECLAW_SYSLOG_HOST")
+    if not host:
+        warnings.warn(
+            "Missing CLIMATECLAW_SYSLOG_HOST; remote syslog disabled",
+            stacklevel=2,
+        )
+        return None
+
+    protocol = validate_syslog_protocol(os.getenv("CLIMATECLAW_SYSLOG_PROTOCOL", "tcp"))
+    if not protocol:
+        return None
+
+    port = os.getenv("CLIMATECLAW_SYSLOG_PORT", "1514")
+    return protocol, host, port
+
+
+def get_syslog_target() -> str | None:
+    parts = read_syslog_variables()
+    if not parts:
+        return None
+
+    protocol, host, port = parts
+    return f"{protocol}@{host}:{port}"
+
+
+def add_litellm_syslog_logging(services: dict) -> None:
+    if DEV_MODE:
+        return
+
+    parts = read_syslog_variables()
+    if not parts:
+        return None
+
+    protocol, host, port = parts
+    syslog_address = f"{protocol}://{host}:{port}"
+
+    for name, service in services.items():
+        if name == "litellm" or name.startswith("litellm-"):
+            service["logging"] = {
+                "driver": "syslog",
+                "options": {
+                    "syslog-address": syslog_address,
+                    "tag": f"{name}-${{CLIMATECLAW_INSTANCE_NAME}}",
+                },
+            }
 
 
 def expand_service(name, service, replicas):
@@ -159,9 +218,13 @@ def generate_haproxy(
         "    daemon\n"
         "    maxconn 1024\n"
         "    log stdout format raw local0 info\n"
-        f"    log {os.environ.get('CLIMATECLAW_SYSLOG_TARGET', 'stdout')} local0 info\n"
         "    stats socket /var/run/haproxy.sock mode 660 level admin\n"
     )
+
+    if not DEV_MODE:
+        syslog_target = get_syslog_target()
+        if syslog_target:
+            conf.append(f"    log {syslog_target} local0 info\n")
 
     conf.append(
         "defaults\n"
@@ -313,6 +376,7 @@ def main():
             new_services[name] = svc
 
     update_service_dependencies(new_services, replica_counts)
+    add_litellm_syslog_logging(new_services)
 
     dev_ports = [
         f"{backend_target_port}:{backend_port}",
