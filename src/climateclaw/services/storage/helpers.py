@@ -30,10 +30,9 @@ class Thread:
 # ──────────────────── Helper Functions ──────────────────────────────
 
 
-def create_dir_at_cache(user_id: str, thread_id: str) -> None:
+def create_dir_at_cache(thread_id: str) -> None:
     """
-    Create cache/{user_id}/{thread_id}. On failure (e.g., non-alphanumeric user_id),
-    retry with a sanitized user_id (keep only [A-Za-z0-9]). Logs but never raises.
+    Create cache/{thread_id}. Logs but never raises.
     """
     cache = CACHE_ROOT / thread_id
     try:
