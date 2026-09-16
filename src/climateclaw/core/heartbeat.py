@@ -12,7 +12,7 @@ def collect_performance_metrics() -> dict:
     Collect system heartbeat info: CPU, memory, process stats, and host identity.
     """
     metrics = {
-        "timestamp": datetime.now(UTC),
+        "timestamp": datetime.now(UTC).isoformat(),
         "hostname": socket.gethostname(),
     }
 
