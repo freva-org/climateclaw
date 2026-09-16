@@ -261,14 +261,14 @@ def patch_user_threads(monkeypatch):
             SimpleNamespace(
                 user_id=user_id,
                 thread_id="t-1",
-                date="2025-01-01T00:00:00Z",
+                last_activity="2025-01-01T00:00:00Z",
                 topic="First thread",
                 content="first content",
             ),
             SimpleNamespace(
                 user_id=user_id,
                 thread_id="t-2",
-                date="2025-01-02T00:00:00Z",
+                last_activity="2025-01-02T00:00:00Z",
                 topic="Second thread",
                 content="second content",
             ),

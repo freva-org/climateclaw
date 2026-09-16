@@ -51,7 +51,7 @@ async def search_threads(
                 1. A list of matching thread metadata dictionaries, each including:
                    - user_id (str)
                    - thread_id (str)
-                   - date (datetime | str)
+                   - last_activity (datetime | str)
                    - topic (str)
                    - content (Any)
                 2. The total number of matching threads (int).
@@ -100,7 +100,7 @@ async def search_threads(
             {
                 "user_id": t.user_id,
                 "thread_id": t.thread_id,
-                "date": t.date,
+                "last_activity": t.last_activity,
                 "topic": t.topic,
                 "content": t.content,
             }
