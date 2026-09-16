@@ -66,9 +66,9 @@ async def get_user_threads(
     num_threads = request.num_threads
     page = request.page
 
-    logger = configure_logging(__name__, user_id=auth.username)
+    logger = configure_logging(__name__, user_id=auth.user_id)
 
-    if not auth.username:
+    if not auth.user_id:
         raise HTTPException(
             status_code=422,
             detail="Missing user_id (auth).",
@@ -76,13 +76,13 @@ async def get_user_threads(
 
     try:
         threads, total_num_threads = await storage.list_recent_threads(
-            auth.username, limit=num_threads, page=page
+            auth.user_id, limit=num_threads, page=page
         )
 
         logger.info(
             "Fetched recent threads",
             extra={
-                "user_id": auth.username,
+                "user_id": auth.user_id,
                 "thread_count": len(threads),
                 "requested": num_threads,
             },
