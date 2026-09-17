@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 
+from climateclaw.core import heartbeat
 from climateclaw.services.streaming import stream_orchestrator
 from climateclaw.services.streaming.stream_variants import SVServerHint
 
@@ -54,3 +55,24 @@ async def test_yield_heartbeats_until_is_quiet_for_fast_task(monkeypatch):
 
     assert await task == "done"
     assert heartbeats == []
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_content_omits_hostname(monkeypatch):
+    monkeypatch.setattr(
+        heartbeat,
+        "collect_performance_metrics",
+        lambda: {
+            "timestamp": "now",
+            "hostname": "worker-1",
+            "cpu_usage": 1.0,
+        },
+    )
+
+    hint = await heartbeat.heartbeat_content()
+
+    assert isinstance(hint, SVServerHint)
+    assert hint.content == {
+        "timestamp": "now",
+        "cpu_usage": 1.0,
+    }
