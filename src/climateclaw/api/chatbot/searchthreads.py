@@ -43,8 +43,7 @@ async def search_threads(
             The page number for pagination (reserved for paging logic). Optional, starts at 0.
 
     Dependencies:
-        auth (Authenticator): Injected authentication object containing
-            username
+        auth (Authenticator): Injected authentication object containing user_id
 
     Returns:
         List[Any]:
@@ -71,9 +70,9 @@ async def search_threads(
     page = request.page
     num_threads = request.num_threads
 
-    logger = configure_logging(__name__, user_id=auth.username)
+    logger = configure_logging(__name__, user_id=auth.user_id)
 
-    if not auth.username:
+    if not auth.user_id:
         raise HTTPException(
             status_code=422,
             detail="Missing user_id (auth).",
@@ -90,7 +89,7 @@ async def search_threads(
 
     try:
         total_num_threads, threads = await storage.query_by_topic(
-            auth.username, query, num_threads, page
+            auth.user_id, query, num_threads, page
         )
     except Exception as e:
         logger.exception("Failed to query threads: %s", e)

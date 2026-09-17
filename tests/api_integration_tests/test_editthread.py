@@ -37,7 +37,7 @@ async def test_editthread_success_path_trims_and_saves(
     assert patch_save_thread
     saved = patch_save_thread[-1]
     assert saved["thread_id"] == "new-thread-123"
-    assert saved["user_id"] == "alice"  # from stubbed auth response
+    assert saved["user_id"] == "062027f1-df70-572b-a59a-fbd0c55c179c"
     assert saved["root_thread_id"] == "src-1"
     assert saved["parent_thread_id"] == "src-1"
     assert saved["fork_from_index"] == 2
