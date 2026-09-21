@@ -326,8 +326,7 @@ def main():
         sys.argv[2] if len(sys.argv) > 2 else os.environ.get("CLIMATECLAW_PROJECT_NAME")
     )
 
-    if project:
-        preview_paths = preview_paths_for_project(project)
+    preview_paths = preview_paths_for_project(project)
 
     backend_port = os.environ.get("CLIMATECLAW_BACKEND_PORT", "8502")
     backend_target_port = os.environ.get("CLIMATECLAW_TARGET_PORT", "8502")
