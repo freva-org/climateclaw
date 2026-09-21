@@ -368,6 +368,11 @@ def main():
     for name, svc in services.items():
         if name == "climateclaw":
             set_project_environment(svc, project)
+
+            node_name = os.environ.get("CLIMATECLAW_NODE_NAME")
+            if node_name:
+                set_environment(svc, "CLIMATECLAW_NODE_NAME", node_name)
+
             new_services.update(expand_service(name, svc, backend_n))
         elif name == "litellm":
             new_services.update(expand_service(name, svc, litellm_n))
