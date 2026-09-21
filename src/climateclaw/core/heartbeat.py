@@ -16,7 +16,10 @@ def collect_performance_metrics() -> dict[str, MetricValue]:
     """
     metrics: dict[str, MetricValue] = {
         "timestamp": datetime.now(UTC).isoformat(),
-        "hostname": socket.gethostname(),
+        "hostname": os.getenv(
+            "CLIMATECLAW_NODE_NAME", socket.gethostname()
+        ),  # Physical/node identity
+        "service_hostname": socket.gethostname(),  # ClimateClaw deployment / instance identity
     }
 
     psutil.virtual_memory()
@@ -69,6 +72,7 @@ async def heartbeat_content():
     """
     metrics = collect_performance_metrics()
     metrics.pop("hostname", None)
+    metrics.pop("service_hostname", None)
 
     # Return as StreamVariant::ServerHint
     return SVServerHint(content=metrics)

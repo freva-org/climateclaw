@@ -340,8 +340,7 @@ def main():
         sys.argv[2] if len(sys.argv) > 2 else os.environ.get("CLIMATECLAW_PROJECT_NAME")
     )
 
-    if project:
-        preview_paths = preview_paths_for_project(project)
+    preview_paths = preview_paths_for_project(project)
 
     # Read env variables
     backend_port = os.environ.get("CLIMATECLAW_BACKEND_PORT", "8502")
@@ -385,6 +384,11 @@ def main():
     for name, svc in services.items():
         if name == "climateclaw":
             set_project_environment(svc, project)
+
+            node_name = os.environ.get("CLIMATECLAW_NODE_NAME")
+            if node_name:
+                set_environment(svc, "CLIMATECLAW_NODE_NAME", node_name)
+
             new_services.update(expand_service(name, svc, backend_n))
         elif name == "litellm":
             new_services.update(expand_service(name, svc, litellm_n))
