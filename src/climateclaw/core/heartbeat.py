@@ -16,7 +16,7 @@ def collect_performance_metrics() -> dict[str, MetricValue]:
     """
     metrics: dict[str, MetricValue] = {
         "timestamp": datetime.now(UTC).isoformat(),
-        "hostname": socket.gethostname(),
+        "hostname": os.getenv("CLIMATECLAW_NODE_NAME", socket.gethostname()),
     }
 
     psutil.virtual_memory()
