@@ -123,7 +123,7 @@ def _ensure_base_logging() -> None:
                     socktype=socket_type,
                 )
                 syslog_handler.setFormatter(LOG_FORMATTER)
-                syslog_handler.ident = f"{SERVICE_NAME}"
+                syslog_handler.ident = f"{SERVICE_NAME}: "
                 syslog_handler.addFilter(base_filter)
                 root.addHandler(syslog_handler)
             except OSError as e:
