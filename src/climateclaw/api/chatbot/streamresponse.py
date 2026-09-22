@@ -163,9 +163,10 @@ async def streamresponse(
         )
 
     user_name = auth.user_id
+    log_input = " ".join(input.splitlines())
     logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
     logger.info(
-        f"User request: thread-id '{thread_id}', user-input '{input}', chatbot '{chatbot}'"
+        f"User request: thread-id '{thread_id}', user-input '{log_input}', chatbot '{chatbot}'"
     )
 
     create_dir_at_cache(thread_id)
