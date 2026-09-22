@@ -11,7 +11,7 @@ from climateclaw.tools.active_requests import (
     current_ids,
     tracked_request,
 )
-from climateclaw.tools.header_gate import make_header_gate
+from climateclaw.tools.header_gate import RequestIdMiddleware, make_header_gate
 
 from .code_execution import (
     EXEC_TIMEOUT,
@@ -26,6 +26,7 @@ from .safety_check import check_code_safety
 logger = configure_logging(__name__)
 
 mcp = FastMCP("code-interpreter-server")
+mcp.add_middleware(RequestIdMiddleware())
 
 # ── Config ───────────────────────────────────────────────────────────────────
 REQUEST_TIMEOUT = int(os.getenv("CLIMATECLAW_MCP_REQUEST_TIMEOUT_SEC", "600"))

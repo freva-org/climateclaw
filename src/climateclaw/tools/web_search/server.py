@@ -11,7 +11,7 @@ from climateclaw.tools.active_requests import (
     current_ids,
     tracked_request,
 )
-from climateclaw.tools.header_gate import make_header_gate
+from climateclaw.tools.header_gate import RequestIdMiddleware, make_header_gate
 
 logger = configure_logging(__name__)
 
@@ -19,6 +19,7 @@ logger = configure_logging(__name__)
 OPENAI_API_KEY = os.getenv("CLIMATECLAW_OPENAI_API_KEY", "")
 
 mcp = FastMCP("web-search-server")
+mcp.add_middleware(RequestIdMiddleware())
 
 # ── Config ───────────────────────────────────────────────────────────────────
 WEB_SEARCH_MODEL = "gpt-4.1"
