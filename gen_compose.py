@@ -2,6 +2,7 @@
 
 import os
 import sys
+import warnings
 from copy import deepcopy
 from pathlib import Path
 
@@ -17,7 +18,66 @@ MCP_SERVER_CONFIG = {
 }
 MCP_SERVICES = set(MCP_SERVER_CONFIG)
 
-DEV_MODE = os.environ.get("CLIMATECLAW_DEV", "0")
+DEV_MODE = os.environ.get("CLIMATECLAW_DEV", "").lower() in {"1", "true", "yes"}
+
+
+def validate_syslog_protocol(protocol: str) -> str | None:
+    if protocol not in {"tcp", "udp"}:
+        warnings.warn(
+            f"Invalid CLIMATECLAW_SYSLOG_PROTOCOL={protocol!r}; remote syslog disabled",
+            stacklevel=2,
+        )
+        return None
+    return protocol
+
+
+def read_syslog_variables() -> tuple[str, str, str] | None:
+    host = os.getenv("CLIMATECLAW_SYSLOG_HOST")
+    if not host:
+        warnings.warn(
+            "Missing CLIMATECLAW_SYSLOG_HOST; remote syslog disabled",
+            stacklevel=2,
+        )
+        return None
+
+    protocol = validate_syslog_protocol(os.getenv("CLIMATECLAW_SYSLOG_PROTOCOL", "tcp"))
+    if not protocol:
+        return None
+
+    port = os.getenv("CLIMATECLAW_SYSLOG_PORT", "1514")
+    return protocol, host, port
+
+
+def get_syslog_target() -> str | None:
+    parts = read_syslog_variables()
+    if not parts:
+        return None
+
+    protocol, host, port = parts
+    return f"{protocol}@{host}:{port}"
+
+
+def add_litellm_syslog_logging(services: dict) -> None:
+    if DEV_MODE:
+        return
+
+    parts = read_syslog_variables()
+    if not parts:
+        return None
+
+    protocol, host, port = parts
+    syslog_address = f"{protocol}://{host}:{port}"
+
+    for name, service in services.items():
+        if name == "litellm" or name.startswith("litellm-"):
+            service["logging"] = {
+                "driver": "syslog",
+                "options": {
+                    "syslog-address": syslog_address,
+                    "tag": f"{name}-${{CLIMATECLAW_INSTANCE_NAME}}",
+                },
+            }
+
 
 # NOTE: freva-dev and nextgems currently share deployment instance
 # so we mount both their preview paths together
@@ -237,12 +297,26 @@ def generate_haproxy(
     timeout,
 ):
     conf = []
+    request_id_rules = (
+        "    http-request set-header X-Request-Id %[uuid()] unless { req.hdr(X-Request-Id) -m found }\n"
+        "    declare capture request len 64\n"
+        "    http-request capture req.hdr(X-Request-Id) id 0\n"
+    )
 
     conf.append(
         "global\n"
         "    daemon\n"
-        "    maxconn 256\n"
-        f"    log {os.environ.get('CLIMATECLAW_SYSLOG_TARGET', 'stdout')} format raw local0 info\n\n"
+        "    maxconn 1024\n"
+        "    log stdout format raw local0 info\n"
+        "    stats socket /var/run/haproxy.sock mode 660 level admin\n"
+    )
+
+    if not DEV_MODE:
+        syslog_target = get_syslog_target()
+        if syslog_target:
+            conf.append(f"    log {syslog_target} local0 info\n")
+
+    conf.append(
         "defaults\n"
         "    mode http\n"
         "    timeout connect 5s\n"
@@ -250,31 +324,39 @@ def generate_haproxy(
         f"    timeout server {timeout}s\n"
         "    default-server inter 3s fall 3 rise 2\n"
         "    log     global\n"
-        '    log-format "%t %ci:%cp %ft %b/%s Tq=%Tq Tw=%Tw Tc=%Tc Tr=%Tr Tt=%Tt '
-        'status=%ST bytes=%B term=%ts conn=%ac/%fc/%bc/%sc/%rc %{+Q}r"\n'
+        "    option  httplog\n"
+        "    log-format '%t %ci:%cp %ft %b/%s Tq=%Tq Tw=%Tw Tc=%Tc Tr=%Tr Tt=%Tt "
+        "status=%ST bytes=%B term=%ts conn=%ac/%fc/%bc/%sc/%rc "
+        "request_id=%[capture.req.hdr(0)] %{+Q}r'\n"
     )
 
     conf.append(
         "frontend fe_backend\n"
         f"    bind *:{backend_port}\n"
+        f"{request_id_rules}"
         "    default_backend be_climateclaw\n"
-        "\n"
     )
 
     conf.append(
-        "frontend fe_litellm\n    bind *:4000\n    default_backend be_litellm\n\n"
+        "frontend fe_litellm\n"
+        "    bind *:4000\n"
+        f"{request_id_rules}"
+        "    default_backend be_litellm\n"
     )
 
     conf.append(
-        "frontend fe_ollama\n    bind *:11434\n    default_backend be_ollama\n\n"
+        "frontend fe_ollama\n"
+        "    bind *:11434\n"
+        f"{request_id_rules}"
+        "    default_backend be_ollama\n"
     )
 
     for s in server_list:
         conf.append(
             f"frontend fe_{s}\n"
             f"    bind *:{port_dict[s]}\n"
+            f"{request_id_rules}"
             f"    default_backend be_{s}\n"
-            "\n"
         )
 
     conf.append(
@@ -394,6 +476,7 @@ def main():
             new_services[name] = svc
 
     update_service_dependencies(new_services, replica_counts)
+    add_litellm_syslog_logging(new_services)
 
     dev_ports = [
         f"{backend_target_port}:{backend_port}",

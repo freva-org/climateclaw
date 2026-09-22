@@ -2,6 +2,39 @@ from contextvars import ContextVar
 
 import pytest
 
+import climateclaw.tools.header_gate as header_gate
+from climateclaw.core.logging_setup import (
+    get_request_id,
+    reset_request_id,
+    set_request_id,
+)
+
+
+@pytest.mark.asyncio
+async def test_request_id_middleware_scopes_request_id(monkeypatch):
+    monkeypatch.setattr(
+        header_gate,
+        "get_http_headers",
+        lambda: {"x-request-id": "current-request"},
+    )
+
+    outer_token = set_request_id("outer-request")
+    try:
+
+        async def call_next(context):
+            assert context == "message"
+            assert get_request_id() == "current-request"
+            return "handled"
+
+        result = await header_gate.RequestIdMiddleware().on_message(
+            "message", call_next
+        )
+
+        assert result == "handled"
+        assert get_request_id() == "outer-request"
+    finally:
+        reset_request_id(outer_token)
+
 
 @pytest.mark.asyncio
 async def test_header_gate_delete_triggers_cleanup_and_returns_204():

@@ -52,9 +52,7 @@ async def get_mcp_manager(
         "X-Freva-Thread-Id": thread_id,
     }
 
-    logger = configure_logging(
-        __name__, thread_id=thread_id, user_id=authenticator.user_id
-    )
+    logger = configure_logging(__name__, thread_id=thread_id)
 
     try:
         MCP_SERVER_URLs = get_server_url_dict(settings.AVAILABLE_MCP_SERVERS)
