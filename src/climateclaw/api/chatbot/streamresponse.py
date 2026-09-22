@@ -164,7 +164,7 @@ async def streamresponse(
 
     user_name = auth.user_id
     log_input = " ".join(input.splitlines())
-    logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
+    logger = configure_logging(__name__, thread_id=thread_id)
     logger.info(
         f"User request: thread-id '{thread_id}', user-input '{log_input}', chatbot '{chatbot}'"
     )
@@ -183,7 +183,7 @@ async def streamresponse(
             f"Thread {old_thread_id} belongs to a different user ({thread_owner}). Forking the thread for the current user with new thread_id: {thread_id}..."
         )
         await storage.fork_thread(old_thread_id, thread_id, user_name)
-        logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
+        logger = configure_logging(__name__, thread_id=thread_id)
 
     # Check if thread-id exists in DB
     read_history = False
@@ -231,7 +231,7 @@ async def streamresponse(
     except ValueError as e:
         logger.warning(
             f"ValueError during stream preparation; most likely a race condition: {e}",
-            extra={"thread_id": thread_id, "user_id": user_name},
+            extra={"thread_id": thread_id},
         )
         raise HTTPException(
             status_code=409,
@@ -239,7 +239,7 @@ async def streamresponse(
         )
     except Exception as e:
         msg = f"Stream preparation has failed: {e}"
-        logger.exception(msg, extra={"thread_id": thread_id, "user_id": user_name})
+        logger.exception(msg, extra={"thread_id": thread_id})
         # Normalize response to a clean HTTP 500 instead of a partial stream
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
 
@@ -288,7 +288,7 @@ async def streamresponse(
                 )
                 logger.info(
                     "Stopped streaming after client request",
-                    extra={"thread_id": thread_id, "user_id": user_name},
+                    extra={"thread_id": thread_id},
                 )
                 return
 
@@ -302,7 +302,7 @@ async def streamresponse(
             )
             logger.info(
                 msg,
-                extra={"thread_id": thread_id, "user_id": user_name},
+                extra={"thread_id": thread_id},
             )
 
         except asyncio.CancelledError as e:

@@ -34,7 +34,6 @@ REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup (was @app.on_event("startup"))
-    configure_logging()
     run_startup_checks(get_settings())
     app.state.thread_storage = await ThreadStorage.create()
 

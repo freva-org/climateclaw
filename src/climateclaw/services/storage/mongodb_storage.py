@@ -70,7 +70,7 @@ class ThreadStorage:
         fork_from_index: int | None = None,
         append_to_existing: bool | None = False,
     ) -> None:
-        logger = configure_logging(__name__, thread_id=thread_id, user_id=user_id)
+        logger = configure_logging(__name__, thread_id=thread_id)
         content_cleaned: list[StreamVariant] = cleanup_conversation(content)
         if not content_cleaned:
             return
@@ -123,7 +123,6 @@ class ThreadStorage:
             "Saved thread to MongoDB",
             extra={
                 "thread_id": thread_id,
-                "user_id": user_id,
                 "append": append_to_existing,
             },
         )
@@ -135,7 +134,7 @@ class ThreadStorage:
         limit: int = 20,
         page: int = 0,
     ) -> tuple[list[Thread], int]:
-        logger = configure_logging(__name__, user_id=user_id)
+        logger = configure_logging(__name__)
         coll = self.db[MONGODB_COLLECTION_NAME]
         ownership_filter: dict = {"user_id": user_id}
         if username:
@@ -198,7 +197,7 @@ class ThreadStorage:
         return doc.get("user_id")
 
     async def fork_thread(self, old_thread_id: str, new_thread_id: str, user_id: str):
-        logger = configure_logging(__name__, thread_id=old_thread_id, user_id=user_id)
+        logger = configure_logging(__name__, thread_id=old_thread_id)
         coll = self.db[MONGODB_COLLECTION_NAME]
         doc = await coll.find_one({"thread_id": old_thread_id})
         if not doc:
@@ -226,7 +225,6 @@ class ThreadStorage:
             extra={
                 "old_thread_id": old_thread_id,
                 "new_thread_id": new_thread_id,
-                "user_id": user_id,
             },
         )
 

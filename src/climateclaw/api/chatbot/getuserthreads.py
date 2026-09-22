@@ -66,7 +66,7 @@ async def get_user_threads(
     num_threads = request.num_threads
     page = request.page
 
-    logger = configure_logging(__name__, user_id=auth.user_id)
+    logger = configure_logging(__name__)
 
     if not auth.user_id:
         raise HTTPException(

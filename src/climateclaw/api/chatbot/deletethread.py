@@ -54,7 +54,7 @@ async def delete_thread(
 
     thread_id = request.thread_id
 
-    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.user_id)
+    logger = configure_logging(__name__, thread_id=thread_id)
 
     if not thread_id:
         raise HTTPException(
@@ -74,13 +74,13 @@ async def delete_thread(
         await storage.delete_thread(thread_id)
         logger.info(
             "Deleted thread from storage",
-            extra={"thread_id": thread_id, "user_id": auth.user_id},
+            extra={"thread_id": thread_id},
         )
         return {"detail": "Thread deleted."}
     except Exception as e:
         logger.exception(
             "Failed to delete thread from storage",
-            extra={"thread_id": thread_id, "user_id": auth.user_id, "error": str(e)},
+            extra={"thread_id": thread_id, "error": str(e)},
         )
         raise HTTPException(
             status_code=500, detail="Failed to remove thread from storage."
