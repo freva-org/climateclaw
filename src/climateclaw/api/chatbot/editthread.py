@@ -58,8 +58,7 @@ async def edit_thread(
 
     Dependencies:
         Auth (Authenticator):
-            Injected authentication object containing:
-            - username (used as user_id)
+            Injected authentication object containing user_id
 
     Returns:
         dict:
@@ -88,7 +87,7 @@ async def edit_thread(
 
     source_thread_id = request.source_thread_id
     user_index = request.user_index
-    user_name = auth.username
+    user_name = auth.user_id
 
     if not source_thread_id:
         raise HTTPException(
@@ -156,7 +155,7 @@ async def edit_thread(
 
     new_id = await new_thread_id()
     logger.info(f"Continuing the edited thread with thread-id: {new_id}")
-    logger = configure_logging(__name__, thread_id=new_id, user_id=auth.username)
+    logger = configure_logging(__name__, thread_id=new_id, user_id=auth.user_id)
     base_sv = update_threadid_in_content(new_id, base_sv, logger=logger)
 
     root_thread_id = (

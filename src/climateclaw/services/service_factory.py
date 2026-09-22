@@ -49,11 +49,11 @@ async def get_mcp_manager(
     """
     # Defaults to send; per-call headers (rest) are added at call time.
     default_headers: dict[str, str] = {
-        "thread-id": thread_id,
+        "X-Freva-Thread-Id": thread_id,
     }
 
     logger = configure_logging(
-        __name__, thread_id=thread_id, user_id=authenticator.username
+        __name__, thread_id=thread_id, user_id=authenticator.user_id
     )
 
     try:

@@ -79,7 +79,90 @@ def add_litellm_syslog_logging(services: dict) -> None:
             }
 
 
-def expand_service(name, service, replicas):
+# NOTE: freva-dev and nextgems currently share deployment instance
+# so we mount both their preview paths together
+PREVIEW_MOUNTS = {
+    "codes": ["/work/kd1418/codes/work/share/preview/climateclaw"],
+    "eve": ["/work/ch1187/clint/freva-dev/share/preview/climateclaw"],
+    "freva-dev": ["/work/ch1187/clint/freva-dev/share/preview/climateclaw"],
+    "nextgems": ["/work/ch1187/clint/nextgems/share/preview/climateclaw"],
+    "regiklim-ces": ["/work/ch1187/regiklim-work/share/preview/climateclaw"],
+    "xces": ["/work/bm1159/XCES/xces-work/share/preview/climateclaw"],
+}
+
+WEBSITES = {
+    "codes": "https://codes.dkrz.de",
+    "eve": "https://eve.dkrz.de",
+    "freva-dev": "https://freva.dkrz.de",
+    "nextgems": "https://gems.dkrz.de",
+    "regiklim-ces": "https://www-regiklim.dkrz.de",
+    "xces": "https://www.xces.dkrz.de",
+}
+
+
+def preview_paths_for_project(project: str | None) -> list[str] | None:
+    if not project:
+        return None
+
+    if project not in PREVIEW_MOUNTS:
+        valid_projects = ", ".join(sorted(PREVIEW_MOUNTS))
+        print(
+            f"ERROR: unknown project '{project}'. Valid projects: {valid_projects}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return PREVIEW_MOUNTS[project]
+
+
+def website_for_project(project: str | None) -> list[str] | None:
+    if not project:
+        return None
+
+    if project not in WEBSITES:
+        valid_projects = ", ".join(sorted(WEBSITES))
+        print(
+            f"ERROR: unknown project '{project}'. Valid projects: {valid_projects}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return WEBSITES[project]
+
+
+def set_environment(service: dict, key: str, value: str) -> None:
+    environment = service.get("environment")
+
+    if environment is None:
+        service["environment"] = [f"{key}={value}"]
+        return
+
+    if isinstance(environment, dict):
+        environment[key] = value
+        return
+
+    if isinstance(environment, list):
+        prefix = f"{key}="
+        service["environment"] = [
+            item for item in environment if not str(item).startswith(prefix)
+        ]
+        service["environment"].append(f"{key}={value}")
+        return
+
+    raise TypeError("service environment must be a mapping or a list")
+
+
+def set_project_environment(service: dict, project: str | None) -> None:
+    if not project:
+        return
+
+    set_environment(service, "CLIMATECLAW_PROJECT_NAME", project)
+    set_environment(
+        service, "CLIMATECLAW_PROJECT_WEBSITE", website_for_project(project)
+    )
+
+
+def expand_service(name, service, replicas, preview_paths=None):
     services = {}
 
     for i in range(1, replicas + 1):
@@ -93,6 +176,12 @@ def expand_service(name, service, replicas):
             ]
 
         s["hostname"] = replica_name + "-${CLIMATECLAW_INSTANCE_NAME}"
+        if preview_paths:
+            volumes = s.get("volumes", [])
+            volumes.extend(
+                f"{preview_path}:/app/cache:rw" for preview_path in preview_paths
+            )
+            s["volumes"] = volumes
 
         services[replica_name] = s
 
@@ -184,6 +273,7 @@ def haproxy_dependencies(
 def haproxy_backend(name, port, service_names, sticky_mode=None):
     lines = []
     lines.append(f"backend be_{name}")
+
     if sticky_mode:
         lines.append(f"    balance {sticky_mode}")
         lines.append("    hash-type consistent")
@@ -274,7 +364,7 @@ def generate_haproxy(
             "climateclaw",
             backend_port,
             service_instance_names("climateclaw", backend_n, services),
-            "url_param thread_id",
+            "hdr(X-Freva-Thread-Id)",
         )
     )
 
@@ -301,7 +391,7 @@ def generate_haproxy(
                 s,
                 port_dict[s],
                 service_instance_names(s, replica_dict[s], services),
-                "hdr(thread-id)",
+                "hdr(X-Freva-Thread-Id)",
             )
         )
 
@@ -311,10 +401,15 @@ def generate_haproxy(
 def main():
 
     if len(sys.argv) < 2:
-        print("Usage: gen_compose.py docker-compose.dev.yml")
+        print("Usage: gen_compose.py docker-compose.dev.yml [project]")
         sys.exit(1)
 
     compose_path = sys.argv[1]
+    project = (
+        sys.argv[2] if len(sys.argv) > 2 else os.environ.get("CLIMATECLAW_PROJECT_NAME")
+    )
+
+    preview_paths = preview_paths_for_project(project)
 
     backend_port = os.environ.get("CLIMATECLAW_BACKEND_PORT", "8502")
     backend_target_port = os.environ.get("CLIMATECLAW_TARGET_PORT", "8502")
@@ -355,13 +450,18 @@ def main():
 
     for name, svc in services.items():
         if name == "climateclaw":
+            set_project_environment(svc, project)
             new_services.update(expand_service(name, svc, backend_n))
         elif name == "litellm":
             new_services.update(expand_service(name, svc, litellm_n))
         elif name == "ollama":
             new_services.update(expand_ollama_service(name, svc, ollama_n))
         elif name in MCP_SERVICES:
-            if name in available_mcp_servers:
+            if name == "code-server":
+                new_services.update(
+                    expand_service(name, svc, mcp_replica_n[name], preview_paths)
+                )
+            elif name in available_mcp_servers:
                 new_services.update(expand_service(name, svc, mcp_replica_n[name]))
         elif name == "freva-web":
             env = [

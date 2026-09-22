@@ -95,6 +95,11 @@ def custom_openapi():
         "in": "header",
         "name": "x-freva-rest-url",
     }
+    security_schemes["FrevaThreadId"] = {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Freva-Thread-Id",
+    }
     security_schemes["RequestId"] = {
         "type": "apiKey",
         "in": "header",
@@ -112,6 +117,7 @@ def custom_openapi():
                 {
                     "BearerAuth": [],
                     "FrevaRestUrl": [],
+                    "FrevaThreadId": [],
                     "RequestId": [],
                 }
             )
