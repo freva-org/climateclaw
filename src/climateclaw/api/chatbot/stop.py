@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from starlette.status import HTTP_422_UNPROCESSABLE_CONTENT
 
 from climateclaw.core.logging_setup import configure_logging
@@ -8,11 +9,13 @@ from climateclaw.services.streaming.active_conversations import request_stop
 router = APIRouter()
 
 
-@router.get("/stop", dependencies=[AuthRequired])
-async def stop_get(
-    thread_id: str | None = Query(
-        default=None, description="Thread to stop (optional)"
-    ),
+class StopRequest(BaseModel):
+    thread_id: str | None = None
+
+
+@router.post("/stop", dependencies=[AuthRequired])
+async def stop(
+    request: StopRequest,
 ):
     """
     Stop Active Conversation Streaming.
@@ -24,7 +27,7 @@ async def stop_get(
     Parameters:
         thread_id (str | None):
             The unique identifier of the thread whose streaming process
-            should be stopped. Must be provided as a query parameter.
+            should be stopped. Must be provided in the request body.
 
     Returns:
         dict:
@@ -39,11 +42,12 @@ async def stop_get(
         HTTPException (500):
             - Failure to request stop.
     """
+    thread_id = request.thread_id
 
     if not thread_id:
         raise HTTPException(
             status_code=HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Thread ID is missing. Please provide a thread_id in the query parameters.",
+            detail="Thread ID is missing. Please provide a thread_id in the request body.",
         )
 
     logger = configure_logging(__name__, thread_id=thread_id)
@@ -53,14 +57,15 @@ async def stop_get(
         if ok:
             logger.debug("Initiated stop request", extra={"thread_id": thread_id})
             return {"detail": "Conversation stopped."}
-        else:
-            logger.exception(
-                f"Thread not found in the registry. Nothing to stop: {thread_id}"
-            )
-            raise HTTPException(
-                status_code=404,
-                detail=f"Conversation with given thread-id not found in the registry: {thread_id}",
-            )
+        logger.warning(
+            f"Thread not found in the registry. Nothing to stop: {thread_id}"
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=f"Conversation with given thread-id not found in the registry: {thread_id}",
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Failed to stop the thread {thread_id}: {e}")
         raise HTTPException(

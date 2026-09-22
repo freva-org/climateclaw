@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import (
@@ -22,6 +23,10 @@ from climateclaw.services.streaming.stream_variants import (
 router = APIRouter()
 
 
+class GetThreadRequest(BaseModel):
+    thread_id: str | None = None
+
+
 def _post_process(variants: list[StreamVariant]) -> list[SVDict]:
     """Remove Prompt variants before returning, drop any StreamEnd except the final one, and drop 'unexpected manner' ones anywhere."""
     items = [item for item in variants if not is_prompt(item)]
@@ -29,17 +34,15 @@ def _post_process(variants: list[StreamVariant]) -> list[SVDict]:
     for i, v in enumerate(items):
         if isinstance(v, SVStreamEnd):
             is_last = i == len(items) - 1
-            if (not is_last) or (
-                "unexpected manner" in (getattr(v, "message", "") or "").lower()
-            ):
+            if (not is_last) or ("unexpected manner" in (v.content or "").lower()):
                 continue
         cleaned.append(from_sv_to_json(v))
     return cleaned
 
 
-@router.get("/getthread", dependencies=[AuthRequired])
+@router.post("/getthread", dependencies=[AuthRequired])
 async def get_thread(
-    thread_id: str | None = Query(None),
+    request: GetThreadRequest,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -56,8 +59,7 @@ async def get_thread(
             as a query parameter.
 
     Dependencies:
-        auth (Authenticator): Injected authentication object containing
-            username
+        auth (Authenticator): Injected authentication object containing user_id
 
     Returns:
         List[dict]:
@@ -75,13 +77,15 @@ async def get_thread(
             - If an error occurs while reading or processing the thread.
     """
 
+    thread_id = request.thread_id
+
     if not thread_id:
         raise HTTPException(
             status_code=422,
             detail="Thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.username)
+    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.user_id)
 
     try:
         messages = await get_conversation_history(
@@ -104,7 +108,7 @@ async def get_thread(
 
     logger.info(
         "Fetched thread content.",
-        extra={"thread_id": thread_id, "user_id": auth.username},
+        extra={"thread_id": thread_id, "user_id": auth.user_id},
     )
 
     return content

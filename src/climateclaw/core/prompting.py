@@ -7,10 +7,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 from climateclaw.core.available_chatbots import model_is_gpt_5, model_is_ollama
-from climateclaw.services.streaming.stream_variants import (
-    help_convert_sv_ccrm,
-    parse_examples_jsonl,
-)
+from climateclaw.services.streaming.openai_helpers import help_convert_sv_ccrm
+from climateclaw.services.streaming.stream_variants import parse_examples_jsonl
 
 """
 Prompt loading & assembly (non-streaming), single API for all models.
@@ -18,7 +16,7 @@ Prompt loading & assembly (non-streaming), single API for all models.
 What this module does
 ---------------------
 • Pick a prompt-set directory based on the model (GPT-5 falls back to baseline for now)
-• Load 3 prompt assets: starting_prompt.txt, examples.jsonl, summary_prompt.txt
+• Load 3 prompt assets: starting_prompt.md, examples.jsonl, summary_prompt.md
 • Build OpenAI Chat messages in this order:
     1) System(starting_prompt)   [name="prompt"]
     2) Example conversation messages (from examples.jsonl via StreamVariants)
@@ -34,8 +32,8 @@ Differences from Rust (documented for future parity)
 logger = logging.getLogger(__name__)
 
 # Filenames we expect in a prompt set
-STARTING_TXT = "starting_prompt.txt"
-SUMMARY_TXT = "summary_prompt.txt"
+STARTING_TXT = "starting_prompt.md"
+SUMMARY_TXT = "summary_prompt.md"
 EXAMPLES_JL = "examples.jsonl"
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]

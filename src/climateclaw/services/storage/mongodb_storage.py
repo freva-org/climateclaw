@@ -55,6 +55,11 @@ class ThreadStorage:
     async def close(self) -> None:
         await self.client.close()
 
+    async def thread_exists(self, thread_id: str) -> bool:
+        coll = self.db[MONGODB_COLLECTION_NAME]
+        exists = await coll.find_one({"thread_id": thread_id}, {"_id": 1}) is not None
+        return exists
+
     async def save_thread(
         self,
         thread_id: str,
@@ -126,14 +131,24 @@ class ThreadStorage:
     async def list_recent_threads(
         self,
         user_id: str,
+        username: str | None = None,
         limit: int = 20,
         page: int = 0,
     ) -> tuple[list[Thread], int]:
         logger = configure_logging(__name__, user_id=user_id)
         coll = self.db[MONGODB_COLLECTION_NAME]
-        n_threads = await coll.count_documents({"user_id": user_id})
+        ownership_filter: dict = {"user_id": user_id}
+        if username:
+            ownership_filter = {
+                "$or": [
+                    {"user_id": user_id},
+                    {"user_id": username},
+                ]
+            }
+
+        n_threads = await coll.count_documents(ownership_filter)
         cursor = (
-            coll.find({"user_id": user_id})
+            coll.find(ownership_filter)
             .sort([("date", -1)])
             .skip(page * limit)
             .limit(limit)
@@ -141,7 +156,7 @@ class ThreadStorage:
         docs = await cursor.to_list(length=limit)
         threads = [
             Thread(
-                user_id=d["user_id"],
+                user_id=d.get("user_id") or d.get("username") or user_id,
                 thread_id=d["thread_id"],
                 date=d["date"],
                 topic=d.get("topic", ""),
@@ -349,7 +364,7 @@ def update_threadid_in_content(
     new_id: str, content: list[StreamVariant], logger
 ) -> list[StreamVariant]:
     if isinstance(content[0], SVServerHint):
-        content[0] = SVServerHint(data={"thread_id": new_id})
+        content[0] = SVServerHint(content={"thread_id": new_id})
         logger.info("Updated ServerHint with new thread-id.")
     else:
         if any(isinstance(c, SVServerHint) for c in content):
@@ -359,5 +374,5 @@ def update_threadid_in_content(
             logger.info(
                 "ServerHint is missing in the thread content. It is inserted with the new thread-id."
             )
-            content = [SVServerHint(data={"thread_id": new_id})] + content
+            content = [SVServerHint(content={"thread_id": new_id})] + content
     return content

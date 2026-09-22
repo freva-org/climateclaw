@@ -59,7 +59,6 @@ def GOOD_HEADERS():
     return {
         "Authorization": "Bearer test-token",
         "x-freva-rest-url": "http://rest.example",
-        "x-freva-config-path": "dummy.conf",
     }
 
 
@@ -107,7 +106,7 @@ class DummyCollection:
                 docs = docs[:length]
             return docs[: self._limit] if self._limit is not None else docs
 
-    async def find_one(self, q):
+    async def find_one(self, q, unique=None):
         return self.storage.get(q.get("thread_id"))
 
     def find(self, q):
@@ -250,7 +249,9 @@ def patch_save_thread(monkeypatch):
 
 @pytest.fixture
 def patch_user_threads(monkeypatch):
-    async def fake_get_user_threads(self, user_id: str, limit: int = 20, page: int = 0):
+    async def fake_get_user_threads(
+        self, user_id: str, username=None, limit: int = 20, page: int = 0
+    ):
         threads = [
             SimpleNamespace(
                 user_id=user_id,
@@ -314,6 +315,11 @@ def patch_registry(monkeypatch):
     act_conv.Registry.clear()
 
 
+def register_fake_mcp(patch_registry, thread_id, fake_mcp):
+    patch_registry({thread_id: []})
+    act_conv.Registry[thread_id].mcp_manager = fake_mcp
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # STREAM PATCH
 # ──────────────────────────────────────────────────────────────────────────────
@@ -327,8 +333,8 @@ def patch_stream(monkeypatch):
             SVServerHint,
         )
 
-        yield SVServerHint(data={"thread_id": "t-abc"})
-        yield SVAssistant(text="hello")
+        yield SVServerHint(content={"thread_id": "t-abc"})
+        yield SVAssistant(content="hello")
         return
 
     monkeypatch.setattr(
@@ -345,6 +351,12 @@ def patch_stream(monkeypatch):
 
 
 class DummyMcpManager:
+    def __init__(self, tools=None):
+        self._tools = tools or []
+
+    async def available_tools(self):
+        return self._tools
+
     async def close(self) -> None:
         pass
 

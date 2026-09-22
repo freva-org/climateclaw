@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import (
@@ -14,10 +15,14 @@ from climateclaw.services.storage.mongodb_storage import ThreadStorage
 router = APIRouter()
 
 
-@router.get("/getuserthreads", dependencies=[AuthRequired])
+class GetUserThreadsRequest(BaseModel):
+    num_threads: int = 20
+    page: int = 0
+
+
+@router.post("/getuserthreads", dependencies=[AuthRequired])
 async def get_user_threads(
-    num_threads: int = 20,
-    page: int = 0,
+    request: GetUserThreadsRequest,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -58,9 +63,12 @@ async def get_user_threads(
         HTTPException (500):
             - If fetching the user's thread history fails.
     """
-    logger = configure_logging(__name__, user_id=auth.username)
+    num_threads = request.num_threads
+    page = request.page
 
-    if not auth.username:
+    logger = configure_logging(__name__, user_id=auth.user_id)
+
+    if not auth.user_id:
         raise HTTPException(
             status_code=422,
             detail="Missing user_id (auth).",
@@ -68,13 +76,13 @@ async def get_user_threads(
 
     try:
         threads, total_num_threads = await storage.list_recent_threads(
-            auth.username, limit=num_threads, page=page
+            auth.user_id, username=auth.username, limit=num_threads, page=page
         )
 
         logger.info(
             "Fetched recent threads",
             extra={
-                "user_id": auth.username,
+                "user_id": auth.user_id,
                 "thread_count": len(threads),
                 "requested": num_threads,
             },

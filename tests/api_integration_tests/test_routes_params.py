@@ -5,7 +5,9 @@ import pytest
 async def test_getthread_requires_thread_id(stub_resp, client, GOOD_HEADERS):
     with stub_resp:
         async with client:
-            r = await client.get("/api/chatbot/getthread", headers=GOOD_HEADERS)
+            r = await client.post(
+                "/api/chatbot/getthread", json={}, headers=GOOD_HEADERS
+            )
             assert r.status_code == 422
             assert (
                 r.json()["detail"]
@@ -19,9 +21,9 @@ async def test_getthread_ok_with_thread_id(
 ):
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/getthread",
-                params={"thread_id": "t-123"},
+                json={"thread_id": "t-123"},
                 headers=GOOD_HEADERS,
             )
             assert r.status_code == 200
@@ -44,10 +46,10 @@ async def test_streamresponse_accepts_params_and_headers(
 ):
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/streamresponse",
-                params={"thread_id": "t-999", "input": "hello", "user_id": "alice"},
-                headers={**GOOD_HEADERS, "x-freva-config-path": "/tmp/config.yml"},
+                json={"thread_id": "t-999", "input": "hello", "user_id": "alice"},
+                headers={**GOOD_HEADERS},
             )
             assert r.status_code == 200
             assert r.headers.get("content-type", "").startswith("application/x-ndjson")
@@ -55,3 +57,35 @@ async def test_streamresponse_accepts_params_and_headers(
             text = r.text
             assert "ServerHint" in text
             assert "Assistant" in text
+
+
+@pytest.mark.asyncio
+async def test_stop_requires_thread_id(stub_resp, client, GOOD_HEADERS):
+    with stub_resp:
+        async with client:
+            r = await client.post(
+                "/api/chatbot/stop",
+                json={},
+                headers=GOOD_HEADERS,
+            )
+            assert r.status_code == 422
+            assert (
+                r.json()["detail"]
+                == "Thread ID is missing. Please provide a thread_id in the request body."
+            )
+
+
+@pytest.mark.asyncio
+async def test_stop_returns_404_for_unknown_thread(stub_resp, client, GOOD_HEADERS):
+    with stub_resp:
+        async with client:
+            r = await client.post(
+                "/api/chatbot/stop",
+                json={"thread_id": "missing-thread"},
+                headers=GOOD_HEADERS,
+            )
+            assert r.status_code == 404
+            assert (
+                r.json()["detail"]
+                == "Conversation with given thread-id not found in the registry: missing-thread"
+            )

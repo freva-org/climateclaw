@@ -3,12 +3,12 @@ from __future__ import annotations
 import re
 from typing import List
 
+from climateclaw.core.available_chatbots import default_chatbot_local
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
 from climateclaw.services.streaming.stream_variants import StreamVariant, SVUser
 
 DEFAULT_LOGGER = configure_logging(__name__)
-
 
 _NO_TOPIC = "No topic yet"
 
@@ -53,7 +53,7 @@ def _extract_first_meaningful_user_text(content: List[StreamVariant]) -> str:
     """Return the first non-empty user text that is not exact-match filler."""
     for sv in content:
         if isinstance(sv, SVUser):
-            text = _normalize_text(getattr(sv, "text", ""))
+            text = _normalize_text(sv.content)
             if text and not _is_low_information(text):
                 return text
     return ""
@@ -101,7 +101,7 @@ async def summarize_topic(content: List[StreamVariant]) -> str:
     try:
         resp = await acomplete(
             messages=[{"role": "user", "content": prompt}],
-            model="gpt-4.1-mini",
+            model=default_chatbot_local(),
             max_tokens=30,
             temperature=0.1,
         )
