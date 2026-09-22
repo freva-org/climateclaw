@@ -114,6 +114,7 @@ def _ensure_base_logging() -> None:
                     "Invalid CLIMATECLAW_SYSLOG_PROTOCOL=%r; expected tcp or udp",
                     settings.SYSLOG_PROTOCOL,
                 )
+                _CONFIGURED = True
                 return
 
             try:
