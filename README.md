@@ -72,7 +72,7 @@ Generated artifacts that persist across runs:
 - `logs/` (when mounted in Docker)
 
 ## Architecture at a Glance
-1. **FastAPI layer** enforces auth via `AuthRequired` (Bearer tokens validated against `x-freva-rest-url`), injects usernames, and validates per-request headers.
+1. **FastAPI layer** enforces auth via `AuthRequired` (Bearer tokens validated against `x-freva-rest-url`), derives stable UUIDv5 pseudonymous user IDs from usernames, and validates per-request headers.
 2. **LiteLLM proxy** (`CLIMATECLAW_LITE_LLM_ADDRESS`) provides OpenAI-compatible chat + embeddings endpoints; completions stream into `StreamVariant` classes that normalize assistant text, code blocks, tool hints, images, and server hints.
 3. **Persistence** uses MongoDB for storing threads and user feedback.
 4. **MCP Manager** (`src/climateclaw/services/mcp/mcp_manager.py`) connects to tool servers listed in `CLIMATECLAW_AVAILABLE_MCP_SERVERS`, discovers tools, exposes OpenAI function schemas to LiteLLM, and routes tool invocations with per-thread session ids.
@@ -101,7 +101,7 @@ Generated artifacts that persist across runs:
 - Clients can call `/api/chatbot/stop?thread_id=...` to move a conversation into `STOPPING`; the streaming loop exits and cancels in-flight MCP requests (code, rag, web-search) via the shared `ActiveRequest` registry.
 
 ## Persistence, Prompts, and Assets
-- **MongoDB (`mongodb_storage.py`)**: canonical record for threads. Each document stores `user_id`, `thread_id`, ISO timestamp, topic (summarized via LiteLLM), and serialized `StreamVariant` list.
+- **MongoDB (`mongodb_storage.py`)**: canonical record for threads. Each document stores a UUIDv5 pseudonymous `user_id`, `thread_id`, ISO timestamp, topic (summarized via LiteLLM), and serialized `StreamVariant` list.
 - **`cache/` scratch**: `create_dir_at_cache()` ensures each user/thread has a writable directory for generated files (plots, CSVs). Entries are sanitized if user IDs contain unsupported characters.
 - **Prompt library**: `prompt_library/baseline` contains `starting_prompt.txt`, `summary_prompt.txt`, and `examples.jsonl`. GPT-5 models currently fall back to baseline prompts (warning logged). Customize by adding new prompt sets and updating `_resolve_baseline_dir()` / `_resolve_gpt5_dir_or_placeholder()`.
 - **Resources**: `resources/stableclimgen` seeds the RAG MCP server. Drop additional corpora per library folder and list them in `CLIMATECLAW_AVAILABLE_LIBRARIES` inside `src/climateclaw/tools/rag/server.py`.

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import HTTPException, Request, status
 from starlette.datastructures import Headers
@@ -9,6 +10,12 @@ from climateclaw.core.settings import Settings, get_settings
 from .helpers import bearer_token_from_header, get_username_from_token
 
 log = configure_logging(__name__)
+
+
+def anonymize_username(username: str) -> str:
+    """Create a stable UUID-based user ID for storage and ownership checks."""
+    normalized_username = username.strip().lower()
+    return str(uuid5(NAMESPACE_URL, f"climateclaw:user:{normalized_username}"))
 
 
 @dataclass
@@ -26,6 +33,7 @@ class Authenticator:
     request: Request | None
     settings: Settings
     username: str
+    user_id: str
     rest_url: str | None
     access_token: str | None
 
@@ -65,6 +73,7 @@ class Authenticator:
                     request=request,
                     settings=settings,
                     username=username,
+                    user_id=anonymize_username(username),
                     rest_url=rest_url,
                     access_token=access_token,
                 )
@@ -89,6 +98,7 @@ class Authenticator:
             request=None,
             settings=get_settings(),
             username=username,
+            user_id=anonymize_username(username),
             rest_url=rest_url,
             access_token=access_token,
         )

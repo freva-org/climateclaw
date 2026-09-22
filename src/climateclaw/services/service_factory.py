@@ -53,7 +53,7 @@ async def get_mcp_manager(
     }
 
     logger = configure_logging(
-        __name__, thread_id=thread_id, user_id=authenticator.username
+        __name__, thread_id=thread_id, user_id=authenticator.user_id
     )
 
     try:
