@@ -193,7 +193,9 @@ class McpClient:
             "Mcp-Protocol-Version": MCP_PROTOCOL_VERSION,
         }
         h.update(self.default_headers)
-        h[REQUEST_ID_HEADER] = get_request_id()
+        request_id = get_request_id()
+        if request_id:
+            h[REQUEST_ID_HEADER] = request_id
 
         if include_session and session_id:
             h["Mcp-Session-Id"] = session_id

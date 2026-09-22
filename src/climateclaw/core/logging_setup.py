@@ -33,8 +33,8 @@ REQUEST_ID_CONTEXT: ContextVar[str | None] = ContextVar(
 )
 
 
-def get_request_id() -> str:
-    return REQUEST_ID_CONTEXT.get() or "-"
+def get_request_id() -> str | None:
+    return REQUEST_ID_CONTEXT.get() or None
 
 
 def set_request_id(request_id: str | None):
@@ -72,7 +72,7 @@ class ContextFilter(logging.Filter):
         record.user_id = getattr(record, "user_id", self.user_id) or "-"
         record_request_id = getattr(record, "request_id", None)
         record.request_id = (
-            get_request_id() if record_request_id in (None, "-") else record_request_id
+            get_request_id() if record_request_id is None else record_request_id
         )
         return True
 
