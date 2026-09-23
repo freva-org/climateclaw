@@ -52,7 +52,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--start",
-        default="2026-09-15T18:00:00Z",
+        default="2026-09-19T16:00:00Z",
         help="Only include requests after this time, e.g. 2026-09-18T00:00:00Z",
     )
     parser.add_argument(
