@@ -8,7 +8,7 @@ The project integrates LiteLLM-native prompting, MongoDB-backed conversation sta
 - Streaming responses via LiteLLM/OpenAI-compatible SSE (`application/x-ndjson`) with code + image variants
 - Persistent conversation threads in MongoDB and JSONL files (`threads/`), plus per-user scratch space (`cache/`)
 - MCP manager that wires the backend to dedicated tool servers
-- Docker compose stack that includes LiteLLM, Ollama, the backend, and both MCP servers
+- Docker compose stack that includes LiteLLM, the backend, and both MCP servers
 - Comprehensive pytest suite covering auth, prompting, storage, litellm client helpers, and route matrices
 - Web-search MCP server for ICON model + DKRZ/HPC docs with cancellable OpenAI Web Search calls
 
@@ -31,9 +31,45 @@ Services that start:
 - `web-search-server`: MCP server doing web search via OpenAI API and exposing `web_search`
 - `rag-server`: MCP server exposing `get_context_from_resources`
 - `litellm`: LiteLLM proxy that reads `litellm_config.yaml`
-- `ollama`: Optional local model runner for LiteLLM backends
 
-Bind mounts expose `/work`, logs, threads, and shared `cache` to other Freva services. Provide GPU access to Ollama via Docker device reservations when needed.
+Bind mounts expose `/work`, logs, threads, and shared `cache` to other Freva services.
+
+### vLLM inference with Apptainer
+
+The Docker Compose stack delegates local-model inference to an OpenAI-compatible
+vLLM endpoint. To run that endpoint on a GPU host with Apptainer, copy and
+configure the example environment file:
+
+```bash
+cp apptainer/.env.example apptainer/.env
+```
+
+Set `APPTAINER_BASE_DIR`, `VLLM_OCI_IMAGE`, `VLLM_MODEL`, GPU and serving
+settings, and `VLLM_API_KEY` in `apptainer/.env`. Then pull the configured
+image and start vLLM:
+
+```bash
+./apptainer/vllm/run.sh pull
+./apptainer/vllm/run.sh up
+```
+
+Use `./apptainer/vllm/run.sh status`, `logs`, and `down` to manage the service.
+The runner uses `--nv`, persists Apptainer, Hugging Face, and vLLM caches below
+`APPTAINER_BASE_DIR`, and supports additional vLLM options through
+`EXTRA_VLLM_ARGS`.
+
+Configure the main `.env` so LiteLLM can reach the service:
+
+```bash
+CLIMATECLAW_VLLM_MODEL_ID="<model-id>"
+CLIMATECLAW_VLLM_API_BASE="http://<vllm-host>:8000/v1"
+CLIMATECLAW_VLLM_API_KEY="<vllm-api-key>"
+```
+
+`<vllm-host>` must be reachable from the LiteLLM container. This separation
+also lets future deployments replace the locally managed Apptainer service with
+dedicated LLM-inference infrastructure without changing ClimateClaw's client
+interface.
 
 ## Quick Start (local dev)
 
@@ -114,7 +150,7 @@ Generated artifacts that persist across runs:
 - **Manager** (`src/climateclaw/services/mcp/mcp_manager.py`): caches clients, discovers tool schemas, exports OpenAI function definitions, and pins MCP session ids to thread ids for deterministic tool contexts.
 
 ## Development Workflow
-- **Spin up dev stack**: `./dev.sh up -d --build` (FastAPI, rag, code, web-search, litellm, ollama). Use `./dev.sh up --build` to tail the app.
+- **Spin up dev stack**: `./dev.sh up -d --build` (FastAPI, rag, code, web-search, litellm). Use `./dev.sh up --build` to tail the app.
 - **Unit/functional tests**: `uv run pytest` or focus, e.g. `uv run pytest tests/test_auth.py -k bearer`.
 - **Integration: code interpreter**: `CLIMATECLAW_CODE_SERVER_URL=http://localhost:8051 uv run pytest tests/full_integration_tests/test_code_interpreter.py -m integration`.
 - **Integration: web-search**: `CLIMATECLAW_WEB_SEARCH_SERVER_URL=http://localhost:8052 uv run pytest tests/full_integration_tests/test_web_search.py -m integration`.

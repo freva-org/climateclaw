@@ -217,7 +217,7 @@ async def test_stream_with_tools_rejects_malformed_code_arguments_without_mcp_ca
 
 
 @pytest.mark.asyncio
-async def test_stream_with_tools_streams_raw_code_chunks_for_non_ollama_models(
+async def test_stream_with_tools_streams_raw_code_chunks_for_non_local_models(
     patch_registry,
     patch_thread_storage,
     monkeypatch,
@@ -235,7 +235,7 @@ async def test_stream_with_tools_streams_raw_code_chunks_for_non_ollama_models(
         patch_registry=patch_registry,
         patch_thread_storage=patch_thread_storage,
         monkeypatch=monkeypatch,
-        thread_id="t-non-ollama-code",
+        thread_id="t-non-local-code",
         model="gpt-4.1",
         raw_arguments=raw_arguments,
     )
@@ -255,7 +255,7 @@ async def test_stream_with_tools_streams_raw_code_chunks_for_non_ollama_models(
     ],
 )
 @pytest.mark.asyncio
-async def test_stream_with_tools_emits_normalized_code_later_for_ollama_models(
+async def test_stream_with_tools_emits_normalized_code_later_for_local_models(
     patch_registry,
     patch_thread_storage,
     monkeypatch,
@@ -267,7 +267,7 @@ async def test_stream_with_tools_emits_normalized_code_later_for_ollama_models(
         patch_registry=patch_registry,
         patch_thread_storage=patch_thread_storage,
         monkeypatch=monkeypatch,
-        thread_id=f"t-ollama-code-{model}",
+        thread_id=f"t-local-code-{model}",
         model=model,
         raw_arguments=raw_arguments,
     )
