@@ -34,6 +34,43 @@ Services that start:
 
 Bind mounts expose `/work`, logs, threads, and shared `cache` to other Freva services.
 
+### vLLM inference with Apptainer
+
+The Docker Compose stack delegates local-model inference to an OpenAI-compatible
+vLLM endpoint. To run that endpoint on a GPU host with Apptainer, copy and
+configure the example environment file:
+
+```bash
+cp apptainer/.env.example apptainer/.env
+```
+
+Set `APPTAINER_BASE_DIR`, `VLLM_OCI_IMAGE`, `VLLM_MODEL`, GPU and serving
+settings, and `VLLM_API_KEY` in `apptainer/.env`. Then pull the configured
+image and start vLLM:
+
+```bash
+./apptainer/vllm/run.sh pull
+./apptainer/vllm/run.sh up
+```
+
+Use `./apptainer/vllm/run.sh status`, `logs`, and `down` to manage the service.
+The runner uses `--nv`, persists Apptainer, Hugging Face, and vLLM caches below
+`APPTAINER_BASE_DIR`, and supports additional vLLM options through
+`EXTRA_VLLM_ARGS`.
+
+Configure the main `.env` so LiteLLM can reach the service:
+
+```bash
+CLIMATECLAW_VLLM_MODEL_ID="<model-id>"
+CLIMATECLAW_VLLM_API_BASE="http://<vllm-host>:8000/v1"
+CLIMATECLAW_VLLM_API_KEY="<vllm-api-key>"
+```
+
+`<vllm-host>` must be reachable from the LiteLLM container. This separation
+also lets future deployments replace the locally managed Apptainer service with
+dedicated LLM-inference infrastructure without changing ClimateClaw's client
+interface.
+
 ## Quick Start (local dev)
 
 ### Requirements
