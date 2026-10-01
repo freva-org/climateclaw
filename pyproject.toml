@@ -54,6 +54,7 @@ dev = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=6.0.0",
+    "matplotlib>=3.11.1",
 ]
 test = [
     "jupyter-client>=8.8.0",

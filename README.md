@@ -1,7 +1,8 @@
 # ClimateClaw
+
 ClimateClaw is a Python service for building AI-assisted climate-data workflows. It provides the API, conversation handling, model prompting, persistent thread storage, and tool orchestration needed to support interactive work with climate data.
 
-The project integrates LiteLLM-native prompting, MongoDB-backed conversation state, and MCP-based tool execution for retrieval, code execution, and domain-specific automation.
+The project integrates LiteLLM-native prompting, MongoDB-backed conversation states, and MCP-based tool execution for code execution, web/documentation search, code retrieval, and domain-specific automation.
 
 ## Highlights
 - FastAPI app with strict auth parity to the production Rust service (`/api/chatbot/*`)
@@ -29,7 +30,6 @@ Services that start:
 - `climateclaw`: FastAPI app (debugpy toggle via `DEBUG=true` for remote debugging session)
 - `code-server`: MCP server running the sandboxed Jupyter kernel and exposing `code_interpreter`
 - `web-search-server`: MCP server doing web search via OpenAI API and exposing `web_search`
-- `rag-server`: MCP server exposing `get_context_from_resources`
 - `litellm`: LiteLLM proxy that reads `litellm_config.yaml`
 - `ollama`: Optional local model runner for LiteLLM backends
 
@@ -67,6 +67,7 @@ Create `.env` (used by FastAPI, Docker, and MCP servers). See `.env.example` for
 | `litellm_config.yaml` | Source of truth for model catalog (consumed by `available_chatbots()`) |
 
 Generated artifacts that persist across runs:
+
 - `threads/` (JSONL transcript per thread id)
 - `cache/{user_id}/{thread_id}` (LLM-created files, plots, etc.)
 - `logs/` (when mounted in Docker)
@@ -110,6 +111,7 @@ Generated artifacts that persist across runs:
 - **Code interpreter** (`src/climateclaw/tools/code/server.py`): spins up per-session Jupyter kernels, sanitizes input, enforces configurable timeouts, and injects Freva config via environment variables. Outputs include stdout/stderr, display data, and structured errors.
 - **Web search server** (`src/climateclaw/tools/web_search/server.py`): calls OpenAI Web Search (`gpt-4.1`) constrained to ICON model + DKRZ/HPC docs. Honors request cancellation.
 - **RAG server** (`src/climateclaw/tools/rag/server.py`): indexes documentation with custom loaders + splitters, stores embeddings in MongoDB (`embeddings`), and surfaces a single tool `get_context_from_resources`. LiteLLM requests embed queries through the same proxy (`CLIMATECLAW_LITE_LLM_ADDRESS`).
+- **Plugin code search server** (`src/climateclaw/tools/plugin_code_search/server.py`): retrieves code from GitLab repositories used as Freva plugins for climate data analysis (included projects: *Coming Decade*, *ClimXtreme*, *RegiKlim*). Returns scraped code, doc and/or config files as query-relevant context.
 - **Header gate** (`src/climateclaw/tools/header_gate.py`): wraps each MCP ASGI app so critical headers become ContextVars and requests fail fast when missing/invalid (e.g., missing Mongo URI yields SSE-friendly JSON-RPC errors).
 - **Manager** (`src/climateclaw/services/mcp/mcp_manager.py`): caches clients, discovers tool schemas, exports OpenAI function definitions, and pins MCP session ids to thread ids for deterministic tool contexts.
 

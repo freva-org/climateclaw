@@ -65,9 +65,10 @@ jobs:
 
       - name: Start dev stack
         run: |
-          ./dev.sh up code-server web-search-server -d --wait --build --remove-orphans || {
+          ./dev.sh up code-server web-search-server plugin-code-search-server -d --wait --build --remove-orphans || {
             docker compose ps -a
             docker compose logs web-search-server
+            docker compose logs plugin-code-search-server
             docker compose logs code-server
             exit 1
           }
@@ -102,6 +103,7 @@ jobs:
           CLIMATECLAW_MONGODB_PASSWORD=ci-psswrd
           CLIMATECLAW_MONGODB_DATABASE_NAME=ci-db
           CLIMATECLAW_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          CLIMATECLAW_GITLAB_ACCESS_TOKEN=${{ secrets.GITLAB_ACCESS_TOKEN }}
           EOF
 
       - name: Build production base image
@@ -109,11 +111,12 @@ jobs:
 
       - name: Start production stack
         run: |
-          docker compose up climateclaw code-server web-search-server -d --wait --build --remove-orphans || {
+          docker compose up climateclaw code-server web-search-server plugin-code-search-server -d --wait --build --remove-orphans || {
             docker compose ps -a
             docker compose logs climateclaw
             docker compose logs code-server
             docker compose logs web-search-server
+            docker compose logs plugin-code-search-server
             docker compose logs mongodb
             docker compose logs litellm
             exit 1
