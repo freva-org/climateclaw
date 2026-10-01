@@ -1,13 +1,10 @@
 # ClimateClaw
 
-`ClimateClaw` is a Python service for building AI-assisted climate-data workflows. It provides the API, conversation handling, model prompting, persistent thread storage, and tool orchestration needed to support interactive work with climate data.
+ClimateClaw is a Python service for building AI-assisted climate-data workflows. It provides the API, conversation handling, model prompting, persistent thread storage, and tool orchestration needed to support interactive work with climate data.
 
 The project integrates LiteLLM-native prompting, MongoDB-backed conversation states, and MCP-based tool execution for code execution, web/documentation search, code retrieval, and domain-specific automation.
 
-[TOC]
-
 ## Highlights
-
 - FastAPI app with strict auth parity to the production Rust service (`/api/chatbot/*`)
 - Streaming responses via LiteLLM/OpenAI-compatible SSE (`application/x-ndjson`) with code + image variants
 - Persistent conversation threads in MongoDB and JSONL files (`threads/`), plus per-user scratch space (`cache/`)
@@ -19,22 +16,17 @@ The project integrates LiteLLM-native prompting, MongoDB-backed conversation sta
 ## Quick Start (deployment)
 
 ### Requirements
-
 - `podman` or `docker`
 - Credentials & headers for the Freva auth services
 
 ### Configure environment
-
 Create `.env` (used by FastAPI, Docker, and MCP servers). See `.env.example` for guidance.
 
 ### Full stack via Docker Compose
-
 ```bash
 ./prod.sh up -d --build
 ```
-
 Services that start:
-
 - `climateclaw`: FastAPI app (debugpy toggle via `DEBUG=true` for remote debugging session)
 - `code-server`: MCP server running the sandboxed Jupyter kernel and exposing `code_interpreter`
 - `web-search-server`: MCP server doing web search via OpenAI API and exposing `web_search`
@@ -46,21 +38,17 @@ Bind mounts expose `/work`, logs, threads, and shared `cache` to other Freva ser
 ## Quick Start (local dev)
 
 ### Requirements
-
 - `podman` or `docker`
 
 ### Configure environment
-
 Create `.env` (used by FastAPI, Docker, and MCP servers). See `.env.example` for guidance.
 
 ### Start docker containers in DEV mode
-
 ```bash
 ./dev.sh up -d --build
 ```
 
 ## Repository Layout
-
 | Path | Purpose |
 | --- | --- |
 | `src/climateclaw/app.py` | FastAPI entrypoint, CORS policy, router registration, app lifespan hooks |
@@ -107,7 +95,6 @@ Generated artifacts that persist across runs:
 | `POST` | `/api/chatbot/stop` | Initiates stopping of an active conversation | JSON body: `thread_id`; requires auth |
 
 ### Streaming contract
-
 - Response type: `application/x-ndjson`
 - Each `data:` line is a JSON object with `variant` discriminators (`Assistant`, `Code`, `CodeOutput`, `CodeError`, `Image`, `ServerHint`, `StreamEnd`, etc.).
 - Code tool calls stream incremental chunks while LiteLLM emits `tool_calls`. When the MCP tool resolves, results are converted back into JSON events and appended to Mongo/disk storage.
@@ -143,7 +130,6 @@ Generated artifacts that persist across runs:
 - **Ports**: HAProxy binds `CLIMATECLAW_TARGET_PORT` for the backend and `4000` for litellm; MCP frontends bind their configured ports (e.g., 8050/8051/8052) while container instances stay internal.
 
 ## Troubleshooting
-
 - **Auth failures**: verify headers include both `Authorization` and `x-freva-rest-url`. Inspect FastAPI logs for the exact HTTP status.
 - **Missing models**: ensure `litellm_config.yaml` is readable and contains `model_name` keys. `available_chatbots()` aborts the process if it cannot find any entries.
 - **MCP issues**: backend logs warn but continue when tool discovery fails; LiteLLM will simply not emit tool calls. Use `settings.AVAILABLE_MCP_SERVERS` to enable/disable targets explicitly.
