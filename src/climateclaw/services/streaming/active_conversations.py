@@ -82,7 +82,7 @@ async def initialize_conversation(
     If a conversation with the same thread_id already exists, it will be updated to STREAMING state
     and the last_activity timestamp will be refreshed, but the existing conversation will stay unchanged.
     """
-    log = logger or configure_logging(__name__, thread_id=thread_id, user_id=user_id)
+    log = logger or configure_logging(__name__, thread_id=thread_id)
     now = datetime.now(timezone.utc)
 
     mcp_mgr = await get_mcp_manager(authenticator=auth, thread_id=thread_id)

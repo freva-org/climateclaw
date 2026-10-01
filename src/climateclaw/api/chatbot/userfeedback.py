@@ -91,7 +91,7 @@ async def user_feedback(
             detail="Thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.user_id)
+    logger = configure_logging(__name__, thread_id=thread_id)
 
     # Load the thread content
     try:

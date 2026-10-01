@@ -85,7 +85,7 @@ async def get_thread(
             detail="Thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.user_id)
+    logger = configure_logging(__name__, thread_id=thread_id)
 
     try:
         messages = await get_conversation_history(
@@ -108,7 +108,7 @@ async def get_thread(
 
     logger.info(
         "Fetched thread content.",
-        extra={"thread_id": thread_id, "user_id": auth.user_id},
+        extra={"thread_id": thread_id},
     )
 
     return content

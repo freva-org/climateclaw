@@ -95,7 +95,7 @@ async def edit_thread(
             detail="Source thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    logger = configure_logging(__name__, thread_id=source_thread_id, user_id=user_name)
+    logger = configure_logging(__name__, thread_id=source_thread_id)
 
     # Load original content
     try:
@@ -155,7 +155,7 @@ async def edit_thread(
 
     new_id = await new_thread_id()
     logger.info(f"Continuing the edited thread with thread-id: {new_id}")
-    logger = configure_logging(__name__, thread_id=new_id, user_id=auth.user_id)
+    logger = configure_logging(__name__, thread_id=new_id)
     base_sv = update_threadid_in_content(new_id, base_sv, logger=logger)
 
     root_thread_id = (

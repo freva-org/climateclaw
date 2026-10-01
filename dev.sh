@@ -69,7 +69,7 @@ for arg in "$@"; do
       ;;
     # Launch with scaling and proxy
     --scale)
-      ./gen_compose.py ${COMPOSE_FILE}
+      uv run ./gen_compose.py ${COMPOSE_FILE}
       COMPOSE_FILE="docker-compose.dev.scaled.yml"
       ;;
     # Build images once from the unscaled compose file.

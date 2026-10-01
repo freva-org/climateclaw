@@ -6,13 +6,33 @@ import pytest
 import yaml
 
 # gen_compose.py is a repo-root script, while pytest only adds src/ to sys.path.
-GEN_COMPOSE_PATH = Path(__file__).resolve().parents[2] / "gen_compose.py"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+GEN_COMPOSE_PATH = REPO_ROOT / "gen_compose.py"
 spec = importlib.util.spec_from_file_location("gen_compose", GEN_COMPOSE_PATH)
 assert spec is not None
 assert spec.loader is not None
 gen_compose = importlib.util.module_from_spec(spec)
 sys.modules["gen_compose"] = gen_compose
 spec.loader.exec_module(gen_compose)
+
+
+def reload_gen_compose(
+    monkeypatch,
+    protocol: str | None = None,
+    host: str | None = "syslog.example",
+):
+    monkeypatch.setenv("CLIMATECLAW_DEV", "0")
+    if host is None:
+        monkeypatch.delenv("CLIMATECLAW_SYSLOG_HOST", raising=False)
+    else:
+        monkeypatch.setenv("CLIMATECLAW_SYSLOG_HOST", host)
+    monkeypatch.setenv("CLIMATECLAW_SYSLOG_PORT", "5514")
+    if protocol is None:
+        monkeypatch.delenv("CLIMATECLAW_SYSLOG_PROTOCOL", raising=False)
+    else:
+        monkeypatch.setenv("CLIMATECLAW_SYSLOG_PROTOCOL", protocol)
+    return importlib.reload(gen_compose)
 
 
 def test_project_mapping_returns_preview_mounts_and_website():
@@ -145,3 +165,85 @@ def test_generated_compose_sets_project_env_and_code_server_mounts(
         "/work:/work:ro",
         "/work/kd1418/codes/work/share/preview/climateclaw:/app/cache:rw",
     ]
+
+
+def test_get_syslog_target_accepts_tcp_and_udp(monkeypatch):
+    module = reload_gen_compose(monkeypatch)
+    assert module.get_syslog_target() == "tcp@syslog.example:5514"
+
+    module = reload_gen_compose(monkeypatch, protocol="udp")
+    assert module.get_syslog_target() == "udp@syslog.example:5514"
+
+
+def test_get_syslog_target_warns_for_invalid_protocol(monkeypatch):
+    module = reload_gen_compose(monkeypatch, protocol="tpc")
+
+    with pytest.warns(UserWarning, match="remote syslog disabled"):
+        assert module.get_syslog_target() is None
+
+
+def test_get_syslog_target_warns_when_host_is_missing(monkeypatch):
+    module = reload_gen_compose(monkeypatch, host=None)
+
+    with pytest.warns(UserWarning, match="remote syslog disabled"):
+        assert module.get_syslog_target() is None
+
+
+def test_generate_haproxy_continues_without_remote_syslog(monkeypatch):
+    module = reload_gen_compose(monkeypatch, host=None)
+
+    with pytest.warns(UserWarning, match="remote syslog disabled"):
+        config = module.generate_haproxy(
+            services={
+                "climateclaw": {},
+                "litellm": {},
+                "ollama": {},
+            },
+            backend_n=1,
+            backend_port="8502",
+            litellm_n=1,
+            ollama_n=1,
+            server_list=[],
+            replica_dict={},
+            port_dict={},
+            timeout=600,
+        )
+
+    assert "log stdout format raw local0 info" in config
+    assert "stats socket /var/run/haproxy.sock mode 660 level admin" in config
+    assert "log tcp@" not in config
+    assert "log udp@" not in config
+
+
+def test_add_litellm_syslog_logging_when_host_is_set(monkeypatch):
+    module = reload_gen_compose(monkeypatch)
+    services = {"litellm": {}, "litellm-2": {}, "climateclaw": {}}
+
+    module.add_litellm_syslog_logging(services)
+
+    expected_logging = {
+        "driver": "syslog",
+        "options": {
+            "syslog-address": "tcp://syslog.example:5514",
+            "tag": "litellm-${CLIMATECLAW_INSTANCE_NAME}",
+        },
+    }
+    assert services["litellm"]["logging"] == expected_logging
+    assert services["litellm-2"]["logging"] == {
+        "driver": "syslog",
+        "options": {
+            "syslog-address": "tcp://syslog.example:5514",
+            "tag": "litellm-2-${CLIMATECLAW_INSTANCE_NAME}",
+        },
+    }
+    assert "logging" not in services["climateclaw"]
+
+
+def test_add_litellm_syslog_logging_continues_without_host(monkeypatch):
+    module = reload_gen_compose(monkeypatch, host=None)
+    services = {"litellm": {}}
+
+    with pytest.warns(UserWarning, match="remote syslog disabled"):
+        module.add_litellm_syslog_logging(services)
+
+    assert "logging" not in services["litellm"]

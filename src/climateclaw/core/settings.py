@@ -36,6 +36,9 @@ class Settings:
         os.getenv("CLIMATECLAW_MCP_REQUEST_TIMEOUT_SEC", "600")
     )
     DEV: bool = os.getenv("CLIMATECLAW_DEV", "").lower() in {"1", "true", "yes"}
+    SYSLOG_PROTOCOL: str = os.getenv("CLIMATECLAW_SYSLOG_PROTOCOL", "tcp")
+    SYSLOG_PORT: int = int(os.getenv("CLIMATECLAW_SYSLOG_PORT", "1514"))
+    SYSLOG_HOST: str | None = os.getenv("CLIMATECLAW_SYSLOG_HOST")
 
 
 # Simple singleton-style accessor
