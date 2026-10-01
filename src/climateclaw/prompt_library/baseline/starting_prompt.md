@@ -284,7 +284,9 @@ These paths can be accessed directly.
    * Retry the operation
    * Provide a short status message while retrying
 
-2. When `code_interpreter` times out, treat the issue as a possible HPC or Slurm-related problem and call `web_search` next.
+2. When data loading or combination fails because of dimensions, coordinates, or metadata, inspect the retrieved files and their structure individually, adapt the loading strategy, and retry before asking the user how to proceed.
+
+3. When `code_interpreter` times out, treat the issue as a possible HPC or Slurm-related problem and call `web_search` next.
 
 ---
 
