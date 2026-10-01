@@ -2,6 +2,17 @@ import httpx
 import pytest
 import respx
 
+from climateclaw.services.authentication.auth import anonymize_username
+
+
+def test_anonymize_username_is_stable_and_opaque():
+    user_id = anonymize_username(" Alice ")
+
+    assert user_id == "062027f1-df70-572b-a59a-fbd0c55c179c"
+    assert user_id == anonymize_username("alice")
+    assert "alice" not in user_id
+    assert user_id != anonymize_username("bob")
+
 
 @pytest.mark.asyncio
 async def test_auth_missing_headers_returns_401(client):
@@ -9,7 +20,7 @@ async def test_auth_missing_headers_returns_401(client):
         r = await client.get("/api/chatbot/availablechatbots")
         assert r.status_code == 401
         detail = r.json()["detail"]
-        assert "Some necessary field weren't found" in detail
+        assert "Some necessary fields for authentication weren't found" in detail
         assert "nginx proxy" in detail
 
 

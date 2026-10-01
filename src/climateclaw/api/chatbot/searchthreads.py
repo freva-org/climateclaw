@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import (
@@ -14,11 +15,15 @@ from climateclaw.services.storage.mongodb_storage import ThreadStorage
 router = APIRouter()
 
 
-@router.get("/searchthreads", dependencies=[AuthRequired])
+class SearchThreadRequest(BaseModel):
+    query: str
+    page: int = 0
+    num_threads: int = 20
+
+
+@router.post("/searchthreads", dependencies=[AuthRequired])
 async def search_threads(
-    query: str,
-    page: int = 0,
-    num_threads: int = 20,
+    request: SearchThreadRequest,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -38,8 +43,7 @@ async def search_threads(
             The page number for pagination (reserved for paging logic). Optional, starts at 0.
 
     Dependencies:
-        auth (Authenticator): Injected authentication object containing
-            username
+        auth (Authenticator): Injected authentication object containing user_id
 
     Returns:
         List[Any]:
@@ -61,9 +65,14 @@ async def search_threads(
         HTTPException (500):
             - If querying threads fails due to an internal error.
     """
-    logger = configure_logging(__name__, user_id=auth.username)
 
-    if not auth.username:
+    query = request.query
+    page = request.page
+    num_threads = request.num_threads
+
+    logger = configure_logging(__name__, user_id=auth.user_id)
+
+    if not auth.user_id:
         raise HTTPException(
             status_code=422,
             detail="Missing user_id (auth).",
@@ -80,7 +89,7 @@ async def search_threads(
 
     try:
         total_num_threads, threads = await storage.query_by_topic(
-            auth.username, query, num_threads, page
+            auth.user_id, query, num_threads, page
         )
     except Exception as e:
         logger.exception("Failed to query threads: %s", e)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import (
@@ -14,9 +15,13 @@ from climateclaw.services.service_factory import (
 router = APIRouter()
 
 
-@router.get("/deletethread", dependencies=[AuthRequired])
+class DeleteThreadRequest(BaseModel):
+    thread_id: str
+
+
+@router.post("/deletethread", dependencies=[AuthRequired])
 async def delete_thread(
-    thread_id: str,
+    request: DeleteThreadRequest,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -32,8 +37,7 @@ async def delete_thread(
             as a query parameter.
 
     Dependencies:
-        auth (Authenticator): Injected authentication object containing
-            username
+        auth (Authenticator): Injected authentication object containing user_id
 
     Returns:
         dict:
@@ -47,7 +51,10 @@ async def delete_thread(
         HTTPException (500):
             - If deletion fails due to an internal storage error.
     """
-    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.username)
+
+    thread_id = request.thread_id
+
+    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.user_id)
 
     if not thread_id:
         raise HTTPException(
@@ -58,7 +65,7 @@ async def delete_thread(
     try:
         thread_owner = await storage.get_user_id_for_thread(thread_id)
         # Only allow the deletion of the thread if the user is the owner of the thread
-        if thread_owner and thread_owner != auth.username:
+        if thread_owner and thread_owner != auth.user_id:
             raise HTTPException(
                 status_code=403,
                 detail="You are not the owner of this thread.",
@@ -67,13 +74,13 @@ async def delete_thread(
         await storage.delete_thread(thread_id)
         logger.info(
             "Deleted thread from storage",
-            extra={"thread_id": thread_id, "user_id": auth.username},
+            extra={"thread_id": thread_id, "user_id": auth.user_id},
         )
         return {"detail": "Thread deleted."}
     except Exception as e:
         logger.exception(
             "Failed to delete thread from storage",
-            extra={"thread_id": thread_id, "user_id": auth.username, "error": str(e)},
+            extra={"thread_id": thread_id, "user_id": auth.user_id, "error": str(e)},
         )
         raise HTTPException(
             status_code=500, detail="Failed to remove thread from storage."

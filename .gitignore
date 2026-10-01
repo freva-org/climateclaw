@@ -23,3 +23,6 @@ mongo-data/
 cache/
 logs/
 build.log
+
+*scaled.yml
+haproxy.cfg

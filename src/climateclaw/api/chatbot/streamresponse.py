@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections.abc import Generator
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
-from climateclaw.core.available_chatbots import available_chatbots, default_chatbot
+from climateclaw.core.available_chatbots import (
+    available_chatbots,
+    default_chatbot,
+    default_chatbot_local,
+)
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.prompting import get_entire_prompt
 from climateclaw.services.service_factory import (
@@ -45,6 +51,13 @@ router = APIRouter()
 CHECK_INTERVAL = 3  # seconds, the interval to wait before check STOP request
 
 
+class StreamResponseRequest(BaseModel):
+    thread_id: str | None = None
+    input: str | None = None
+    chatbot: str | None = None
+    store_thread: bool = True
+
+
 def _sse_data(obj: SVDict) -> Generator[bytes]:
     if obj.get("variant") == IMAGE:
         image_b64 = obj.get("content")
@@ -60,12 +73,10 @@ def _sse_data(obj: SVDict) -> Generator[bytes]:
         yield f"{payload}\n".encode()
 
 
-@router.get("/streamresponse", dependencies=[AuthRequired])
+@router.post("/streamresponse", dependencies=[AuthRequired])
 async def streamresponse(
-    thread_id: str | None = Query(None),
-    input: str | None = Query(None),
-    chatbot: str | None = Query(None),
-    store_thread: bool = True,
+    request: StreamResponseRequest,
+    http_request: Request,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -78,8 +89,8 @@ async def streamresponse(
     Requires a valid authenticated user.
 
     Behavior:
-        - Creates a new thread if `thread_id` is not provided.
-        - Resumes an existing thread if `thread_id` is provided.
+        - Checks if thread-id exists in storage, resumes an existing thread
+          if it already exists.
         - Reads thread history if the thread exists in storage but is not
           registered in the in-memory registry.
         - Selects the specified chatbot model or falls back to the default.
@@ -98,8 +109,7 @@ async def streamresponse(
             the default chatbot model is selected.
 
     Dependencies:
-        Auth (Authenticator): Injected authentication object containing
-            username
+        Auth (Authenticator): Injected authentication object containing user_id
 
     Returns:
         StreamingResponse:
@@ -111,6 +121,7 @@ async def streamresponse(
         HTTPException (409):
             - If the provided `thread_id` is already active and streaming.
         HTTPException (422):
+            - If the thread id is missing or empty.
             - If the user input is missing or empty.
             - If the specified chatbot model is not found in the available chatbots.
         HTTPException (503):
@@ -119,14 +130,60 @@ async def streamresponse(
             - If stream preparation fails or an internal server error occurs
               before streaming begins.
     """
+
+    thread_id = request.thread_id
+    input = request.input
+    chatbot = request.chatbot
+    store_thread = request.store_thread
+
     logger = configure_logging(__name__)
-    read_history = False
-    is_new_thread = False
+
     if not thread_id:
-        is_new_thread = True
-        thread_id = await new_thread_id()
-        logger.info(f"Starting a new conversation with thread_id: {thread_id}...")
+        raise HTTPException(
+            status_code=422,
+            detail="Thread-id not found. Please request a new thread-id and provide it in the query parameters, of type String.",
+        )
+
+    if not input:
+        raise HTTPException(
+            status_code=422,
+            detail="Input not found. Please provide a non-empty input in the query parameters, of type String.",
+        )
+
+    if chatbot == "local":
+        model_name = default_chatbot_local()
     else:
+        model_name = chatbot or default_chatbot()
+
+    available = available_chatbots()
+    if model_name not in available:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Chatbot model '{model_name}' not found. Please provide a valid model name from the available chatbots: {available}.",
+        )
+
+    user_name = auth.user_id
+    logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
+
+    create_dir_at_cache(thread_id)
+
+    is_new_thread = False
+
+    # If the thread does not belong to this user, fork it and continue with a different thread_id
+    thread_owner = await storage.get_user_id_for_thread(thread_id)
+    if thread_owner and thread_owner != user_name:
+        is_new_thread = True
+        old_thread_id = thread_id
+        thread_id = await new_thread_id()
+        logger.info(
+            f"Thread {old_thread_id} belongs to a different user ({thread_owner}). Forking the thread for the current user with new thread_id: {thread_id}..."
+        )
+        await storage.fork_thread(old_thread_id, thread_id, user_name)
+        logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
+
+    # Check if thread-id exists in DB
+    read_history = False
+    if await storage.thread_exists(thread_id=thread_id):
         logger.info(f"Resuming conversation with thread_id: {thread_id}...")
         if not await check_thread_exists(thread_id):
             logger.info(
@@ -143,36 +200,9 @@ async def streamresponse(
                 status_code=409,
                 detail=f"Conversation with thread_id: {thread_id} is already active and streaming. Please use a different thread_id or wait for the current stream to finish.",
             )
-
-    if input is None:
-        raise HTTPException(
-            status_code=422,
-            detail="Input not found. Please provide a non-empty input in the query parameters or the headers, of type String.",
-        )
-
-    model_name = chatbot or default_chatbot()
-    available = available_chatbots()
-    if model_name not in available:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Chatbot model '{model_name}' not found. Please provide a valid model name from the available chatbots: {available}.",
-        )
-
-    user_name = auth.username
-    logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
-
-    create_dir_at_cache(user_name, thread_id)
-
-    # If the thread does not belong to this user, fork it and continue with a different thread_id
-    thread_owner = await storage.get_user_id_for_thread(thread_id)
-    if thread_owner and thread_owner != user_name:
-        old_thread_id = thread_id
-        thread_id = await new_thread_id()
-        logger.info(
-            f"Thread {old_thread_id} belongs to a different user ({thread_owner}). Forking the thread for the current user with new thread_id: {thread_id}..."
-        )
-        await storage.fork_thread(old_thread_id, thread_id, user_name)
-        logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
+    else:
+        is_new_thread = True
+        logger.info(f"Starting a new conversation with thread_id: {thread_id}...")
 
     system_prompt = get_entire_prompt(user_name, thread_id, model_name)
 
@@ -210,57 +240,89 @@ async def streamresponse(
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
 
     async def event_stream():
-        if is_new_thread:
-            # Append ServerHint with thread_id
-            hint_v = SVServerHint(data={"thread_id": thread_id})
-            for data in _sse_data(from_sv_to_json(hint_v)):
-                yield data
-            await add_to_conversation(
-                thread_id, [hint_v], storage=storage, store_thread=store_thread
+        try:
+            if is_new_thread:
+                # Append ServerHint with thread_id
+                hint_v = SVServerHint(content={"thread_id": thread_id})
+                for data in _sse_data(from_sv_to_json(hint_v)):
+                    yield data
+                await add_to_conversation(
+                    thread_id, [hint_v], storage=storage, store_thread=store_thread
+                )
+
+            stop_requested = False
+
+            last_check = time.monotonic()
+            async for variant in run_stream(
+                model=model_name,
+                thread_id=thread_id,
+                user_input=input,
+                system_prompt=system_prompt,
+                storage=storage,
+                store_thread=store_thread,
+                logger=logger,
+            ):
+                for data in _sse_data(from_sv_to_json(variant)):
+                    yield data
+
+                now = time.monotonic()
+                # Check if there is STOP request from
+                if now - last_check > CHECK_INTERVAL:
+                    last_check = now
+                    state = await get_conversation_state(thread_id)
+                    if state == ConversationState.STOPPING:
+                        stop_requested = True
+
+                        await cancel_tool_tasks(thread_id)
+
+            if stop_requested:
+                end_v = SVStreamEnd(content="Stream is stopped by user.")
+                for data in _sse_data(from_sv_to_json(end_v)):
+                    yield data
+                await end_and_save_conversation(
+                    thread_id, storage, store_thread=store_thread
+                )
+                logger.info(
+                    "Stopped streaming after client request",
+                    extra={"thread_id": thread_id, "user_id": user_name},
+                )
+                return
+
+            await end_and_save_conversation(
+                thread_id, storage, store_thread=store_thread
+            )
+            msg = (
+                "Completed streaming and saved conversation"
+                if store_thread
+                else "Completed streaming without saving the conversation"
+            )
+            logger.info(
+                msg,
+                extra={"thread_id": thread_id, "user_id": user_name},
             )
 
-        last_check = time.monotonic()
-        async for variant in run_stream(
-            model=model_name,
-            thread_id=thread_id,
-            user_input=input,
-            system_prompt=system_prompt,
-            storage=storage,
-            store_thread=store_thread,
-            logger=logger,
-        ):
-            for data in _sse_data(from_sv_to_json(variant)):
-                yield data
+        except asyncio.CancelledError as e:
+            task = asyncio.current_task()
+            state = await get_conversation_state(thread_id)
 
-            now = time.monotonic()
-            # Check if there is STOP request from
-            if now - last_check > CHECK_INTERVAL:
-                last_check = now
-                state = await get_conversation_state(thread_id)
-                if state == ConversationState.STOPPING:
-                    end_v = SVStreamEnd(message="Stream is stopped by user.")
-                    for data in _sse_data(from_sv_to_json(end_v)):
-                        yield data
-                    await cancel_tool_tasks(thread_id)
-                    await end_and_save_conversation(
-                        thread_id, storage, store_thread=store_thread
-                    )
-                    logger.info(
-                        "Stopped streaming after client request",
-                        extra={"thread_id": thread_id, "user_id": user_name},
-                    )
-                    return
+            try:
+                disconnected = await http_request.is_disconnected()
+            except Exception:
+                disconnected = None
 
-        await end_and_save_conversation(thread_id, storage, store_thread=store_thread)
-        msg = (
-            "Completed streaming and saved conversation"
-            if store_thread
-            else "Completed streaming without saving the conversation"
-        )
-        logger.info(
-            msg,
-            extra={"thread_id": thread_id, "user_id": user_name},
-        )
+            logger.error(
+                "EVENT STREAM CANCELLED: "
+                "thread=%s conv_state=%s http_disconnected=%s "
+                "task=%r cancelling=%s error=%r args=%r",
+                thread_id,
+                state,
+                disconnected,
+                task,
+                task.cancelling() if task else None,
+                e,
+                e.args,
+                exc_info=True,
+            )
 
     return StreamingResponse(
         event_stream(),

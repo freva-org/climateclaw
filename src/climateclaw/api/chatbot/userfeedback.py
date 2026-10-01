@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import (
@@ -18,11 +19,15 @@ from climateclaw.services.streaming.active_conversations import (
 router = APIRouter()
 
 
-@router.get("/userfeedback", dependencies=[AuthRequired])
+class UserFeedbackRequest(BaseModel):
+    thread_id: str
+    feedback_index: int
+    feedback: str
+
+
+@router.post("/userfeedback", dependencies=[AuthRequired])
 async def user_feedback(
-    thread_id: str,
-    feedback_index: int,
-    feedback: str,
+    request: UserFeedbackRequest,
     auth: Authenticator = Depends(auth_dependency),
     storage: ThreadStorage = Depends(get_thread_storage),
 ):
@@ -52,8 +57,7 @@ async def user_feedback(
 
     Dependencies:
         auth (Authenticator):
-            Injected authentication object containing:
-            - username (used as user_id)
+            Injected authentication object containing user_id
 
     Returns:
         dict:
@@ -77,13 +81,17 @@ async def user_feedback(
             - Failure connecting to thread storage (MongoDB)
     """
 
+    thread_id = request.thread_id
+    feedback_index = request.feedback_index
+    feedback = request.feedback
+
     if not thread_id:
         raise HTTPException(
             status_code=422,
             detail="Thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.username)
+    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.user_id)
 
     # Load the thread content
     try:
@@ -127,7 +135,7 @@ async def user_feedback(
             await save_feedback(
                 storage,
                 thread_id,
-                auth.username,
+                auth.user_id,
                 content_json,
                 feedback_at_thread_index,
                 feedback,
@@ -157,7 +165,7 @@ async def user_feedback(
             await delete_feedback(
                 storage,
                 thread_id,
-                auth.username,
+                auth.user_id,
                 content_json,
                 feedback_at_thread_index,
             )

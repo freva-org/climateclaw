@@ -9,9 +9,9 @@ async def test_userfeedback_empty_thread_id_returns_422(
 ):
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/userfeedback",
-                params={"thread_id": "", "feedback_index": 0, "feedback": "hi"},
+                json={"thread_id": "", "feedback_index": 0, "feedback": "hi"},
                 headers=GOOD_HEADERS,
             )
             assert r.status_code == 422
@@ -30,9 +30,9 @@ async def test_userfeedback_index_out_of_range(
 ):
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/userfeedback",
-                params={"thread_id": "t-1", "feedback_index": 5, "feedback": "great"},
+                json={"thread_id": "t-1", "feedback_index": 5, "feedback": "great"},
                 headers=GOOD_HEADERS,
             )
             assert r.status_code == 422
@@ -61,9 +61,9 @@ async def test_userfeedback_save_success(
     )
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/userfeedback",
-                params={"thread_id": "t-2", "feedback_index": 0, "feedback": "up"},
+                json={"thread_id": "t-2", "feedback_index": 0, "feedback": "up"},
                 headers=GOOD_HEADERS,
             )
             assert r.status_code == 200
@@ -105,9 +105,9 @@ async def test_userfeedback_remove_success(
     )
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/userfeedback",
-                params={"thread_id": "t-3", "feedback_index": 0, "feedback": "remove"},
+                json={"thread_id": "t-3", "feedback_index": 0, "feedback": "remove"},
                 headers=GOOD_HEADERS,
             )
             assert r.status_code == 200
@@ -123,9 +123,9 @@ async def test_userfeedback_remove_failure_not_found(
 ):
     with stub_resp:
         async with client:
-            r = await client.get(
+            r = await client.post(
                 "/api/chatbot/userfeedback",
-                params={"thread_id": "t-3", "feedback_index": 0, "feedback": "remove"},
+                json={"thread_id": "t-3", "feedback_index": 0, "feedback": "remove"},
                 headers=GOOD_HEADERS,
             )
             assert r.status_code == 404

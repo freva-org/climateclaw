@@ -17,11 +17,16 @@ from climateclaw.tools.rag.helpers import (
 )
 from climateclaw.tools.rag.text_splitters import CustomDocumentSplitter
 
-logger = configure_logging(__name__, named_log="rag_server")
+SERVICE_NAME = os.getenv("HOSTNAME") or "rag_server"
+
+logger = configure_logging(__name__, named_log=SERVICE_NAME)
+
 
 LITE_LLM_ADDRESS: str = os.getenv("CLIMATECLAW_LITE_LLM_ADDRESS", "http://litellm:4000")
 
 mcp = FastMCP("rag_server")
+
+# TODO: implement cancel routine
 
 # ── Config ───────────────────────────────────────────────────────────────────
 EMBEDDING_MODEL = "ollama/mxbai-embed-large:latest"

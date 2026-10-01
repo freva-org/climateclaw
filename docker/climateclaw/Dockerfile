@@ -29,8 +29,16 @@ ENTRYPOINT ["/bin/sh", "-c", "\
   if [ \"${CLIMATECLAW_DEBUG,,}\" = \"true\" ] || [ \"${CLIMATECLAW_DEBUG}\" = \"1\" ]; then \
     echo \"[backend] DEBUG on → waiting for debugger on ${CLIMATECLAW_DEBUG_PORT:-5678}\"; \
     exec python -m debugpy --listen 0.0.0.0:${CLIMATECLAW_DEBUG_PORT:-5678} --wait-for-client \
-         -m uvicorn climateclaw.app:app --host 0.0.0.0 --port ${CLIMATECLAW_BACKEND_PORT:-8502} --proxy-headers; \
+         -m uvicorn climateclaw.app:app \
+         --host 0.0.0.0 \
+         --port ${CLIMATECLAW_BACKEND_PORT:-8502} \
+         --proxy-headers; \
+         --forwarded-allow-ips='*'; \
   else \
     echo \"[backend] DEBUG off → starting plain uvicorn\"; \
-    exec uvicorn climateclaw.app:app --host 0.0.0.0 --port ${CLIMATECLAW_BACKEND_PORT:-8502} --proxy-headers; \
+    exec uvicorn climateclaw.app:app \
+         --host 0.0.0.0 \
+         --port ${CLIMATECLAW_BACKEND_PORT:-8502} \
+         --proxy-headers; \
+         --forwarded-allow-ips='*'; \
   fi"]

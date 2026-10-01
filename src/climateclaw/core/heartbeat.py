@@ -56,4 +56,4 @@ async def heartbeat_content():
     heartbeat["process_memory"] = process_memory
 
     # Return as StreamVariant::ServerHint
-    return SVServerHint(data=heartbeat)
+    return SVServerHint(content=heartbeat)
