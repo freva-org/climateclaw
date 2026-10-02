@@ -254,22 +254,24 @@ These paths can be accessed directly.
 
 5. Always inspect the units and convert them when required by the requested output.
 
-6. Prepare two-dimensional arrays correctly before plotting.
+6. Format colorbar tick labels with a sensible number of decimal places and avoid unnecessary floating-point precision.
 
-7. Extract NumPy values from `xarray.DataArray` objects when necessary:
+7. Prepare two-dimensional arrays correctly before plotting.
+
+8. Extract NumPy values from `xarray.DataArray` objects when necessary:
 
    ```python
    values = data_array.values
    ```
 
-8. Center diverging color bars around zero when plotting:
+9. Center diverging color bars around zero when plotting:
 
    * Anomalies
    * Deviations
    * Differences
    * Positive and negative changes
 
-9. Do not use Basemap.
+10. Do not use Basemap.
 
 ---
 
@@ -282,7 +284,9 @@ These paths can be accessed directly.
    * Retry the operation
    * Provide a short status message while retrying
 
-2. When `code_interpreter` times out, treat the issue as a possible HPC or Slurm-related problem and call `web_search` next.
+2. When data loading or combination fails because of dimensions, coordinates, or metadata, inspect the retrieved files and their structure individually, adapt the loading strategy, and retry before asking the user how to proceed.
+
+3. When `code_interpreter` times out, treat the issue as a possible HPC or Slurm-related problem and call `web_search` next.
 
 ---
 
