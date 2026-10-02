@@ -7,7 +7,7 @@ Usage: $(basename "$0") [OPTIONS] [COMPOSE_ARGS...]
 
 Deploy the climateclaw stack via podman-compose.
 
-Generates a scaled compose file from docker-compose.yml, tears down any
+Generates a scaled compose file from docker/docker-compose.yml, tears down any
 previous deployment, optionally rebuilds images, and starts the services.
 
 Options:
@@ -32,8 +32,8 @@ EOF
     exit 0
 }
 
-COMPOSE_FILE="docker-compose.yml"
-SCALED_FILE="docker-compose.scaled.yml"
+COMPOSE_FILE="docker/docker-compose.yml"
+SCALED_FILE="docker/docker-compose.scaled.yml"
 ENV_FILE=".env"
 PROJECT="${CLIMATECLAW_PROJECT_NAME:-}"
 do_build=false
@@ -122,7 +122,7 @@ fi
 # --- Generate scaled compose file ---
 echo "[prod.sh] Generating scaled compose file from ${COMPOSE_FILE}"
 echo "[prod.sh] Using project: ${CLIMATECLAW_PROJECT_NAME}"
-./gen_compose.py "${COMPOSE_FILE}" "${PROJECT}"
+./docker/gen_compose.py "${COMPOSE_FILE}" "${PROJECT}"
 
 # --- Tear down previous deployment ---
 ${COMPOSE} -f "${SCALED_FILE}" down

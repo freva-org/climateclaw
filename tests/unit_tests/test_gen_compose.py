@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-# gen_compose.py is a repo-root script, while pytest only adds src/ to sys.path.
-GEN_COMPOSE_PATH = Path(__file__).resolve().parents[2] / "gen_compose.py"
+# gen_compose.py lives under docker/, while pytest only adds src/ to sys.path.
+GEN_COMPOSE_PATH = Path(__file__).resolve().parents[2] / "docker" / "gen_compose.py"
 spec = importlib.util.spec_from_file_location("gen_compose", GEN_COMPOSE_PATH)
 assert spec is not None
 assert spec.loader is not None

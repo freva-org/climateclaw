@@ -23,7 +23,7 @@ Custom options:
   --debug, --DEBUG  Enable debug mode (CLIMATECLAW_DEBUG=1)
   --debug=VALUE     Set debug explicitly, e.g. --debug=0 or --debug=1
   --no-debug        Disable debug mode
-  --scale           Generate and use docker-compose.dev.scaled.yml
+  --scale           Generate and use docker/docker-compose.dev.scaled.yml
   --build           Build images before starting
 
 Examples:
@@ -43,7 +43,7 @@ EOF
 export CLIMATECLAW_DEV=1
 
 CLIMATECLAW_DEBUG="${CLIMATECLAW_DEBUG:-0}"
-COMPOSE_FILE="docker-compose.dev.yml"
+COMPOSE_FILE="docker/docker-compose.dev.yml"
 BUILD_COMPOSE_FILE="${COMPOSE_FILE}"
 DO_BUILD=0
 COMPOSE_ARGS=()
@@ -69,8 +69,8 @@ for arg in "$@"; do
       ;;
     # Launch with scaling and proxy
     --scale)
-      ./gen_compose.py ${COMPOSE_FILE}
-      COMPOSE_FILE="docker-compose.dev.scaled.yml"
+      ./docker/gen_compose.py "${COMPOSE_FILE}"
+      COMPOSE_FILE="docker/docker-compose.dev.scaled.yml"
       ;;
     # Build images once from the unscaled compose file.
     --build)
