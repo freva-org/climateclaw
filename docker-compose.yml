@@ -99,6 +99,8 @@ services:
         --detailed_debug
         2>&1 | tee -a /app/logs/litellm.log
     env_file: .env
+    environment:
+      CLIMATECLAW_VLLM_LITELLM_MODEL: "hosted_vllm/${CLIMATECLAW_VLLM_MODEL_ID:-nvidia/Gemma-4-31B-IT-NVFP4}"
     networks:
       - climateclaw
     healthcheck:
@@ -107,18 +109,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  ollama: # Ollama is only for the backend and not accessible from the outside. Port 11434 is not exposed.
-    image: ollama/ollama:latest
-    hostname: ollama-${CLIMATECLAW_INSTANCE_NAME}
-    volumes:
-      - /container/da/climateclaw-ollama-models/.ollama:/root/.ollama
-    environment:
-      OLLAMA_KEEP_ALIVE: ${CLIMATECLAW_OLLAMA_KEEP_ALIVE:--1}
-    networks:
-      - climateclaw
-    devices:
-      - nvidia.com/gpu=all
 
   mongodb:
     user: 0:0
