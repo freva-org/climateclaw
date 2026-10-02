@@ -100,9 +100,6 @@ services:
       CLIMATECLAW_VLLM_LITELLM_MODEL: "hosted_vllm/${CLIMATECLAW_VLLM_MODEL_ID:-nvidia/Gemma-4-31B-IT-NVFP4}"
     networks:
       - climateclaw
-    depends_on:
-      vllm:
-        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
       interval: 30s
