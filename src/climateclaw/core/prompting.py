@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
-from climateclaw.core.available_chatbots import model_is_gpt_5, model_is_ollama
+from climateclaw.core.available_chatbots import model_is_gpt_5, model_is_local
 from climateclaw.services.streaming.openai_helpers import help_convert_sv_ccrm
 from climateclaw.services.streaming.stream_variants import parse_examples_jsonl
 
@@ -47,8 +47,8 @@ GPT5_DIRS = [
     PACKAGE_DIR / "prompt_library" / "gpt_5",
 ]
 
-OLLAMA_DIRS = [
-    PACKAGE_DIR / "prompt_library" / "ollama",
+LOCAL_MODEL_DIRS = [
+    PACKAGE_DIR / "prompt_library" / "local_model",
 ]
 
 
@@ -70,13 +70,13 @@ def _resolve_gpt5_dir_or_placeholder() -> Path:
     return _resolve_baseline_dir()
 
 
-def _resolve_ollama_dir() -> Path:
+def _resolve_local_model_dir() -> Path:
     logger.warning(
-        "Ollama prompting is developed mainly focussing on Mistral. "
-        "IMPORTANT: Check if model name is recognized as Ollama model"
-        "hint: model_is_ollama"
+        "Local model prompting is developed mainly focussing on Mistral. "
+        "IMPORTANT: Check if model name is recognized as local model"
+        "hint: model_is_local"
     )
-    for d in OLLAMA_DIRS:
+    for d in LOCAL_MODEL_DIRS:
         if all(
             (d / name).is_file()
             for name in (
@@ -86,15 +86,15 @@ def _resolve_ollama_dir() -> Path:
         ):
             # Examples may be adjusted and added to dir later
             return d
-    tried = [str(d.resolve()) for d in OLLAMA_DIRS]
-    raise FileNotFoundError(f"Ollama prompt set not found. Tried: {tried}")
+    tried = [str(d.resolve()) for d in LOCAL_MODEL_DIRS]
+    raise FileNotFoundError(f"Local model prompt set not found. Tried: {tried}")
 
 
 def _pick_prompt_dir(model: str) -> Path:
     if model_is_gpt_5(model):
         return _resolve_gpt5_dir_or_placeholder()
-    elif model_is_ollama(model):
-        return _resolve_ollama_dir()
+    elif model_is_local(model):
+        return _resolve_local_model_dir()
     return _resolve_baseline_dir()
 
 

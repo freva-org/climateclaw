@@ -130,20 +130,6 @@ def expand_service(name, service, replicas, preview_paths=None):
     return services
 
 
-def expand_ollama_service(name, service, replicas):
-    services = expand_service(name, service, replicas)
-
-    if replicas == 1:
-        return services
-
-    if not DEV_MODE:
-        for i in range(1, replicas + 1):
-            replica_name = f"{name}-{i}"
-            services[replica_name]["devices"] = [f"nvidia.com/gpu={i - 1}"]
-
-    return services
-
-
 def expand_depends_on(depends_on, replica_counts):
     """Update the dependencies with names of replicated services"""
 
@@ -203,7 +189,6 @@ def haproxy_dependencies(
     services,
     backend_n,
     litellm_n,
-    ollama_n,
     available_mcp_servers,
     mcp_replica_n,
 ):
@@ -217,7 +202,6 @@ def haproxy_dependencies(
 
     dependencies.extend(service_instance_names("litellm", litellm_n, services))
     dependencies.append("mongodb")
-    dependencies.extend(service_instance_names("ollama", ollama_n, services))
 
     return [dependency for dependency in dependencies if dependency in services]
 
@@ -242,7 +226,6 @@ def generate_haproxy(
     backend_n,
     backend_port,
     litellm_n,
-    ollama_n,
     server_list,
     replica_dict,
     port_dict,
@@ -277,10 +260,6 @@ def generate_haproxy(
         "frontend fe_litellm\n    bind *:4000\n    default_backend be_litellm\n\n"
     )
 
-    conf.append(
-        "frontend fe_ollama\n    bind *:11434\n    default_backend be_ollama\n\n"
-    )
-
     for s in server_list:
         conf.append(
             f"frontend fe_{s}\n"
@@ -303,15 +282,6 @@ def generate_haproxy(
             "litellm",
             4000,
             service_instance_names("litellm", litellm_n, services),
-        )
-    )
-
-    conf.append(
-        haproxy_backend(
-            "ollama",
-            11434,
-            service_instance_names("ollama", ollama_n, services),
-            "leastconn",
         )
     )
 
@@ -347,7 +317,6 @@ def main():
     backend_target_port = os.environ.get("CLIMATECLAW_TARGET_PORT", "8502")
     backend_n = int(os.environ.get("CLIMATECLAW_BACKEND_REPLICAS", "1"))
     litellm_n = int(os.environ.get("CLIMATECLAW_LITELLM_REPLICAS", "1"))
-    ollama_n = int(os.environ.get("CLIMATECLAW_OLLAMA_REPLICAS", "1"))
 
     available_mcp_servers = [
         s
@@ -376,7 +345,6 @@ def main():
     replica_counts = {
         "climateclaw": backend_n,
         "litellm": litellm_n,
-        "ollama": ollama_n,
         **mcp_replica_n,
     }
 
@@ -392,8 +360,6 @@ def main():
             new_services.update(expand_service(name, svc, backend_n))
         elif name == "litellm":
             new_services.update(expand_service(name, svc, litellm_n))
-        elif name == "ollama":
-            new_services.update(expand_ollama_service(name, svc, ollama_n))
         elif name in MCP_SERVICES:
             if name == "code-server":
                 new_services.update(
@@ -454,7 +420,6 @@ def main():
             services=new_services,
             backend_n=backend_n,
             litellm_n=litellm_n,
-            ollama_n=ollama_n,
             available_mcp_servers=available_mcp_servers,
             mcp_replica_n=mcp_replica_n,
         ),
@@ -474,7 +439,6 @@ def main():
         backend_n=backend_n,
         backend_port=backend_port,
         litellm_n=litellm_n,
-        ollama_n=ollama_n,
         server_list=available_mcp_servers,
         replica_dict=mcp_replica_n,
         port_dict=port_dict,

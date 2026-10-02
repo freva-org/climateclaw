@@ -178,11 +178,11 @@ def model_is_gpt_5(model: str) -> bool:
     return model.startswith("gpt-5")
 
 
-def model_is_ollama(model: str) -> bool:
+def model_is_local(model: str) -> bool:
     """
     True for names starting with the defined list.
     """
-    ollama_list = (
+    local_models = (
         "mistral",
         "ministral",
         "qwen",
@@ -190,7 +190,7 @@ def model_is_ollama(model: str) -> bool:
         "deepseek",
         "gemma",
     )
-    return model.startswith(ollama_list)
+    return model.startswith(local_models)
 
 
 def model_supports_images(model: str) -> bool:
@@ -218,7 +218,7 @@ __all__ = [
     "available_chatbots",
     "default_chatbot",
     "model_is_gpt_5",
-    "model_is_ollama",
+    "model_is_local",
     "model_is_reasoning",
     "model_supports_images",
     "refresh_cache",
