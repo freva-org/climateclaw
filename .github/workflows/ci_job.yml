@@ -35,6 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       COMPOSE_FILE: docker/docker-compose.dev.yml
+      COMPOSE_ENV_FILES: .env
 
     steps:
       - name: Checkout
@@ -89,6 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       COMPOSE_FILE: docker/docker-compose.yml
+      COMPOSE_ENV_FILES: .env
 
     steps:
       - name: Checkout

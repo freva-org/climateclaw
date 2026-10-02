@@ -122,7 +122,6 @@ services:
         --port=4000
         --num_workers=8
         --run_gunicorn
-        --detailed_debug
         2>&1 | tee -a /app/logs/litellm.log
     env_file: ../.env
     ports:

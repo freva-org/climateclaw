@@ -128,19 +128,19 @@ echo "[prod.sh] Using project: ${CLIMATECLAW_PROJECT_NAME}"
 ./docker/gen_compose.py "${COMPOSE_FILE}" "${PROJECT}"
 
 # --- Tear down previous deployment ---
-${COMPOSE} -f "${SCALED_FILE}" down
+${COMPOSE} --env-file "${ENV_FILE}" -f "${SCALED_FILE}" down
 
 echo "[prod.sh] Building climateclaw-base from ${COMPOSE_FILE}"
-${COMPOSE} -f "${COMPOSE_FILE}" --profile build-only build climateclaw-base
+${COMPOSE} --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile build-only build climateclaw-base
 
 if [ "$do_build" = true ]; then
     echo "[prod.sh] Building images ..."
-    ${COMPOSE} -f "${COMPOSE_FILE}" build
+    ${COMPOSE} --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" build
 fi
 
 # --- Start ---
 if [ ${#args[@]} -eq 0 ]; then
     args=(up -d)
 fi
-echo "[prod.sh] Starting: ${COMPOSE} -f ${SCALED_FILE} ${args[*]}"
-${COMPOSE} -f "${SCALED_FILE}" "${args[@]}"
+echo "[prod.sh] Starting: ${COMPOSE} --env-file ${ENV_FILE} -f ${SCALED_FILE} ${args[*]}"
+${COMPOSE} --env-file "${ENV_FILE}" -f "${SCALED_FILE}" "${args[@]}"
