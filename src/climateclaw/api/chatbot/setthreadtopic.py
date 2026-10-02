@@ -41,8 +41,7 @@ async def set_thread_topic(
             The new topic/title string to assign to the thread.
 
     Dependencies:
-        auth (Authenticator): Injected authentication object containing
-            username
+        auth (Authenticator): Injected authentication object containing user_id
 
     Returns:
         dict:
@@ -66,12 +65,12 @@ async def set_thread_topic(
             detail="Thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.username)
+    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.user_id)
 
     try:
         thread_owner = await storage.get_user_id_for_thread(thread_id)
         # Only allow the update of the thread topic if the user is the owner of the thread
-        if thread_owner and thread_owner != auth.username:
+        if thread_owner and thread_owner != auth.user_id:
             raise HTTPException(
                 status_code=403,
                 detail="You are not the owner of this thread.",
@@ -79,12 +78,12 @@ async def set_thread_topic(
         await storage.update_thread_topic(thread_id, topic)
         logger.info(
             "Updated thread topic",
-            extra={"thread_id": thread_id, "user_id": auth.username},
+            extra={"thread_id": thread_id, "user_id": auth.user_id},
         )
         return {"detail": "Topic updated."}
     except Exception as e:
         logger.exception(
             "Failed to update thread topic",
-            extra={"thread_id": thread_id, "user_id": auth.username, "error": str(e)},
+            extra={"thread_id": thread_id, "user_id": auth.user_id, "error": str(e)},
         )
         raise HTTPException(status_code=500, detail="Failed to update thread topic.")

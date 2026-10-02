@@ -23,7 +23,6 @@ services:
       - /work:/work:ro
       - /pool/data:/pool/data:ro
       - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
-      - ${CLIMATECLAW_CACHE_PATH}:/app/cache:rw
     networks:
       - climateclaw
     healthcheck:
@@ -50,7 +49,6 @@ services:
       - /work:/work:ro
       - /pool/data:/pool/data:ro
       - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
-      - ${CLIMATECLAW_CACHE_PATH}:/app/cache:rw
     cpus: 4
     networks:
       - climateclaw
@@ -83,16 +81,24 @@ services:
       start_period: 10s
 
   litellm:
-    image: ghcr.io/berriai/litellm:main-stable
+    image: ghcr.io/berriai/litellm:v1.102.0
     hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
       - ./litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
-    command: >
-      --config=/app/config.yaml
-      --port=4000
-      --num_workers=8
-      --run_gunicorn
+      - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        litellm
+        --config=/app/config.yaml
+        --port=4000
+        --num_workers=8
+        --run_gunicorn
+        --detailed_debug
+        2>&1 | tee -a /app/logs/litellm.log
     env_file: .env
+    environment:
+      CLIMATECLAW_VLLM_LITELLM_MODEL: "hosted_vllm/${CLIMATECLAW_VLLM_MODEL_ID:-nvidia/Gemma-4-31B-IT-NVFP4}"
     networks:
       - climateclaw
     healthcheck:
@@ -101,16 +107,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  ollama: # Ollama is only for the backend and not accessible from the outside. Port 11434 is not exposed.
-    image: ollama/ollama:latest
-    hostname: ollama-${CLIMATECLAW_INSTANCE_NAME}
-    volumes:
-      - /container/da/climateclaw-ollama-models/.ollama:/root/.ollama
-    networks:
-      - climateclaw
-    devices:
-      - nvidia.com/gpu=all
 
 networks:
   climateclaw:

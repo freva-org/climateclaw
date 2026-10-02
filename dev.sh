@@ -9,6 +9,7 @@ set -euo pipefail
 #   --debug=0 / --DEBUG=0      -> DEBUG=0
 #   --no-debug                 -> DEBUG=0
 #   --scale                    -> use scaling with load-balancing proxy
+#   --build                    -> build images before running compose
 #
 # Everything else is passed through to `docker compose`.
 # ------------------------------------------------------------------
@@ -23,6 +24,7 @@ Custom options:
   --debug=VALUE     Set debug explicitly, e.g. --debug=0 or --debug=1
   --no-debug        Disable debug mode
   --scale           Generate and use docker-compose.dev.scaled.yml
+  --build           Build images before starting
 
 Examples:
   ./dev.sh up
@@ -42,6 +44,8 @@ export CLIMATECLAW_DEV=1
 
 CLIMATECLAW_DEBUG="${CLIMATECLAW_DEBUG:-0}"
 COMPOSE_FILE="docker-compose.dev.yml"
+BUILD_COMPOSE_FILE="${COMPOSE_FILE}"
+DO_BUILD=0
 COMPOSE_ARGS=()
 
 for arg in "$@"; do
@@ -68,6 +72,10 @@ for arg in "$@"; do
       ./gen_compose.py ${COMPOSE_FILE}
       COMPOSE_FILE="docker-compose.dev.scaled.yml"
       ;;
+    # Build images once from the unscaled compose file.
+    --build)
+      DO_BUILD=1
+      ;;
     # Everything else goes to docker compose
     *)
       COMPOSE_ARGS+=("$arg")
@@ -81,5 +89,9 @@ export CLIMATECLAW_DEBUG
 echo "[dev.sh] Using ${COMPOSE_FILE} with DEBUG=${CLIMATECLAW_DEBUG}"
 echo "[dev.sh] docker compose -f ${COMPOSE_FILE} ${COMPOSE_ARGS[*]}"
 
-docker compose -f "${COMPOSE_FILE}" --profile build-only build climateclaw-base
+docker compose -f "${BUILD_COMPOSE_FILE}" --profile build-only build climateclaw-base
+if [ "${DO_BUILD}" = "1" ]; then
+  echo "[dev.sh] Building images from ${BUILD_COMPOSE_FILE}"
+  docker compose -f "${BUILD_COMPOSE_FILE}" build
+fi
 docker compose -f "${COMPOSE_FILE}" "${COMPOSE_ARGS[@]}"

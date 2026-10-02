@@ -9,7 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
-from climateclaw.core.available_chatbots import available_chatbots, default_chatbot
+from climateclaw.core.available_chatbots import (
+    available_chatbots,
+    default_chatbot,
+    default_chatbot_local,
+)
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.prompting import get_entire_prompt
 from climateclaw.services.service_factory import (
@@ -105,8 +109,7 @@ async def streamresponse(
             the default chatbot model is selected.
 
     Dependencies:
-        Auth (Authenticator): Injected authentication object containing
-            username
+        Auth (Authenticator): Injected authentication object containing user_id
 
     Returns:
         StreamingResponse:
@@ -147,7 +150,11 @@ async def streamresponse(
             detail="Input not found. Please provide a non-empty input in the query parameters, of type String.",
         )
 
-    model_name = chatbot or default_chatbot()
+    if chatbot == "local":
+        model_name = default_chatbot_local()
+    else:
+        model_name = chatbot or default_chatbot()
+
     available = available_chatbots()
     if model_name not in available:
         raise HTTPException(
@@ -155,10 +162,10 @@ async def streamresponse(
             detail=f"Chatbot model '{model_name}' not found. Please provide a valid model name from the available chatbots: {available}.",
         )
 
-    user_name = auth.username
+    user_name = auth.user_id
     logger = configure_logging(__name__, thread_id=thread_id, user_id=user_name)
 
-    create_dir_at_cache(user_name, thread_id)
+    create_dir_at_cache(thread_id)
 
     is_new_thread = False
 

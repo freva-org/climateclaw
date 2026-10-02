@@ -59,8 +59,7 @@ async def get_thread(
             as a query parameter.
 
     Dependencies:
-        auth (Authenticator): Injected authentication object containing
-            username
+        auth (Authenticator): Injected authentication object containing user_id
 
     Returns:
         List[dict]:
@@ -86,7 +85,7 @@ async def get_thread(
             detail="Thread ID not found. Please provide thread_id in the query parameters.",
         )
 
-    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.username)
+    logger = configure_logging(__name__, thread_id=thread_id, user_id=auth.user_id)
 
     try:
         messages = await get_conversation_history(
@@ -109,7 +108,7 @@ async def get_thread(
 
     logger.info(
         "Fetched thread content.",
-        extra={"thread_id": thread_id, "user_id": auth.username},
+        extra={"thread_id": thread_id, "user_id": auth.user_id},
     )
 
     return content

@@ -19,8 +19,90 @@ MCP_SERVICES = set(MCP_SERVER_CONFIG)
 
 DEV_MODE = os.environ.get("CLIMATECLAW_DEV", "0")
 
+# NOTE: freva-dev and nextgems currently share deployment instance
+# so we mount both their preview paths together
+PREVIEW_MOUNTS = {
+    "codes": ["/work/kd1418/codes/work/share/preview/climateclaw"],
+    "eve": ["/work/ch1187/clint/freva-dev/share/preview/climateclaw"],
+    "freva-dev": ["/work/ch1187/clint/freva-dev/share/preview/climateclaw"],
+    "nextgems": ["/work/ch1187/clint/nextgems/share/preview/climateclaw"],
+    "regiklim-ces": ["/work/ch1187/regiklim-work/share/preview/climateclaw"],
+    "xces": ["/work/bm1159/XCES/xces-work/share/preview/climateclaw"],
+}
 
-def expand_service(name, service, replicas):
+WEBSITES = {
+    "codes": "https://codes.dkrz.de",
+    "eve": "https://eve.dkrz.de",
+    "freva-dev": "https://freva.dkrz.de",
+    "nextgems": "https://gems.dkrz.de",
+    "regiklim-ces": "https://www-regiklim.dkrz.de",
+    "xces": "https://www.xces.dkrz.de",
+}
+
+
+def preview_paths_for_project(project: str | None) -> list[str] | None:
+    if not project:
+        return None
+
+    if project not in PREVIEW_MOUNTS:
+        valid_projects = ", ".join(sorted(PREVIEW_MOUNTS))
+        print(
+            f"ERROR: unknown project '{project}'. Valid projects: {valid_projects}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return PREVIEW_MOUNTS[project]
+
+
+def website_for_project(project: str | None) -> list[str] | None:
+    if not project:
+        return None
+
+    if project not in WEBSITES:
+        valid_projects = ", ".join(sorted(WEBSITES))
+        print(
+            f"ERROR: unknown project '{project}'. Valid projects: {valid_projects}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return WEBSITES[project]
+
+
+def set_environment(service: dict, key: str, value: str) -> None:
+    environment = service.get("environment")
+
+    if environment is None:
+        service["environment"] = [f"{key}={value}"]
+        return
+
+    if isinstance(environment, dict):
+        environment[key] = value
+        return
+
+    if isinstance(environment, list):
+        prefix = f"{key}="
+        service["environment"] = [
+            item for item in environment if not str(item).startswith(prefix)
+        ]
+        service["environment"].append(f"{key}={value}")
+        return
+
+    raise TypeError("service environment must be a mapping or a list")
+
+
+def set_project_environment(service: dict, project: str | None) -> None:
+    if not project:
+        return
+
+    set_environment(service, "CLIMATECLAW_PROJECT_NAME", project)
+    set_environment(
+        service, "CLIMATECLAW_PROJECT_WEBSITE", website_for_project(project)
+    )
+
+
+def expand_service(name, service, replicas, preview_paths=None):
     services = {}
 
     for i in range(1, replicas + 1):
@@ -34,22 +116,14 @@ def expand_service(name, service, replicas):
             ]
 
         s["hostname"] = replica_name + "-${CLIMATECLAW_INSTANCE_NAME}"
+        if preview_paths:
+            volumes = s.get("volumes", [])
+            volumes.extend(
+                f"{preview_path}:/app/cache:rw" for preview_path in preview_paths
+            )
+            s["volumes"] = volumes
 
         services[replica_name] = s
-
-    return services
-
-
-def expand_ollama_service(name, service, replicas):
-    services = expand_service(name, service, replicas)
-
-    if replicas == 1:
-        return services
-
-    if not DEV_MODE:
-        for i in range(1, replicas + 1):
-            replica_name = f"{name}-{i}"
-            services[replica_name]["devices"] = [f"nvidia.com/gpu={i - 1}"]
 
     return services
 
@@ -103,7 +177,6 @@ def haproxy_dependencies(
     services,
     backend_n,
     litellm_n,
-    ollama_n,
     available_mcp_servers,
     mcp_replica_n,
 ):
@@ -117,7 +190,6 @@ def haproxy_dependencies(
 
     dependencies.extend(service_instance_names("litellm", litellm_n, services))
     dependencies.append("mongodb")
-    dependencies.extend(service_instance_names("ollama", ollama_n, services))
 
     return [dependency for dependency in dependencies if dependency in services]
 
@@ -125,6 +197,7 @@ def haproxy_dependencies(
 def haproxy_backend(name, port, service_names, sticky_mode=None):
     lines = []
     lines.append(f"backend be_{name}")
+
     if sticky_mode:
         lines.append(f"    balance {sticky_mode}")
         lines.append("    hash-type consistent")
@@ -141,7 +214,6 @@ def generate_haproxy(
     backend_n,
     backend_port,
     litellm_n,
-    ollama_n,
     server_list,
     replica_dict,
     port_dict,
@@ -176,10 +248,6 @@ def generate_haproxy(
         "frontend fe_litellm\n    bind *:4000\n    default_backend be_litellm\n\n"
     )
 
-    conf.append(
-        "frontend fe_ollama\n    bind *:11434\n    default_backend be_ollama\n\n"
-    )
-
     for s in server_list:
         conf.append(
             f"frontend fe_{s}\n"
@@ -193,7 +261,7 @@ def generate_haproxy(
             "climateclaw",
             backend_port,
             service_instance_names("climateclaw", backend_n, services),
-            "url_param thread_id",
+            "hdr(X-Freva-Thread-Id)",
         )
     )
 
@@ -205,22 +273,13 @@ def generate_haproxy(
         )
     )
 
-    conf.append(
-        haproxy_backend(
-            "ollama",
-            11434,
-            service_instance_names("ollama", ollama_n, services),
-            "leastconn",
-        )
-    )
-
     for s in server_list:
         conf.append(
             haproxy_backend(
                 s,
                 port_dict[s],
                 service_instance_names(s, replica_dict[s], services),
-                "hdr(thread-id)",
+                "hdr(X-Freva-Thread-Id)",
             )
         )
 
@@ -230,16 +289,20 @@ def generate_haproxy(
 def main():
 
     if len(sys.argv) < 2:
-        print("Usage: gen_compose.py docker-compose.dev.yml")
+        print("Usage: gen_compose.py docker-compose.dev.yml [project]")
         sys.exit(1)
 
     compose_path = sys.argv[1]
+    project = (
+        sys.argv[2] if len(sys.argv) > 2 else os.environ.get("CLIMATECLAW_PROJECT_NAME")
+    )
+
+    preview_paths = preview_paths_for_project(project)
 
     backend_port = os.environ.get("CLIMATECLAW_BACKEND_PORT", "8502")
     backend_target_port = os.environ.get("CLIMATECLAW_TARGET_PORT", "8502")
     backend_n = int(os.environ.get("CLIMATECLAW_BACKEND_REPLICAS", "1"))
     litellm_n = int(os.environ.get("CLIMATECLAW_LITELLM_REPLICAS", "1"))
-    ollama_n = int(os.environ.get("CLIMATECLAW_OLLAMA_REPLICAS", "1"))
 
     available_mcp_servers = [
         s
@@ -268,19 +331,21 @@ def main():
     replica_counts = {
         "climateclaw": backend_n,
         "litellm": litellm_n,
-        "ollama": ollama_n,
         **mcp_replica_n,
     }
 
     for name, svc in services.items():
         if name == "climateclaw":
+            set_project_environment(svc, project)
             new_services.update(expand_service(name, svc, backend_n))
         elif name == "litellm":
             new_services.update(expand_service(name, svc, litellm_n))
-        elif name == "ollama":
-            new_services.update(expand_ollama_service(name, svc, ollama_n))
         elif name in MCP_SERVICES:
-            if name in available_mcp_servers:
+            if name == "code-server":
+                new_services.update(
+                    expand_service(name, svc, mcp_replica_n[name], preview_paths)
+                )
+            elif name in available_mcp_servers:
                 new_services.update(expand_service(name, svc, mcp_replica_n[name]))
         elif name == "freva-web":
             env = [
@@ -307,16 +372,6 @@ def main():
 
     network_name = list(base["networks"].keys())[0]
 
-    haproxy_network = (
-        {
-            network_name: {
-                "aliases": ["ollama"],
-            }
-        }
-        if ollama_n > 1
-        else [network_name]
-    )
-
     log_dir = (
         "./logs/"
         if "dev" in compose_path
@@ -337,12 +392,11 @@ def main():
             "haproxy -W -db -f /usr/local/etc/haproxy/haproxy.cfg "
             ">> /app/logs/haproxy.log 2>&1",
         ],
-        "networks": haproxy_network,
+        "networks": [network_name],
         "depends_on": haproxy_dependencies(
             services=new_services,
             backend_n=backend_n,
             litellm_n=litellm_n,
-            ollama_n=ollama_n,
             available_mcp_servers=available_mcp_servers,
             mcp_replica_n=mcp_replica_n,
         ),
@@ -361,7 +415,6 @@ def main():
         backend_n=backend_n,
         backend_port=backend_port,
         litellm_n=litellm_n,
-        ollama_n=ollama_n,
         server_list=available_mcp_servers,
         replica_dict=mcp_replica_n,
         port_dict=port_dict,

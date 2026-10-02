@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+from pathlib import Path
 from queue import Empty
 from typing import Any, Dict, Optional
 
@@ -11,7 +12,7 @@ from climateclaw.tools.active_requests import (
     RequestCancelled,
 )
 
-from .helpers import strip_ansi
+from .helpers import detect_created_or_modified_files, snapshot_files, strip_ansi
 from .kernels import (
     KERNEL_LOCKS,
     KERNEL_LOCKS_GUARD,
@@ -309,6 +310,9 @@ def execute_code(
         )
         raise RequestCancelled("Execution cancelled by client")
 
+    workdir = Path(working_dir).resolve()
+    before_files = snapshot_files(workdir)
+
     km = get_or_start_kernel(session_id, cwd_str=working_dir)
 
     def _attempt_once() -> Dict[str, Any]:
@@ -330,6 +334,14 @@ def execute_code(
     for attempt in range(MAX_RECOVERY_RETRIES + 1):
         try:
             out = _attempt_once()
+
+            after_files = snapshot_files(workdir)
+            out["created_files"] = detect_created_or_modified_files(
+                workdir,
+                before_files,
+                after_files,
+            )
+
             return out
 
         except RequestCancelled:

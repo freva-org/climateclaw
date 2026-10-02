@@ -152,6 +152,13 @@ def default_chatbot() -> str:
     return models[0]
 
 
+def default_chatbot_local() -> str:
+    """
+    Default local chatbot.
+    """
+    return "gemma4:31b"
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Helper predicates
 # ──────────────────────────────────────────────────────────────────────────────
@@ -171,32 +178,33 @@ def model_is_gpt_5(model: str) -> bool:
     return model.startswith("gpt-5")
 
 
-def model_is_ollama(model: str) -> bool:
+def model_is_local(model: str) -> bool:
     """
-    True for names starting with 'mistral', 'ministral', 'qwen', 'llama' or 'deepseek'.
+    True for names starting with the defined list.
     """
-    ollama_list = (
+    local_models = (
         "mistral",
         "ministral",
         "qwen",
         "llama",
         "deepseek",
+        "gemma",
     )
-    return model.startswith(ollama_list)
+    return model.startswith(local_models)
 
 
 def model_supports_images(model: str) -> bool:
     """
-    True for names starting with 'gpt-4o', 'gpt-5', or 'gpt-4.1'.
+    True for names starting with the defined list.
     """
-    return model.startswith(("gpt-4o", "gpt-5", "gpt-4.1"))
-
-
-def model_ends_on_no_choice(model: str) -> bool:
-    """
-    True for names starting with 'qwen2_5' (quirk in some Qwen APIs).
-    """
-    return model.startswith("qwen2_5")
+    vision_models = (
+        "gpt",
+        # "qwen3.6",
+        # "gemma4",
+        # "mistral",
+        # "ministral"
+    )
+    return model.startswith(vision_models)
 
 
 def refresh_cache() -> None:
@@ -209,9 +217,8 @@ def refresh_cache() -> None:
 __all__ = [
     "available_chatbots",
     "default_chatbot",
-    "model_ends_on_no_choice",
     "model_is_gpt_5",
-    "model_is_ollama",
+    "model_is_local",
     "model_is_reasoning",
     "model_supports_images",
     "refresh_cache",
