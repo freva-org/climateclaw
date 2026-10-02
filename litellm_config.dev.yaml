@@ -20,15 +20,16 @@ model_list:
   - model_name: "gemma4:31b"
     litellm_params:
       model: "ollama_chat/gemma4:31b"
-      api_base: "http://ollama:11434"
+      api_base: "http://host.docker.internal:11434"
     model_info:
       supports_function_calling: true
   - model_name: "ministral-3:8b"
     litellm_params:
       model: "ollama_chat/ministral-3:8b"
-      api_base: "http://ollama:11434"
+      api_base: "http://host.docker.internal:11434"
     model_info:
       supports_function_calling: true
+
 
 litellm_settings:
   drop_params: true
