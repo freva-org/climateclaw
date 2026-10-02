@@ -17,7 +17,6 @@ spec.loader.exec_module(gen_compose)
 
 def test_project_mapping_returns_preview_mounts_and_website():
     assert gen_compose.preview_paths_for_project("nextgems") == [
-        "/work/ch1187/clint/freva-dev/share/preview/climateclaw",
         "/work/ch1187/clint/nextgems/share/preview/climateclaw",
     ]
     assert gen_compose.website_for_project("nextgems") == "https://gems.dkrz.de"
@@ -129,8 +128,8 @@ def test_generated_compose_sets_project_env_and_code_server_mounts(
     )
     monkeypatch.setenv("CLIMATECLAW_BACKEND_REPLICAS", "1")
     monkeypatch.setenv("CLIMATECLAW_LITELLM_REPLICAS", "1")
-    monkeypatch.setenv("CLIMATECLAW_OLLAMA_REPLICAS", "1")
-    monkeypatch.setenv("CLIMATECLAW_AVAILABLE_MCP_SERVERS", "")
+    monkeypatch.setenv("CLIMATECLAW_AVAILABLE_MCP_SERVERS", "code-server")
+    monkeypatch.setenv("CLIMATECLAW_CODE_SERVER_REPLICAS", "1")
 
     gen_compose.main()
 

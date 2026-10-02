@@ -64,7 +64,7 @@ def test_ccrm_codeoutput_conversion_adds_image_url_in_prod_mode(monkeypatch):
     monkeypatch.setattr(openai_helpers, "settings", SimpleNamespace(DEV=False))
     code_output = _code_output_with_created_file()
 
-    msgs = help_convert_sv_ccrm([code_output])
+    msgs = help_convert_sv_ccrm([code_output], include_images=True)
 
     assert len(msgs) == 2
     assert msgs[1]["role"] == "user"
