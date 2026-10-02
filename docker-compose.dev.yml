@@ -136,6 +136,12 @@ services:
       retries: 3
       start_period: 40s
 
+  ollama:
+    image: ollama/ollama:latest
+    hostname: ollama-${CLIMATECLAW_INSTANCE_NAME}
+    networks:
+      - climateclaw
+
   mongodb:
     networks:
       - climateclaw
