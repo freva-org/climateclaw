@@ -15,7 +15,7 @@ RUN conda run -n env uv pip install --no-cache-dir --system \
 # -------------------------
 
 # The litellm also needs to be copied over to the backend so that the list of chatbots can be extracted
-COPY litellm_config.yaml /app/litellm_config.yaml
+COPY litellm_config.yaml litellm_config.dev.yaml /app/
 
 # Copy source code
 COPY src /app/src

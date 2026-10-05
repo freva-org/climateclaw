@@ -180,7 +180,6 @@ def haproxy_aliases(available_mcp_servers):
     return [
         "climateclaw",
         "litellm",
-        "ollama",
         *available_mcp_servers,
     ]
 
