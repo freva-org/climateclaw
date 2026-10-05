@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "${ROOT_DIR}"
+COMPOSE_PROJECT_NAME="${ROOT_DIR##*/}"
 
 # ------------------------------------------------------------------
 # Simple dev launcher for ClimateClaw
@@ -94,9 +95,9 @@ export CLIMATECLAW_DEBUG
 echo "[dev.sh] Using ${COMPOSE_FILE} with DEBUG=${CLIMATECLAW_DEBUG}"
 echo "[dev.sh] docker compose -f ${COMPOSE_FILE} ${COMPOSE_ARGS[*]}"
 
-docker compose --env-file "${ENV_FILE}" -f "${BUILD_COMPOSE_FILE}" --profile build-only build climateclaw-base
+docker compose --project-name "${COMPOSE_PROJECT_NAME}" --env-file "${ENV_FILE}" -f "${BUILD_COMPOSE_FILE}" --profile build-only build climateclaw-base
 if [ "${DO_BUILD}" = "1" ]; then
   echo "[dev.sh] Building images from ${BUILD_COMPOSE_FILE}"
-  docker compose --env-file "${ENV_FILE}" -f "${BUILD_COMPOSE_FILE}" build
+  docker compose --project-name "${COMPOSE_PROJECT_NAME}" --env-file "${ENV_FILE}" -f "${BUILD_COMPOSE_FILE}" build
 fi
-docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "${COMPOSE_ARGS[@]}"
+docker compose --project-name "${COMPOSE_PROJECT_NAME}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "${COMPOSE_ARGS[@]}"
