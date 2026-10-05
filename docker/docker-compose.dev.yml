@@ -112,7 +112,7 @@ services:
     image: ghcr.io/berriai/litellm:main-latest
     hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
-      - ../litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
+      - ../litellm_config.dev.yaml:/app/config.yaml # Development config excludes the deployment-only vLLM model
       - ../logs/:/app/logs
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -134,12 +134,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  ollama:
-    image: ollama/ollama:latest
-    hostname: ollama-${CLIMATECLAW_INSTANCE_NAME}
-    networks:
-      - climateclaw
 
   mongodb:
     networks:

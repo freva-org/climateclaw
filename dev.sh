@@ -49,6 +49,7 @@ CLIMATECLAW_DEBUG="${CLIMATECLAW_DEBUG:-0}"
 ENV_FILE=".env"
 COMPOSE_FILE="docker/docker-compose.dev.yml"
 BUILD_COMPOSE_FILE="${COMPOSE_FILE}"
+SCALED_COMPOSE_FILE="docker/docker-compose.dev.scaled.yml"
 DO_BUILD=0
 COMPOSE_ARGS=()
 
@@ -74,7 +75,7 @@ for arg in "$@"; do
     # Launch with scaling and proxy
     --scale)
       ./docker/gen_compose.py "${COMPOSE_FILE}"
-      COMPOSE_FILE="docker/docker-compose.dev.scaled.yml"
+      COMPOSE_FILE="${SCALED_COMPOSE_FILE}"
       ;;
     # Build images once from the unscaled compose file.
     --build)
