@@ -185,7 +185,7 @@ async def main() -> None:
         if user_input.lower().startswith("/new"):
             # Optional prefix: "/new"
             thread_id = await new_thread_id()
-            await prepare_for_stream(thread_id, user_id=USER_ID, Auth=Auth, model=MODEL)
+            await prepare_for_stream(thread_id, user_id=USER_ID, Auth=Auth)
             print(f"Started new conversation. Thread: {thread_id}")
             continue
 
@@ -194,7 +194,6 @@ async def main() -> None:
             thread_id=thread_id,
             user_id=USER_ID,
             Auth=Auth,
-            model=MODEL,
             Storage=Storage,
             read_history=read_history,
         )

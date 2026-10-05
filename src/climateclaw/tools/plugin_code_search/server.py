@@ -401,19 +401,37 @@ async def detect_plugin_project(user_query: str) -> tuple[str, str]:
 @mcp.tool()
 async def plugin_code_search(user_query: str) -> str:
     """
-    Search and analyze the source code of a Freva data analysis plugin for decadal climate
-    predictions. Use this where repository-grounded code context could be used to answer the question, i.e, when the user
-    - explicitly asks how a plugin's internal logic works, how to run or
-    configure it, or when code snippets from the plugin should be translated or
-    adapted into Python examples;
-    - asks about a specific climate or weather-related question involving regional, decadal, or extreme-event analysis (lead time selection, hindcast skill scoring, precipitation indices, crop impact, heat waves/HWMID, climate/extreme indices, region matching, urban heatwave extraction, precipitation disaggregation, and plugin creation).
+    Fetch relevant source code and documentation files of a Freva data analysis plugin
+    as a repository-grounded code knowledge base.
+    Use this when the user
+    - explicitly asks how a plugin's internal logic works, how to run or configure it,
+    or wants plugin code translated or adapted into Python examples;
+    - asks a specific climate or weather question involving regional, decadal, or
+    extreme-event analysis (lead time selection, hindcast skill scoring, bias adjustment
+    and drift correction, downscaling, precipitation indices, crop impact, heat waves/HWMID
+    climate/extreme indices, region matching, urban heatwave extraction, precipitation
+    disaggregation, and plugin creation).
+    Workflow Guidelines:
+    - the matching plugin and project are detected automatically from the query.
+    - reference modules, classes, and functions only when asked for more detail.
+    - call it again for follow-up questions not sufficiently covered by prior results.
+    - only implement the plugin's *core logic* in a lightweight Python snippet
+    - replace `cdo` with `xarray` operations
+    - prioritize workflow correctness over mirroring non-critical details (e.g. multiple tries, fallbacks, logging)
 
     Args:
-        user_query (str): What the user wants to know about or do with a dedicated Freva plugin regarding climate or weather data analysis.
+        user_query (str): What the user wants to know about or do with a dedicated Freva
+        plugin regarding climate or weather data analysis. Always the only argument.
 
     Returns:
-        str: Relevant code context fetched from source files of the plugin repository;
-        or an error message if the plugin call is not authorized / code retrieval fails.
+        str: Relevant code context (with a header containing the plugin's repo URL),
+        including directly imported dependency files; or an error message if the plugin
+        is not found, user access is denied, or code retrieval fails.
+
+    Examples:
+        - "How does the 'leadtimeselektor' plugin work from a high-level perspective?"
+        - "How can I calculate climate prediction skill scores against observations or reanalysis data?"
+        - "How can I assess the impact of extreme climate events on crop productivity?"
     """
     plugin, project = await detect_plugin_project(user_query)
     # return f"plugin_name: {plugin}, project_name: {project}"  # only for benchmarking the plugin detection stage

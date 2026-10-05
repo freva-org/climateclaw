@@ -68,7 +68,9 @@ EVAL_TOOL = True
 PLOT_METRICS = True  # plot metrics as bar charts at the end of the benchmark
 
 ## evaluation suite: direct questions about a plugin + indirect ones (more widely phrased)
-path_to_prompts = Path(__file__).parent / "evaluation" / "benchmark_prompts.json"
+path_to_prompts = (
+    Path(__file__).parent / "evaluation" / "benchmark-prompts-plugin-server.json"
+)
 with open(path_to_prompts, "r", encoding="utf-8") as f:
     BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
 # BENCHMARK = {
@@ -108,7 +110,7 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
 
         Auth = Authenticator.local(username="dev_user")
         Storage = await ThreadStorage.create()
-        create_dir_at_cache(USER_ID, thread_id)
+        create_dir_at_cache(thread_id)
 
         await prepare_for_stream(
             thread_id=thread_id,
@@ -297,7 +299,7 @@ def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
         pie = ax.pie(
             chart.values(),
             autopct="%1.1f%%",
-            textprops=dict(fontsize=14, color="white"),
+            textprops=dict(fontsize=14, color="white", fontweight="bold"),
         )
         ax.legend(pie.wedges, metrics, title="Metrics", loc="best", fontsize=14)
         ax.set_title(title, fontsize=16)
@@ -305,7 +307,7 @@ def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
         f"Evaluation Metrics for 'plugin_code_search' tool (Model: {MODEL}, Runs/Query: 30)"
     )
     plt.tight_layout()
-    plt.subplots_adjust(wspace=0.2)
+    plt.subplots_adjust(wspace=0.4)
     plt.savefig(save_dir / f"tool_evaluation_pie_charts_{current_date}.png", dpi=400)
 
     # bar chart for tool/plugin accuracy, precision, recall
