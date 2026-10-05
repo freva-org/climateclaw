@@ -150,7 +150,7 @@ Generated artifacts that persist across runs:
 - **Manager** (`src/climateclaw/services/mcp/mcp_manager.py`): caches clients, discovers tool schemas, exports OpenAI function definitions, and pins MCP session ids to thread ids for deterministic tool contexts.
 
 ## Development Workflow
-- **Spin up dev stack**: `./dev.sh up -d --build` (FastAPI, rag, code, web-search, litellm). Use `./dev.sh up --build` to tail the app.
+- **Spin up dev stack**: `./dev.sh up -d --build` (FastAPI, rag, code, web-search, LiteLLM). Use `./dev.sh up --build` to tail the app. Local Ollama models require an Ollama server running on the host at port `11434` (for example, `ollama serve`).
 - **Unit/functional tests**: `uv run pytest` or focus, e.g. `uv run pytest tests/test_auth.py -k bearer`.
 - **Integration: code interpreter**: `CLIMATECLAW_CODE_SERVER_URL=http://localhost:8051 uv run pytest tests/full_integration_tests/test_code_interpreter.py -m integration`.
 - **Integration: web-search**: `CLIMATECLAW_WEB_SEARCH_SERVER_URL=http://localhost:8052 uv run pytest tests/full_integration_tests/test_web_search.py -m integration`.
