@@ -89,7 +89,7 @@ jobs:
     name: Production smoke test
     runs-on: ubuntu-latest
     env:
-      COMPOSE_FILE: docker/docker-compose.yml
+      COMPOSE_FILE: docker/docker-compose.yml:docker/docker-compose.ci.yml
       COMPOSE_ENV_FILES: .env
 
     steps:
@@ -115,16 +115,11 @@ jobs:
 
       - name: Start production stack
         run: |
-          docker compose \
-            -f docker-compose.yml \
-            -f docker-compose.ci.yml \
-            up climateclaw code-server web-search-server \
+          docker compose up climateclaw code-server web-search-server \
             -d --wait --build --remove-orphans || {
               docker ps -a
 
               docker compose \
-                -f docker-compose.yml \
-                -f docker-compose.ci.yml \
                 logs climateclaw mongodb code-server web-search-server litellm
 
               exit 1
