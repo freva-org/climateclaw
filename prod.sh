@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "${ROOT_DIR}"
+COMPOSE_PROJECT_NAME="${ROOT_DIR##*/}"
 
 usage() {
     cat <<EOF
@@ -125,22 +126,23 @@ fi
 # --- Generate scaled compose file ---
 echo "[prod.sh] Generating scaled compose file from ${COMPOSE_FILE}"
 echo "[prod.sh] Using project: ${CLIMATECLAW_PROJECT_NAME}"
+echo "[prod.sh] Using Compose project: ${COMPOSE_PROJECT_NAME}"
 ./docker/gen_compose.py "${COMPOSE_FILE}" "${PROJECT}"
 
 # --- Tear down previous deployment ---
-${COMPOSE} --env-file "${ENV_FILE}" -f "${SCALED_FILE}" down
+${COMPOSE} --project-name "${COMPOSE_PROJECT_NAME}" --env-file "${ENV_FILE}" -f "${SCALED_FILE}" down
 
 echo "[prod.sh] Building climateclaw-base from ${COMPOSE_FILE}"
-${COMPOSE} --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile build-only build climateclaw-base
+${COMPOSE} --project-name "${COMPOSE_PROJECT_NAME}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile build-only build climateclaw-base
 
 if [ "$do_build" = true ]; then
     echo "[prod.sh] Building images ..."
-    ${COMPOSE} --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" build
+    ${COMPOSE} --project-name "${COMPOSE_PROJECT_NAME}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" build
 fi
 
 # --- Start ---
 if [ ${#args[@]} -eq 0 ]; then
     args=(up -d)
 fi
-echo "[prod.sh] Starting: ${COMPOSE} --env-file ${ENV_FILE} -f ${SCALED_FILE} ${args[*]}"
-${COMPOSE} --env-file "${ENV_FILE}" -f "${SCALED_FILE}" "${args[@]}"
+echo "[prod.sh] Starting: ${COMPOSE} --project-name ${COMPOSE_PROJECT_NAME} --env-file ${ENV_FILE} -f ${SCALED_FILE} ${args[*]}"
+${COMPOSE} --project-name "${COMPOSE_PROJECT_NAME}" --env-file "${ENV_FILE}" -f "${SCALED_FILE}" "${args[@]}"

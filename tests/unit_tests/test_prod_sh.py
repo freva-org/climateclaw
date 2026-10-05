@@ -77,7 +77,9 @@ def test_prod_sh_project_flag_sets_project_and_uses_default_up_args(
         in log_path.read_text()
     )
     assert (
-        "podman-compose --env-file .env -f docker/docker-compose.scaled.yml up -d"
+        "podman-compose "
+        f"--project-name {tmp_path.name} "
+        "--env-file .env -f docker/docker-compose.scaled.yml up -d"
         in log_path.read_text()
     )
 
@@ -128,7 +130,8 @@ def test_prod_sh_preserves_compose_args_after_flags(tmp_path, monkeypatch):
     assert result.returncode == 0
     log = log_path.read_text()
     assert (
-        "podman-compose --env-file .env -f docker/docker-compose.scaled.yml up --force-recreate"
-        in log
+        "podman-compose "
+        f"--project-name {tmp_path.name} "
+        "--env-file .env -f docker/docker-compose.scaled.yml up --force-recreate" in log
     )
     assert "--project codes" not in log
