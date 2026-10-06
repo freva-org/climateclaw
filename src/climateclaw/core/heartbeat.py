@@ -1,20 +1,27 @@
 import os
+import socket
+from datetime import UTC, datetime
+from typing import TypeAlias
 
 import psutil
 
 from climateclaw.services.streaming.stream_variants import SVServerHint
 
+MetricValue: TypeAlias = str | int | float
 
-async def heartbeat_content():
+
+def collect_performance_metrics() -> dict[str, MetricValue]:
     """
-    Collects system heartbeat info — CPU, memory, process stats —
-    and returns it as a JSON string .
+    Collect system heartbeat info: CPU, memory, process stats, and host identity.
     """
+    metrics: dict[str, MetricValue] = {
+        "timestamp": datetime.now(UTC).isoformat(),
+        "hostname": os.getenv(
+            "CLIMATECLAW_NODE_NAME", socket.gethostname()
+        ),  # Physical/node identity
+        "service_hostname": socket.gethostname(),  # ClimateClaw deployment / instance identity
+    }
 
-    heartbeat = {}
-
-    # Simulate "maybe_update" — refresh system metrics
-    psutil.cpu_percent(interval=None)
     psutil.virtual_memory()
 
     # Current process info
@@ -22,14 +29,14 @@ async def heartbeat_content():
 
     # --- Memory Info ---
     mem = psutil.virtual_memory()
-    heartbeat["memory"] = mem.used
-    heartbeat["total_memory"] = mem.total
+    metrics["memory"] = mem.used
+    metrics["total_memory"] = mem.total
 
     # --- CPU Info ---
-    heartbeat["cpu_usage"] = psutil.cpu_percent(interval=None)
+    metrics["cpu_usage"] = psutil.cpu_percent(interval=None)
     # psutil isn't guaranteed to have getloadavg on all platforms.
     if hasattr(psutil, "getloadavg"):
-        heartbeat["cpu_last_minute"] = psutil.getloadavg()[0]  # 1-minute load average
+        metrics["cpu_last_minute"] = psutil.getloadavg()[0]  # 1-minute load average
 
     # --- Process Tree: include self and all descendants ---
     process_list = [pid]
@@ -52,8 +59,20 @@ async def heartbeat_content():
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
 
-    heartbeat["process_cpu"] = process_cpu
-    heartbeat["process_memory"] = process_memory
+    metrics["process_cpu"] = process_cpu
+    metrics["process_memory"] = process_memory
+
+    return metrics
+
+
+async def heartbeat_content():
+    """
+    Collects system heartbeat info — CPU, memory, process stats —
+    and returns it as a ServerHint.
+    """
+    metrics = collect_performance_metrics()
+    metrics.pop("hostname", None)
+    metrics.pop("service_hostname", None)
 
     # Return as StreamVariant::ServerHint
-    return SVServerHint(content=heartbeat)
+    return SVServerHint(content=metrics)

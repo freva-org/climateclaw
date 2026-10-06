@@ -87,6 +87,7 @@ if [ -z "${PROJECT}" ]; then
 fi
 
 export CLIMATECLAW_PROJECT_NAME="${PROJECT}"
+export CLIMATECLAW_NODE_NAME="$(hostname -f 2>/dev/null || hostname)"
 
 # --- Require podman ---
 if ! command -v podman &>/dev/null; then
