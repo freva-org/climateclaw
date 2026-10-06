@@ -80,7 +80,7 @@ async def _run_once(idx: int, sem: asyncio.Semaphore) -> RunResult:
 
         Auth = Authenticator.local(username="dev_user")
         Storage = await ThreadStorage.create()
-        create_dir_at_cache(USER_ID, thread_id)
+        create_dir_at_cache(thread_id)
 
         await prepare_for_stream(
             thread_id=thread_id,

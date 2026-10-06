@@ -29,6 +29,13 @@ logger = logging.getLogger(__name__)
 
 CLIMATECLAW_LITELLM_CONFIG_PATH = "LITELLM_CONFIG"
 DEFAULT_CONFIG_BASENAME = "litellm_config.yaml"
+DEV_CONFIG_BASENAME = "litellm_config.dev.yaml"
+
+
+def _config_basename() -> str:
+    """Select the development catalog when the application runs in dev mode."""
+    is_dev = os.getenv("CLIMATECLAW_DEV", "").lower() in {"1", "true", "yes"}
+    return DEV_CONFIG_BASENAME if is_dev else DEFAULT_CONFIG_BASENAME
 
 
 def _as_str_or_none(value: Any) -> str | None:
@@ -79,8 +86,8 @@ def _discover_config_path() -> Path:
     """
     Resolve the LiteLLM YAML path with the following priority:
     1) LITELLM_CONFIG env var (absolute or relative)
-    2) {CWD}/litellm_config.yaml
-    3) Walk parents from this file and the CWD to find the first litellm_config.yaml
+    2) {CWD}/litellm_config[.dev].yaml, according to CLIMATECLAW_DEV
+    3) Walk parents from this file and the CWD to find the first matching config
     """
     # 1) ENV override
     env_path = os.environ.get(CLIMATECLAW_LITELLM_CONFIG_PATH)
@@ -90,15 +97,17 @@ def _discover_config_path() -> Path:
             return p
         logger.warning("LITELLM_CONFIG is set but not a file: %s", p)
 
+    config_basename = _config_basename()
+
     # 2) CWD
-    cwd_candidate = Path.cwd() / DEFAULT_CONFIG_BASENAME
+    cwd_candidate = Path.cwd() / config_basename
     if cwd_candidate.is_file():
         return cwd_candidate.resolve()
 
     # 3) Walk up from this file
     here = Path(__file__).resolve()
     for parent in [*here.parents, *Path.cwd().resolve().parents]:
-        candidate = parent / DEFAULT_CONFIG_BASENAME
+        candidate = parent / config_basename
         if candidate.is_file():
             return candidate.resolve()
 
@@ -127,7 +136,7 @@ def _load_yaml(path: Path) -> Any:
 def available_chatbots() -> list[str]:
     """
     Returns an ordered list of model names discovered under 'model_name' keys
-    in litellm_config.yaml. Fatal if empty.
+    in the active LiteLLM config. Fatal if empty.
     """
     path: Path = _discover_config_path()
     data = _load_yaml(path)
@@ -178,11 +187,11 @@ def model_is_gpt_5(model: str) -> bool:
     return model.startswith("gpt-5")
 
 
-def model_is_ollama(model: str) -> bool:
+def model_is_local(model: str) -> bool:
     """
     True for names starting with the defined list.
     """
-    ollama_list = (
+    local_models = (
         "mistral",
         "ministral",
         "qwen",
@@ -190,7 +199,7 @@ def model_is_ollama(model: str) -> bool:
         "deepseek",
         "gemma",
     )
-    return model.startswith(ollama_list)
+    return model.startswith(local_models)
 
 
 def model_supports_images(model: str) -> bool:
@@ -212,7 +221,7 @@ __all__ = [
     "available_chatbots",
     "default_chatbot",
     "model_is_gpt_5",
-    "model_is_ollama",
+    "model_is_local",
     "model_is_reasoning",
     "model_supports_images",
     "refresh_cache",

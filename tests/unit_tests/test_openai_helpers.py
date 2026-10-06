@@ -62,7 +62,7 @@ def test_ccrm_codeoutput_conversion_does_not_remove_original_preview_url():
 def test_ccrm_codeoutput_conversion_omits_preview_url_from_model_payload():
     code_output = _code_output_with_created_file()
 
-    msgs = help_convert_sv_ccrm([code_output])
+    msgs = help_convert_sv_ccrm([code_output], include_images=True)
 
     model_payload = json.loads(msgs[0]["content"])
     assert model_payload["created_files"][0] == {
@@ -87,7 +87,7 @@ def test_ccrm_codeoutput_conversion_sends_image_url_in_prod_mode(monkeypatch):
     monkeypatch.setattr(openai_helpers, "settings", SimpleNamespace(DEV=False))
     code_output = _code_output_with_created_file()
 
-    msgs = help_convert_sv_ccrm([code_output])
+    msgs = help_convert_sv_ccrm([code_output], include_images=True)
 
     assert len(msgs) == 2
     assert msgs[1]["role"] == "user"
@@ -100,8 +100,8 @@ def test_ccrm_codeoutput_conversion_sends_image_url_only_once(monkeypatch):
     monkeypatch.setattr(openai_helpers, "settings", SimpleNamespace(DEV=False))
     code_output = _code_output_with_created_file()
 
-    first_msgs = help_convert_sv_ccrm([code_output])
-    second_msgs = help_convert_sv_ccrm([code_output])
+    first_msgs = help_convert_sv_ccrm([code_output], include_images=True)
+    second_msgs = help_convert_sv_ccrm([code_output], include_images=True)
 
     first_model_payload = json.loads(first_msgs[0]["content"])
     second_model_payload = json.loads(second_msgs[0]["content"])
