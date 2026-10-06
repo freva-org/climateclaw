@@ -112,6 +112,11 @@ def custom_openapi():
         "in": "header",
         "name": "x-freva-rest-url",
     }
+    security_schemes["FrevaThreadId"] = {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Freva-Thread-Id",
+    }
 
     for path, path_item in openapi_schema.get("paths", {}).items():
         if not path.startswith("/api/chatbot/"):
@@ -121,7 +126,11 @@ def custom_openapi():
             if not isinstance(operation, dict):
                 continue
             operation.setdefault("security", []).append(
-                {"BearerAuth": [], "FrevaRestUrl": []}
+                {
+                    "BearerAuth": [],
+                    "FrevaRestUrl": [],
+                    "FrevaThreadId": [],
+                }
             )
 
     app.openapi_schema = openapi_schema

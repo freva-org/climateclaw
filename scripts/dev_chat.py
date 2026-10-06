@@ -152,7 +152,7 @@ async def main() -> None:
 
     Auth = Authenticator.local(username=USER_ID)
     Storage = await ThreadStorage.create()
-    create_dir_at_cache(USER_ID, thread_id)
+    create_dir_at_cache(thread_id)
 
     system_prompt = get_entire_prompt(USER_ID, thread_id, MODEL)
 

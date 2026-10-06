@@ -46,6 +46,7 @@ export CLIMATECLAW_NODE_NAME="$(hostname -f 2>/dev/null || hostname)"
 CLIMATECLAW_DEBUG="${CLIMATECLAW_DEBUG:-0}"
 COMPOSE_FILE="docker-compose.dev.yml"
 BUILD_COMPOSE_FILE="${COMPOSE_FILE}"
+SCALED_COMPOSE_FILE="docker-compose.dev.scaled.yml"
 DO_BUILD=0
 COMPOSE_ARGS=()
 
@@ -71,7 +72,7 @@ for arg in "$@"; do
     # Launch with scaling and proxy
     --scale)
       ./gen_compose.py ${COMPOSE_FILE}
-      COMPOSE_FILE="docker-compose.dev.scaled.yml"
+      COMPOSE_FILE="${SCALED_COMPOSE_FILE}"
       ;;
     # Build images once from the unscaled compose file.
     --build)
@@ -89,6 +90,15 @@ export CLIMATECLAW_DEBUG
 
 echo "[dev.sh] Using ${COMPOSE_FILE} with DEBUG=${CLIMATECLAW_DEBUG}"
 echo "[dev.sh] docker compose -f ${COMPOSE_FILE} ${COMPOSE_ARGS[*]}"
+
+if [[ " ${COMPOSE_ARGS[*]} " == *" up "* ]]; then
+  if [ -f "${SCALED_COMPOSE_FILE}" ]; then
+    echo "[dev.sh] Tearing down scaled dev stack"
+    docker compose -f "${SCALED_COMPOSE_FILE}" down
+  fi
+  echo "[dev.sh] Tearing down dev stack"
+  docker compose -f "${BUILD_COMPOSE_FILE}" down
+fi
 
 docker compose -f "${BUILD_COMPOSE_FILE}" --profile build-only build climateclaw-base
 if [ "${DO_BUILD}" = "1" ]; then
