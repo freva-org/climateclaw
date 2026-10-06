@@ -1,32 +1,35 @@
 model_list:
   - model_name: gpt-4.1
-    litellm_params: # all params accepted by litellm.completion() - https://docs.litellm.ai/docs/completion/input
-      model: openai/gpt-4.1 ### MODEL NAME sent to `litellm.completion()` ###
+    litellm_params:
+      model: openai/gpt-4.1
       api_key: "os.environ/CLIMATECLAW_OPENAI_API_KEY"
-      # temperature: 0.2
   - model_name: gpt-5.6-luna
     litellm_params:
       model: openai/gpt-5.6-luna
       api_key: "os.environ/CLIMATECLAW_OPENAI_API_KEY"
       reasoning_effort: none
-      # temperature: 0.2
   - model_name: gpt-5.6-sol
     litellm_params:
       model: openai/gpt-5.6-sol
       api_key: "os.environ/CLIMATECLAW_OPENAI_API_KEY"
       reasoning_effort: none
-      # temperature: 0.2
   - model_name: gpt-4.1-mini
     litellm_params:
       model: openai/gpt-4.1-mini
       api_key: "os.environ/CLIMATECLAW_OPENAI_API_KEY"
   - model_name: "gemma4:31b"
     litellm_params:
-      model: "os.environ/CLIMATECLAW_VLLM_LITELLM_MODEL"
-      api_base: "os.environ/CLIMATECLAW_VLLM_API_BASE"
-      api_key: "os.environ/CLIMATECLAW_VLLM_API_KEY"
+      model: "ollama_chat/gemma4:31b"
+      api_base: "http://host.docker.internal:11434"
+    model_info:
+      supports_function_calling: true
+  - model_name: "ministral-3:8b"
+    litellm_params:
+      model: "ollama_chat/ministral-3:8b"
+      api_base: "http://host.docker.internal:11434"
     model_info:
       supports_function_calling: true
 
+
 litellm_settings:
-  drop_params: true # If true, drop all parameters not in the model_list from the request
+  drop_params: true
