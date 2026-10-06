@@ -77,7 +77,7 @@ services:
       - 8051:8051
     cpus: 4
     volumes:
-      - /Users/fischer/DKRZ/Coding/ClimateClaw/work:/work:ro
+      - /Users/fischer/DKRZ/Coding/ClimateClaw/work:/work:ro # temporary mount for sshfs work directory for easy access to files on levante
       - ./cache/:/app/cache
       - ./logs/:/app/logs
     networks:
@@ -152,7 +152,7 @@ services:
       start_period: 10s
 
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    image: ghcr.io/berriai/litellm:v1.102.0
     hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
       - ./litellm_config.dev.yaml:/app/config.yaml # Development config excludes the deployment-only vLLM model
