@@ -1,5 +1,8 @@
+import ast
 import json
 import os
+import re
+import textwrap
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional, Tuple
@@ -35,8 +38,10 @@ ALLOWED_FILE_EXTENSIONS = (
     ".rst",
 )  # only fetch these file types
 MAX_FILE_SIZE_BYTES = 50_000  # skip files larger than this
-MAX_TOTAL_CODE_CHARS = 50_000  # truncate total fetched code after this limit
-MAX_RELEVANT_FILES = 3  # max files to fetch for relevance filtering
+MAX_TOTAL_CODE_CHARS = 70_000  # truncate total fetched code after this limit
+MAX_FILES = 5  # max files the LLM may select in total
+ENTRY_PATTERN = re.compile(r"(wrapper|api)[^/]*\.py$", re.IGNORECASE)
+EXCLUDE_PATTERN = re.compile(r"(^|/)(tests?/|test_|__init__\.py$)", re.IGNORECASE)
 USERNAME = "username"
 MODEL = "model"
 
@@ -147,7 +152,7 @@ def get_project_id(plugin: str, project: str) -> int | None:
     return resp.json().get("id")
 
 
-def fetch_repo_tree(project_id: int) -> list[str]:
+def fetch_repo_tree_and_branch(project_id: int) -> tuple[list[str], str]:
     """
     Return the recursive file tree for a plugin repository as a list of
     file paths (strings) that match relevant extensions.
@@ -172,117 +177,201 @@ def fetch_repo_tree(project_id: int) -> list[str]:
         for entry in items
         if entry["type"] == "blob" and entry["path"].endswith(ALLOWED_FILE_EXTENSIONS)
     ]
-    return paths
 
-
-def fetch_plugin_code(
-    project_id: int, selected_files: list[str], max_chars: int
-) -> str:
-    """
-    Fetch the raw content of selected files and concatenate them into a single string,
-    until the total character count reaches `max_chars`.
-    The default branch name for all files is "levante" or "master".
-    """
-    # first get the repo's default path
+    # Get the default branch of the repository (usually "levante" or "master")
     resp = _gitlab_http.get(f"/projects/{project_id}")
     resp.raise_for_status()
     default_branch = resp.json().get("default_branch")
+    return paths, default_branch
 
-    collected: list[str] = []
-    total_chars = 0
+
+def fetch_files(
+    project_id: int, branch: str, selected_files: list[str], max_chars: int
+) -> dict[str, str]:
+    """
+    Fetch the raw content of selected files until the total character count
+    reaches `max_chars`. Returns a mapping of file path -> content.
+    """
+    collected: dict[str, str] = {}
+    budget = max_chars
     for file in selected_files:
-        if total_chars >= max_chars:
-            collected.append(f"\n--- (truncated: reached {max_chars} char limit) ---")
+        if budget <= 0:
             break
         try:
-            content = _fetch_file_raw(project_id, file, default_branch)
-            if len(content) > MAX_FILE_SIZE_BYTES:
-                content = content[:MAX_FILE_SIZE_BYTES] + "\n... (file truncated)"
-            collected.append(f"### FILE: {file} ###\n```\n{content}\n```\n")
-            total_chars += len(content)
+            content = _fetch_file_raw(project_id, file, branch)
         except Exception as e:
             logger.debug(
                 "Skipping file %s due to error in fetching content: %s", file, e
             )
+            continue
+        if len(content) > MAX_FILE_SIZE_BYTES:
+            content = content[:MAX_FILE_SIZE_BYTES] + "\n... (file truncated)"
+        if len(content) > budget:
+            content = (
+                content[:budget] + f"\n... (truncated: reached {max_chars} char limit)"
+            )
+        collected[file] = content
+        budget -= len(content)
+    return collected
 
-    if not collected:
-        return "(no source files could be retrieved)"
-    return "\n".join(collected)
+
+# ── Other helpers ────────────────────────────────────────────────
+
+
+def extract_method_from_source(
+    source_code: str, method_name: str = "run_tool"
+) -> str | None:
+    """Parses a Python source string and returns the code of a specific method."""
+    try:
+        # 1. Clean tabs and fix uneven leading indentation
+        cleaned_code = source_code.expandtabs(4)
+        cleaned_code = textwrap.dedent(cleaned_code)
+
+        # 2. Parse the cleaned source code
+        tree = ast.parse(cleaned_code)
+
+        # Look for the method definition anywhere in the tree
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == method_name:
+                # ast.get_source_segment extracts the exact string from the source
+                method_code = ast.get_source_segment(source_code, node)
+                return method_code
+
+        return f"Method '{method_name}' not found in the source code."
+
+    except SyntaxError as e:
+        return f"Syntax error in the provided source code: {e}"
+
+
+def format_files(files: dict[str, str]) -> str:
+    """Concatenate fetched files into a single string, separated by file headers."""
+    return "\n".join(
+        f"### FILE: {path} ###\n```\n{content}\n```\n"
+        for path, content in files.items()
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
 
 
-async def select_relevant_files(
-    plugin: str, context: str, file_paths: list[str], dep: bool = False
+def find_entry_file(file_paths: list[str]) -> str:
+    """
+    Deterministically find the plugin entry file ('*wrapper*.py' or '*api*.py'),
+    excluding tests. Shallower paths come first, as they are most likely the
+    actual plugin entry point.
+    """
+    matches = [
+        p
+        for p in file_paths
+        if ENTRY_PATTERN.search(p) and not EXCLUDE_PATTERN.search(p)
+    ]
+    return sorted(matches, key=lambda p: (p.count("/"), p))[0]
+
+
+async def _llm_select_files(
+    prompt: str, file_paths: list[str], num_files: int, fallback: list[str]
 ) -> list[str]:
     """
-    Given a list of file paths in the plugin repo, ask the model to pick the most relevant
-    ones for the user's query (dep=False) or for searching code dependencies (dep=True).
-    If the LLM-based selection fails, fall back to a heuristic of picking all files.
+    Ask the LLM for a JSON array of file paths and keep only those that exist
+    in `file_paths`. Returns `fallback` if the LLM response cannot be parsed.
     """
-    file_tree = "\n".join(file_paths)
-    if not dep:
-        selection_prompt = (
-            f"Task: You are selecting the most relevant files from the '{plugin}' Freva plugin repository.\n\n"
-            "Selection rules:\n"
-            "- Prioritize files that seem most relevant to answer the query intent.\n"
-            "- For high level usage/configuration questions, prioritize wrapper/config files,  README and docs.\n"
-            "- For questions about implementation logic, prioritize source code modules.\n"
-            "- Exclude tests, examples, generated files, and any '__init__.py'.\n"
-            f"- Return ONLY a valid JSON array of file path strings from the provided list, with at most {MAX_RELEVANT_FILES} items. Output nothing but the JSON array."
-            f"Repository file list:\n{file_tree}\n\n"
-            f"User context:\n{context}\n\n"
-        )
-    else:
-        selection_prompt = (
-            "Task: You are analyzing Python source code from a repository. "
-            " Your job is to find which repository files are directly imported by the given source code.\n\n"
-            "Selection rules:\n"
-            "- Scan the code for all import statements (import X, from X import Y).\n"
-            "- Match each import to a file in the repository list using Python module path conventions (e.g. 'from foo.bar import baz' maps to 'foo/bar.py').\n"
-            "- Only include files that are directly imported — do NOT infer transitive dependencies.\n"
-            "- Exclude tests, examples, generated files, and any '__init__.py'.\n"
-            f"- Return ONLY a valid JSON array of at most {MAX_RELEVANT_FILES} file path strings "
-            "from that list that are imported or depend upon the fetched code. "
-            "If none match, return []."
-            f"=== Fetched Code ===\n{context}\n=== END ===\n\n"
-            f"=== Remaining Repository Files ===\n{file_tree}\n=== END ===\n\n"
-        )
-
     try:
-        raw_text = await call_llm(selection_prompt)
+        raw_text = await call_llm(prompt)
         # Strip markdown code fences if present
         if raw_text.startswith("```"):
             raw_text = "\n".join(raw_text.split("\n")[1:])
         if raw_text.endswith("```"):
             raw_text = "\n".join(raw_text.split("\n")[:-1])
-        selected_files: list[str] = json.loads(raw_text.strip())
+        select_files: list[str] = json.loads(raw_text.strip())
     except Exception as e:
         logger.warning("LLM file selection failed (%s); falling back to heuristic.", e)
-        # Fallback: pick all files from the tree search;
-        # or pick nothing for dependency selection to avoid fetching duplicate code
-        selected_files = file_paths if not dep else []
+        select_files = fallback
 
-    # Return only paths that actually exist in the tree
-    return [p for p in selected_files if p in set(file_paths)][:MAX_RELEVANT_FILES]
+    # Return only paths that exist in repo tree and conform to exclusion pattern
+    valid_paths = [
+        p
+        for p in select_files
+        if p in set(file_paths) and not EXCLUDE_PATTERN.search(p)
+    ]
+    return valid_paths[:num_files]  # limit to max number of files
+
+
+async def select_init_files(
+    plugin: str,
+    user_query: str,
+    fetched_code: str,
+    file_paths: list[str],
+    num_files: int,
+) -> list[str]:
+    """
+    Fallback if no entry file was found: let the LLM pick the most relevant files
+    from the repo tree for the user's query.
+    """
+    file_tree = "\n".join(file_paths)
+    selection_prompt = (
+        f"Task: You are analyzing the files from the '{plugin}' Freva plugin repository. "
+        "Given the context and module imports in the fetched code, prioritize and select the files that seem *most* relevant to answer the user's query.\n\n"
+        "Selection rules:\n"
+        "- For high level usage/configuration questions, prioritize wrapper/config files, README and docs.\n"
+        "- For questions about implementation logic, prioritize source code modules.\n"
+        "- Exclude tests, examples, generated files, and any '__init__.py'.\n"
+        f"- Return ONLY a valid JSON array of at most {num_files} file path strings from the provided list. Output nothing but the JSON array.\n\n"
+        f"=== User Query ===\n{user_query}\n=== END ===\n\n"
+        f"=== Repository file list ===\n{file_tree}\n=== END ===\n\n"
+        f"=== Fetched Code ===\n{fetched_code}\n=== END ===\n\n"
+    )
+    # Fallback: pick all files from the tree search
+    return await _llm_select_files(
+        selection_prompt, file_paths, num_files, fallback=file_paths
+    )
+
+
+async def select_dependency_files(
+    plugin: str,
+    user_query: str,
+    fetched_code: str,
+    file_paths: list[str],
+    num_files: int,
+) -> list[str]:
+    """
+    Ask the LLM which of the remaining repo files are direct dependencies of the
+    fetched code.
+    """
+    file_tree = "\n".join(file_paths)
+    selection_prompt = (
+        f"Task: You are tracing the code base of the '{plugin}' Freva plugin. "
+        "Given the already fetched source code, prioritize and select which of the remaining repository files should be read next.\n\n"
+        "Selection rules:\n"
+        "- Scan the fetched code for imports or script calls and map each to the matching repository file using Python module conventions "
+        "(e.g., 'from foo.bar import baz' -> 'foo/bar.py').\n"
+        "- Ignore imports from third-party libraries (e.g. numpy, xarray, evaluation_system etc.) and focus on the plugin's own source code.\n"
+        "- Exclude tests, examples, generated files, and any '__init__.py'.\n"
+        f"- Return ONLY a valid JSON array of at most {num_files} file path strings from the remaining repository list. If none match, return []. Output nothing but the JSON array.\n\n"
+        f"=== User Query ===\n{user_query}\n=== END ===\n\n"
+        f"=== Fetched Code ===\n{fetched_code}\n=== END ===\n\n"
+        f"=== Remaining Repository Files ===\n{file_tree}\n=== END ===\n\n"
+    )
+    # Fallback: pick nothing to avoid fetching irrelevant code
+    return await _llm_select_files(selection_prompt, file_paths, num_files, fallback=[])
 
 
 async def collect_plugin_context(
     plugin: str, project: str, project_id: int, user_query: str
 ) -> str:
     """
-    Three-stage context retrieval of code base:
-        1. Ask LLM which files are most relevant for the user's query.
-        2. Fetch those files, then scan for imports to identify dependent modules.
-        3. Fetch the dependencies and return the combined contents.
+    Entry-point-driven context retrieval of the plugin code base:
+        1. Deterministically find the plugin entry files ('*wrapper*.py' / '*api*.py')
+           in the repo tree.
+        2. Let the LLM select the direct dependencies of the entry files plus other
+           modules relevant for the user's query, and fetch those.
+        3. Let the LLM resolve the direct dependencies of the newly fetched files.
     Returns a string containing the concatenated relevant source code files,
         separated by file and with a header.
     """
 
     def _log_stage(stage: str, files: list[str]):
         logger.info(
-            "LLM-based %s retrieval stage selected %d/%d files for plugin '%s': %s",
+            "%s retrieval step selected %d/%d files for plugin '%s': %s",
             stage,
             len(files),
             len(file_paths),
@@ -295,27 +384,51 @@ async def collect_plugin_context(
         f"(https://gitlab.dkrz.de/{project}/plugins4freva/{plugin}):\n\n"
     )
 
-    # ── Stage 0: fetch the repository tree with all files ────────────────────
-    file_paths = fetch_repo_tree(project_id)
+    # ── Fetch the repository tree with all files ────────────────────
+    file_paths, branch = fetch_repo_tree_and_branch(project_id)
     if not file_paths:
-        return "(repository is empty)"
+        return f"repository is empty for plugin '{plugin}' in branch '{branch}'"
 
-    # ── Stage 1: let LLM select relevant files ─────────────────────────
-    base_files = await select_relevant_files(plugin, user_query, file_paths)
-    _log_stage("Initial", base_files)
+    # ── Stage 1: find & fetch plugin entry ─────────────────────
+    entry_file = find_entry_file(file_paths)
+    _log_stage("Deterministic entry file", [entry_file])
 
-    # ── Stage 2: fetch selected files ────────────────────────────────────────
-    init_code = fetch_plugin_code(project_id, base_files, 2 * MAX_TOTAL_CODE_CHARS // 3)
+    exec_code = extract_method_from_source(
+        _fetch_file_raw(project_id, entry_file, branch), method_name="run_tool"
+    )
+    exec_code = exec_code or "No 'run_tool' method found in the entry file."
+    _log_stage("Run_tool method extraction", [exec_code])
+    entry_code = format_files({entry_file: exec_code})
 
-    # ── Stage 3: resolve dependencies ────────────────────────────────────────
-    tree_remaining = [p for p in file_paths if p not in set(base_files)]
-    dep_files = await select_relevant_files(plugin, init_code, tree_remaining, dep=True)
-    _log_stage("Dependency", dep_files)
-    if not dep_files:
-        return header + init_code
+    # ── Stage 2: find & fetch useful files, based on entry file + user context ───────
+    remaining = [p for p in file_paths if p not in entry_file]
+    init_files = await select_init_files(
+        plugin, user_query, entry_code, remaining, MAX_FILES
+    )
+    init_files = list(set([entry_file] + init_files))
+    init_code = fetch_files(project_id, branch, init_files, MAX_TOTAL_CODE_CHARS)
+    _log_stage("Combined LLM-based initial", init_files)
 
-    dep_code = fetch_plugin_code(project_id, dep_files, MAX_TOTAL_CODE_CHARS // 3)
-    code_content = init_code + "\n\n### ── Dependency files ── ###\n\n" + dep_code
+    # ── Stage 3: resolve dependencies ───────────────────────────────────
+    budget = MAX_TOTAL_CODE_CHARS - sum(len(c) for c in init_code.values())
+    remaining = [p for p in file_paths if p not in init_code]
+    max_deps = MAX_FILES - len(init_files)
+    dep_files = await select_dependency_files(
+        plugin,
+        user_query,
+        format_files(init_code),
+        remaining,
+        max_deps,
+    )
+    _log_stage("LLM-based dependency", dep_files)
+    deps_code = fetch_files(project_id, branch, dep_files, budget)
+
+    # Format the final output with header and fetched code, including dependencies
+    code_content = format_files(init_code)
+    if deps_code:
+        code_content += "\n\n### ── Dependency files ── ###\n\n" + format_files(
+            deps_code
+        )
     return header + code_content
 
 
@@ -403,6 +516,7 @@ async def plugin_code_search(user_query: str) -> str:
     """
     Fetch relevant source code and documentation files of a Freva data analysis plugin
     as a repository-grounded code knowledge base.
+
     Use this when the user
     - explicitly asks how a plugin's internal logic works, how to run or configure it,
     or wants plugin code translated or adapted into Python examples;
@@ -411,27 +525,34 @@ async def plugin_code_search(user_query: str) -> str:
     and drift correction, downscaling, precipitation indices, crop impact, heat waves/HWMID
     climate/extreme indices, region matching, urban heatwave extraction, precipitation
     disaggregation, and plugin creation).
+
     Workflow Guidelines:
-    - the matching plugin and project are detected automatically from the query.
+    - Ground explanations only in returned code context.
+    - Handle retrieved plugin code in two separate steps:
+      1. **First step (always) – only high level:** a factful explanation of how the plugin works and how to use it (including plugin and project names).
+      2. **Second step (only if requested) – implementation:** turn the plugin's *core logic* into a lightweight Python snippet with a concise plan.
     - reference modules, classes, and functions only when asked for more detail.
-    - call it again for follow-up questions not sufficiently covered by prior results.
-    - only implement the plugin's *core logic* in a lightweight Python snippet
-    - replace `cdo` with `xarray` operations
-    - prioritize workflow correctness over mirroring non-critical details (e.g. multiple tries, fallbacks, logging)
+    - call it again for follow-up questions *not* sufficiently covered by prior results.
+    - only implement the plugin's *core logic* in a lightweight Python snippet - for that:
+        - replace `cdo` with `xarray` operations
+        - prioritize workflow correctness over mirroring non-critical details (e.g. multiple tries, fallbacks, logging)
 
     Args:
+    -----
         user_query (str): What the user wants to know about or do with a dedicated Freva
         plugin regarding climate or weather data analysis. Always the only argument.
 
     Returns:
+    --------
         str: Relevant code context (with a header containing the plugin's repo URL),
         including directly imported dependency files; or an error message if the plugin
         is not found, user access is denied, or code retrieval fails.
 
     Examples:
-        - "How does the 'leadtimeselektor' plugin work from a high-level perspective?"
-        - "How can I calculate climate prediction skill scores against observations or reanalysis data?"
-        - "How can I assess the impact of extreme climate events on crop productivity?"
+    ---------
+    - "How does the 'leadtimeselektor' plugin work from a high-level perspective?"
+    - "How can I calculate climate prediction skill scores against observations or reanalysis data?"
+    - "How can I assess the impact of extreme climate events on crop productivity?"
     """
     plugin, project = await detect_plugin_project(user_query)
     # return f"plugin_name: {plugin}, project_name: {project}"  # only for benchmarking the plugin detection stage
