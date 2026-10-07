@@ -111,9 +111,9 @@ services:
   reference-server:
     image: reference-server-${CLIMATECLAW_INSTANCE_NAME}
     build:
-      context: .
+      context: ..
       dockerfile: docker/reference-server/Dockerfile
-    env_file: .env
+    env_file: ../.env
     hostname: reference-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_MCP_HOST: 0.0.0.0
@@ -123,7 +123,7 @@ services:
     networks:
       - climateclaw
     volumes:
-      - ./logs:/app/logs
+      - ../logs:/app/logs
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8053/healthz')\""]
       interval: 5s
