@@ -47,7 +47,9 @@ async def test_routes_succeed_with_auth_and_username_injection(
                 headers=GOOD_HEADERS,
             )
             assert r.status_code == 200
-            assert r.json()[0][0].get("user_id") == "alice"
+            assert (
+                r.json()[0][0].get("user_id") == "062027f1-df70-572b-a59a-fbd0c55c179c"
+            )
 
             # 3) /getthread: must pass thread_id
             r = await client.post(

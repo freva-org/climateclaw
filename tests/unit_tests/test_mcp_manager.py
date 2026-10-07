@@ -16,7 +16,7 @@ async def discover_openai_tools(raw_tools):
 
     await manager._discover_tools("test-server")
 
-    return await manager.openai_tools()
+    return await manager.available_tools()
 
 
 async def test_discover_tools_accepts_camel_case_input_schema():
