@@ -300,7 +300,7 @@ def generate_haproxy(
 def main():
 
     if len(sys.argv) < 2:
-        print("Usage: gen_compose.py docker-compose.dev.yml [project]")
+        print("Usage: docker/gen_compose.py docker/docker-compose.dev.yml [project]")
         sys.exit(1)
 
     compose_path = sys.argv[1]
@@ -390,7 +390,7 @@ def main():
     }
 
     log_dir = (
-        "./logs/"
+        "../logs/"
         if DEV_MODE
         else "/container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs"
     )
@@ -439,9 +439,10 @@ def main():
         timeout=mcp_request_timeout,
     )
 
-    Path("haproxy.cfg").write_text(haproxy_cfg)
+    haproxy_path = input_path.with_name("haproxy.cfg")
+    haproxy_path.write_text(haproxy_cfg)
 
-    print(f"Generated {output_path.name} and haproxy.cfg")
+    print(f"Generated {output_path} and {haproxy_path}")
 
 
 if __name__ == "__main__":
