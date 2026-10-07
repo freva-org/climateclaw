@@ -125,6 +125,9 @@ async def acomplete(
     if request_params:
         payload.update(_passthrough_params(request_params))
 
+    # Keep tool execution ordered unless a caller deliberately opts in.
+    payload.setdefault("parallel_tool_calls", False)
+
     if not stream:
         return await _post_json(url, payload)
 

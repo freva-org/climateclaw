@@ -113,6 +113,7 @@ async def web_search(query: str) -> dict:
                 ],
                 "stream": False,
                 "tool_choice": "auto",
+                "parallel_tool_calls": False,
                 "tools": [
                     {
                         "type": "web_search",

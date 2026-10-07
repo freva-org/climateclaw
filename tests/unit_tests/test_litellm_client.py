@@ -89,6 +89,7 @@ async def test_acomplete_responses_accepts_messages_and_translates_payload():
         "input": [{"role": "user", "content": "hi"}],
         "temperature": 0.2,
         "max_output_tokens": 25,
+        "parallel_tool_calls": False,
     }
     assert first_text(result) == "hello from responses"
 
@@ -124,6 +125,29 @@ async def test_acomplete_responses_prefers_explicit_input():
             "content": [{"type": "input_text", "text": "used"}],
         }
     ]
+    assert captured["json"]["parallel_tool_calls"] is False
+
+
+@pytest.mark.asyncio
+async def test_acomplete_allows_an_explicit_parallel_tool_calls_override():
+    fake = FakeResp(status_code=200, json_body={"choices": []}, text="")
+    captured = {}
+
+    async def fake_post(self, *args, **kwargs):
+        captured["json"] = kwargs["json"]
+        return fake
+
+    with patch(
+        "climateclaw.services.streaming.litellm_client.httpx.AsyncClient.post",
+        new=fake_post,
+    ):
+        await acomplete(
+            model="gpt-4.1-mini",
+            messages=[],
+            parallel_tool_calls=True,
+        )
+
+    assert captured["json"]["parallel_tool_calls"] is True
 
 
 def test_responses_helpers_extract_text_message_and_tool_calls():
