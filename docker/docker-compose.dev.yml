@@ -1,7 +1,7 @@
 services:
   climateclaw-base:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile.base
     image: ghcr.io/freva-org/climateclaw-base:latest
     profiles:
@@ -10,9 +10,9 @@ services:
   climateclaw:
     image: climateclaw-${CLIMATECLAW_INSTANCE_NAME:?Instance name must be set in the .env file to differentiate between instances}
     build:
-      context: .
+      context: ..
       dockerfile: docker/climateclaw/Dockerfile
-    env_file: .env
+    env_file: ../.env
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
       CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
@@ -22,9 +22,8 @@ services:
       - "8600:${CLIMATECLAW_BACKEND_PORT:-8502}" # localhost:8600/docs give FastAPI docs
       - "${CLIMATECLAW_DEBUG_PORT:-5678}:${CLIMATECLAW_DEBUG_PORT:-5678}" # Port for debugpy
     volumes:
-      - /Users/fischer/DKRZ/Coding/ClimateClaw/work:/work:ro # mounts sshfs work directory for easy access to code and resources from climateclaw container
-      - ./cache/:/app/cache
-      - ./logs/:/app/logs
+      - ../cache/:/app/cache
+      - ../logs/:/app/logs
     networks:
       - climateclaw
     healthcheck:
@@ -46,9 +45,9 @@ services:
   rag-server:
     image: rag-server-${CLIMATECLAW_INSTANCE_NAME}
     build:
-      context: .
+      context: ..
       dockerfile: docker/rag-server/Dockerfile
-    env_file: .env
+    env_file: ../.env
     hostname: rag-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
@@ -56,17 +55,17 @@ services:
       CLIMATECLAW_MCP_HOST: 0.0.0.0
       CLIMATECLAW_MCP_PORT: ${CLIMATECLAW_RAG_PORT:-8050}
     volumes:
-      - ./resources:/app/resources:ro
-      - ./logs/:/app/logs
+      - ../resources:/app/resources:ro
+      - ../logs/:/app/logs
     networks:
       - climateclaw
 
   code-server:
     image: code-server-${CLIMATECLAW_INSTANCE_NAME}
     build:
-      context: .
+      context: ..
       dockerfile: docker/code-server/Dockerfile
-    env_file: .env
+    env_file: ../.env
     hostname: code-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
@@ -77,9 +76,8 @@ services:
       - 8051:8051
     cpus: 4
     volumes:
-      - /Users/fischer/DKRZ/Coding/ClimateClaw/work:/work:ro # temporary mount for sshfs work directory for easy access to files on levante
-      - ./cache/:/app/cache
-      - ./logs/:/app/logs
+      - ../cache/:/app/cache
+      - ../logs/:/app/logs
     networks:
       - climateclaw
     healthcheck:
@@ -96,9 +94,9 @@ services:
   web-search-server:
     image: web-search-server-${CLIMATECLAW_INSTANCE_NAME}
     build:
-      context: .
+      context: ..
       dockerfile: docker/web-search-server/Dockerfile
-    env_file: .env
+    env_file: ../.env
     hostname: web-search-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
@@ -110,7 +108,7 @@ services:
     networks:
       - climateclaw
     volumes:
-      - ./logs/:/app/logs
+      - ../logs/:/app/logs
     healthcheck:
       test:
         [
@@ -155,8 +153,8 @@ services:
     image: ghcr.io/berriai/litellm:v1.102.0
     hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
-      - ./litellm_config.dev.yaml:/app/config.yaml # Development config excludes the deployment-only vLLM model
-      - ./logs/:/app/logs
+      - ../litellm_config.dev.yaml:/app/config.yaml # Development config excludes the deployment-only vLLM model
+      - ../logs/:/app/logs
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >
@@ -165,9 +163,8 @@ services:
         --port=4000
         --num_workers=8
         --run_gunicorn
-        --detailed_debug
         2>&1 | tee -a /app/logs/litellm.log
-    env_file: .env
+    env_file: ../.env
     ports:
       - "4000:4000" # Expose LiteLLM port to the host machine for direct access if needed, e.g. local dev
     networks:
@@ -195,7 +192,7 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - ./mongo-data:/data/db
+      - ../mongo-data:/data/db
     healthcheck:
       test: ["CMD", "healthchecks", "-s", "mongo"]
       interval: 35s
@@ -242,8 +239,8 @@ services:
       - DEV_MODE=1
       - CHAT_BOT=1
     volumes:
-      - ./docker/freva.conf:/data/evaluation_system.conf
-      - ./cache/:/opt/freva_web/static/preview/climateclaw
+      - ./freva.conf:/data/evaluation_system.conf
+      - ../cache/:/opt/freva_web/static/preview/climateclaw
 
   freva-cache:
     networks:
