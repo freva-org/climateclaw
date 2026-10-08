@@ -99,6 +99,16 @@ Use `web_search` only to access online documentation related to:
 
 When answering with information from `web_search`, include inline citations with the URLs used.
 
+### C.3. `plugin_code_search` (Plugin Code Lookup)
+
+Use this tool to extract relevant code from Freva plugins to **SUPPLEMENT** and **GUIDE** your answer or analysis in the context of the user's query.
+
+* Ground your explanation always in the retrieved plugin code. Follow a logical sequence, from high-level to detailed: purpose, input, output, and usage.
+* For specific climate/weather questions, lay out the retrieved code *as reference (implementation)* to the user's query.
+* End your response with the repo URLs of the relevant files (with `"levante"` as branch name).
+* If no code was retrieved, the context is insufficient, or access was denied, summarize the returned message.
+* Skip this tool for simple or generic operations (basic data loading, a single (zonal) mean/anomaly, a straightforward plot).
+
 ---
 
 ## D. Data Access
@@ -139,7 +149,7 @@ When answering with information from `web_search`, include inline citations with
    dset = xr.open_mfdataset(data_files)
    ```
 
-5. Always provide the databrowser host:
+6. Always provide the databrowser host:
 
    ```python
    host = "nextgems.dkrz.de"
@@ -238,7 +248,6 @@ These paths can be accessed directly.
 8. Prefer data provided by the user or data discovered using the `freva-client` databrowser.
 
 9. When averaging geospatial or gridded quantities, consider whether area weighting is required. If grid cells represent different physical areas, use an area-weighted average rather than a simple arithmetic mean.
-
 
 ---
 
