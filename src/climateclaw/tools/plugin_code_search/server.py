@@ -21,7 +21,7 @@ HOST = os.getenv("CLIMATECLAW_MCP_HOST", "0.0.0.0")
 PORT = int(os.getenv("CLIMATECLAW_MCP_PORT", "8053"))
 PATH = os.getenv("CLIMATECLAW_MCP_PATH", "/mcp")  # standard path
 
-# ── Config ───────────────────────────────────────────────────────────────────
+# ── Tool Config ────────────────────────────────────────────────────────────────
 GITLAB_ACCESS_TOKEN: Optional[str] = os.getenv("CLIMATECLAW_GITLAB_ACCESS_TOKEN")
 GITLAB_BASE_URL = "https://gitlab.dkrz.de/api/v4"
 FREVA_PROJECT_NAMES = {
@@ -38,8 +38,8 @@ ALLOWED_FILE_EXTENSIONS = (
     ".rst",
 )  # only fetch these file types
 MAX_FILE_SIZE_BYTES = 50_000  # skip files larger than this
-MAX_TOTAL_CODE_CHARS = 70_000  # truncate total fetched code after this limit
-MAX_FILES = 5  # max files the LLM may select in total
+MAX_TOTAL_CODE_CHARS = 100_000  # truncate total fetched code after this limit
+MAX_FILES = 6  # max files the LLM may select in total
 ENTRY_PATTERN = re.compile(r"(wrapper|api)[^/]*\.py$", re.IGNORECASE)
 EXCLUDE_PATTERN = re.compile(r"(^|/)(tests?/|test_|__init__\.py$)", re.IGNORECASE)
 USERNAME = "username"
@@ -223,17 +223,14 @@ def extract_method_from_source(
 ) -> str | None:
     """Parses a Python source string and returns the code of a specific method."""
     try:
-        # 1. Clean tabs and fix uneven leading indentation
+        # Clean tabs and fix uneven leading indentation
         cleaned_code = source_code.expandtabs(4)
         cleaned_code = textwrap.dedent(cleaned_code)
-
-        # 2. Parse the cleaned source code
+        # Parse the cleaned source code
         tree = ast.parse(cleaned_code)
-
         # Look for the method definition anywhere in the tree
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == method_name:
-                # ast.get_source_segment extracts the exact string from the source
                 method_code = ast.get_source_segment(source_code, node)
                 return method_code
 
@@ -309,10 +306,10 @@ async def select_init_files(
     """
     file_tree = "\n".join(file_paths)
     selection_prompt = (
-        f"Task: You are analyzing the files from the '{plugin}' Freva plugin repository. "
-        "Given the context and module imports in the fetched code, prioritize and select the files that seem *most* relevant to answer the user's query.\n\n"
-        "Selection rules:\n"
-        "- For high level usage/configuration questions, prioritize wrapper/config files, README and docs.\n"
+        f"Task: You are analyzing the files from the '{plugin}' Freva plugin repository, given the user context and the fetched code. "
+        "Prioritize and select the files based on the following rules:\n\n"
+        "- Select the files that are imported or called as scripts in the fetched code, as well as those that seem *most* relevant to answer the user's query.\n"
+        "- For high level usage/configuration questions, prioritize config files, README and docs.\n"
         "- For questions about implementation logic, prioritize source code modules.\n"
         "- Exclude tests, examples, generated files, and any '__init__.py'.\n"
         f"- Return ONLY a valid JSON array of at most {num_files} file path strings from the provided list. Output nothing but the JSON array.\n\n"
@@ -339,14 +336,13 @@ async def select_dependency_files(
     """
     file_tree = "\n".join(file_paths)
     selection_prompt = (
-        f"Task: You are tracing the code base of the '{plugin}' Freva plugin. "
-        "Given the already fetched source code, prioritize and select which of the remaining repository files should be read next.\n\n"
-        "Selection rules:\n"
-        "- Scan the fetched code for imports or script calls and map each to the matching repository file using Python module conventions "
+        f"Task: You are tracing the code base of the '{plugin}' Freva plugin, given the user query and the already fetched source code. "
+        "Prioritize and select which of the remaining repository files should be read next based on the following rules:\n\n"
+        "- Scan the fetched code for imports or script calls and map each to the matching file using Python module conventions "
         "(e.g., 'from foo.bar import baz' -> 'foo/bar.py').\n"
         "- Ignore imports from third-party libraries (e.g. numpy, xarray, evaluation_system etc.) and focus on the plugin's own source code.\n"
         "- Exclude tests, examples, generated files, and any '__init__.py'.\n"
-        f"- Return ONLY a valid JSON array of at most {num_files} file path strings from the remaining repository list. If none match, return []. Output nothing but the JSON array.\n\n"
+        f"- Return ONLY a valid JSON array of at most {num_files} file path strings from the remaining list. If none match, return []. Output nothing but the JSON array.\n\n"
         f"=== User Query ===\n{user_query}\n=== END ===\n\n"
         f"=== Fetched Code ===\n{fetched_code}\n=== END ===\n\n"
         f"=== Remaining Repository Files ===\n{file_tree}\n=== END ===\n\n"
@@ -401,11 +397,11 @@ async def collect_plugin_context(
     entry_code = format_files({entry_file: exec_code})
 
     # ── Stage 2: find & fetch useful files, based on entry file + user context ───────
-    remaining = [p for p in file_paths if p not in entry_file]
+    remaining = [p for p in file_paths if p != entry_file]
     init_files = await select_init_files(
-        plugin, user_query, entry_code, remaining, MAX_FILES
+        plugin, user_query, entry_code, remaining, MAX_FILES // 2
     )
-    init_files = list(set([entry_file] + init_files))
+    init_files = [entry_file] + init_files
     init_code = fetch_files(project_id, branch, init_files, MAX_TOTAL_CODE_CHARS)
     _log_stage("Combined LLM-based initial", init_files)
 
