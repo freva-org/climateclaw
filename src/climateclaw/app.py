@@ -99,11 +99,6 @@ def custom_openapi():
         "in": "header",
         "name": "X-Freva-Thread-Id",
     }
-    security_schemes["RequestId"] = {
-        "type": "apiKey",
-        "in": "header",
-        "name": "X-Request-Id",
-    }
 
     for path, path_item in openapi_schema.get("paths", {}).items():
         if not path.startswith("/api/chatbot/"):
@@ -117,7 +112,6 @@ def custom_openapi():
                     "BearerAuth": [],
                     "FrevaRestUrl": [],
                     "FrevaThreadId": [],
-                    "RequestId": [],
                 }
             )
 
