@@ -7,7 +7,7 @@ from fastmcp import FastMCP
 from pymongo import MongoClient
 
 from climateclaw.core.logging_setup import configure_logging
-from climateclaw.tools.header_gate import make_header_gate
+from climateclaw.tools.header_gate import RequestIdMiddleware, make_header_gate
 from climateclaw.tools.rag.document_loaders import CustomDirectoryLoader
 from climateclaw.tools.rag.helpers import (
     add_vector_search_index_to_db,
@@ -17,14 +17,13 @@ from climateclaw.tools.rag.helpers import (
 )
 from climateclaw.tools.rag.text_splitters import CustomDocumentSplitter
 
-SERVICE_NAME = os.getenv("HOSTNAME") or "rag_server"
-
-logger = configure_logging(__name__, named_log=SERVICE_NAME)
+logger = configure_logging(__name__)
 
 
 LITE_LLM_ADDRESS: str = os.getenv("CLIMATECLAW_LITE_LLM_ADDRESS", "http://litellm:4000")
 
 mcp = FastMCP("rag_server")
+mcp.add_middleware(RequestIdMiddleware())
 
 # TODO: implement cancel routine
 
