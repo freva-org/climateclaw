@@ -218,9 +218,7 @@ def fetch_files(
 # ── Other helpers ────────────────────────────────────────────────
 
 
-def extract_method_from_source(
-    source_code: str, method_name: str = "run_tool"
-) -> str | None:
+def extract_method_from_source(source_code: str, method_name: str = "run_tool") -> str:
     """Parses a Python source string and returns the code of a specific method."""
     try:
         # Clean tabs and fix uneven leading indentation
@@ -232,7 +230,7 @@ def extract_method_from_source(
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == method_name:
                 method_code = ast.get_source_segment(source_code, node)
-                return method_code
+                return method_code or "No 'run_tool' method found in the entry file."
 
         return f"Method '{method_name}' not found in the source code."
 
@@ -392,8 +390,6 @@ async def collect_plugin_context(
     exec_code = extract_method_from_source(
         _fetch_file_raw(project_id, entry_file, branch), method_name="run_tool"
     )
-    exec_code = exec_code or "No 'run_tool' method found in the entry file."
-    _log_stage("Run_tool method extraction", [exec_code])
     entry_code = format_files({entry_file: exec_code})
 
     # ── Stage 2: find & fetch useful files, based on entry file + user context ───────
