@@ -37,7 +37,7 @@ def _headers() -> dict[str, str]:
     request_id = get_request_id()
     if request_id:
         h[REQUEST_ID_HEADER] = request_id
-    # Authorization header is not required for Ollama models,
+    # Authorization header is not required for local models,
     # but sending it (when available) doesn’t hurt and satisfies OpenAI-routed calls.
     if AUTH_TOKEN:
         h["Authorization"] = f"Bearer {AUTH_TOKEN}"

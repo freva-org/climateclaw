@@ -5,16 +5,21 @@ from pathlib import Path
 import pytest
 import yaml
 
-# gen_compose.py is a repo-root script, while pytest only adds src/ to sys.path.
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT))
-GEN_COMPOSE_PATH = REPO_ROOT / "gen_compose.py"
-spec = importlib.util.spec_from_file_location("gen_compose", GEN_COMPOSE_PATH)
-assert spec is not None
-assert spec.loader is not None
-gen_compose = importlib.util.module_from_spec(spec)
-sys.modules["gen_compose"] = gen_compose
-spec.loader.exec_module(gen_compose)
+# gen_compose.py lives under docker/, while pytest only adds src/ to sys.path.
+GEN_COMPOSE_PATH = Path(__file__).resolve().parents[2] / "docker" / "gen_compose.py"
+
+
+def load_gen_compose():
+    spec = importlib.util.spec_from_file_location("gen_compose", GEN_COMPOSE_PATH)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["gen_compose"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+gen_compose = load_gen_compose()
 
 
 def reload_gen_compose(
@@ -32,7 +37,7 @@ def reload_gen_compose(
         monkeypatch.delenv("CLIMATECLAW_SYSLOG_PROTOCOL", raising=False)
     else:
         monkeypatch.setenv("CLIMATECLAW_SYSLOG_PROTOCOL", protocol)
-    return importlib.reload(gen_compose)
+    return load_gen_compose()
 
 
 def test_project_mapping_returns_preview_mounts_and_website():
@@ -108,7 +113,7 @@ def test_expand_service_without_preview_paths_keeps_volumes_unchanged():
         replicas=1,
     )
 
-    assert services["web-search-server"]["volumes"] == ["/logs:/app/logs"]
+    assert services["web-search-server-1"]["volumes"] == ["/logs:/app/logs"]
 
 
 def test_generated_compose_sets_project_env_and_code_server_mounts(
@@ -148,20 +153,19 @@ def test_generated_compose_sets_project_env_and_code_server_mounts(
     )
     monkeypatch.setenv("CLIMATECLAW_BACKEND_REPLICAS", "1")
     monkeypatch.setenv("CLIMATECLAW_LITELLM_REPLICAS", "1")
-    monkeypatch.setenv("CLIMATECLAW_OLLAMA_REPLICAS", "1")
     monkeypatch.setenv("CLIMATECLAW_AVAILABLE_MCP_SERVERS", "code-server")
     monkeypatch.setenv("CLIMATECLAW_CODE_SERVER_REPLICAS", "1")
 
     gen_compose.main()
 
     generated = yaml.safe_load((tmp_path / "docker-compose.scaled.yml").read_text())
-    climateclaw_env = generated["services"]["climateclaw"]["environment"]
+    climateclaw_env = generated["services"]["climateclaw-1"]["environment"]
     assert climateclaw_env == [
         "EXISTING=kept",
         "CLIMATECLAW_PROJECT_NAME=codes",
         "CLIMATECLAW_PROJECT_WEBSITE=https://codes.dkrz.de",
     ]
-    assert generated["services"]["code-server"]["volumes"] == [
+    assert generated["services"]["code-server-1"]["volumes"] == [
         "/work:/work:ro",
         "/work/kd1418/codes/work/share/preview/climateclaw:/app/cache:rw",
     ]
@@ -197,12 +201,10 @@ def test_generate_haproxy_continues_without_remote_syslog(monkeypatch):
             services={
                 "climateclaw": {},
                 "litellm": {},
-                "ollama": {},
             },
             backend_n=1,
             backend_port="8502",
             litellm_n=1,
-            ollama_n=1,
             server_list=[],
             replica_dict={},
             port_dict={},

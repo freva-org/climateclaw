@@ -163,11 +163,13 @@ def set_project_environment(service: dict, project: str | None) -> None:
 
 
 def expand_service(name, service, replicas, preview_paths=None):
+    """Add replicated services"""
+
     services = {}
 
     for i in range(1, replicas + 1):
         s = deepcopy(service)
-        replica_name = name if replicas == 1 else f"{name}-{i}"
+        replica_name = f"{name}-{i}"
 
         if "ports" in s:
             ports = s.pop("ports")
@@ -188,26 +190,14 @@ def expand_service(name, service, replicas, preview_paths=None):
     return services
 
 
-def expand_ollama_service(name, service, replicas):
-    services = expand_service(name, service, replicas)
-
-    if replicas == 1:
-        return services
-
-    if not DEV_MODE:
-        for i in range(1, replicas + 1):
-            replica_name = f"{name}-{i}"
-            services[replica_name]["devices"] = [f"nvidia.com/gpu={i - 1}"]
-
-    return services
-
-
 def expand_depends_on(depends_on, replica_counts):
+    """Update the dependencies with names of replicated services"""
+
     if isinstance(depends_on, dict):
         expanded = {}
         for dependency, config in depends_on.items():
             replicas = replica_counts.get(dependency, 1)
-            if replicas > 1:
+            if dependency in replica_counts:
                 for i in range(1, replicas + 1):
                     expanded[f"{dependency}-{i}"] = deepcopy(config)
             else:
@@ -218,7 +208,7 @@ def expand_depends_on(depends_on, replica_counts):
         expanded = []
         for dependency in depends_on:
             replicas = replica_counts.get(dependency, 1)
-            if replicas > 1:
+            if dependency in replica_counts:
                 expanded.extend(f"{dependency}-{i}" for i in range(1, replicas + 1))
             else:
                 expanded.append(dependency)
@@ -228,6 +218,8 @@ def expand_depends_on(depends_on, replica_counts):
 
 
 def update_service_dependencies(services, replica_counts):
+    """Update the service dependencies inhereted from the base compose"""
+
     for service in services.values():
         if "depends_on" in service:
             service["depends_on"] = expand_depends_on(
@@ -237,9 +229,6 @@ def update_service_dependencies(services, replica_counts):
 
 
 def service_instance_names(name, replicas, services):
-    if replicas == 1 and name in services:
-        return [name]
-
     return [
         replica_name
         for replica_name in (f"{name}-{i}" for i in range(1, replicas + 1))
@@ -247,11 +236,18 @@ def service_instance_names(name, replicas, services):
     ]
 
 
+def haproxy_aliases(available_mcp_servers):
+    return [
+        "climateclaw",
+        "litellm",
+        *available_mcp_servers,
+    ]
+
+
 def haproxy_dependencies(
     services,
     backend_n,
     litellm_n,
-    ollama_n,
     available_mcp_servers,
     mcp_replica_n,
 ):
@@ -265,7 +261,6 @@ def haproxy_dependencies(
 
     dependencies.extend(service_instance_names("litellm", litellm_n, services))
     dependencies.append("mongodb")
-    dependencies.extend(service_instance_names("ollama", ollama_n, services))
 
     return [dependency for dependency in dependencies if dependency in services]
 
@@ -290,7 +285,6 @@ def generate_haproxy(
     backend_n,
     backend_port,
     litellm_n,
-    ollama_n,
     server_list,
     replica_dict,
     port_dict,
@@ -344,13 +338,6 @@ def generate_haproxy(
         "    default_backend be_litellm\n"
     )
 
-    conf.append(
-        "frontend fe_ollama\n"
-        "    bind *:11434\n"
-        f"{request_id_rules}"
-        "    default_backend be_ollama\n"
-    )
-
     for s in server_list:
         conf.append(
             f"frontend fe_{s}\n"
@@ -376,15 +363,6 @@ def generate_haproxy(
         )
     )
 
-    conf.append(
-        haproxy_backend(
-            "ollama",
-            11434,
-            service_instance_names("ollama", ollama_n, services),
-            "leastconn",
-        )
-    )
-
     for s in server_list:
         conf.append(
             haproxy_backend(
@@ -401,21 +379,22 @@ def generate_haproxy(
 def main():
 
     if len(sys.argv) < 2:
-        print("Usage: gen_compose.py docker-compose.dev.yml [project]")
+        print("Usage: docker/gen_compose.py docker/docker-compose.dev.yml [project]")
         sys.exit(1)
 
     compose_path = sys.argv[1]
+
     project = (
         sys.argv[2] if len(sys.argv) > 2 else os.environ.get("CLIMATECLAW_PROJECT_NAME")
     )
 
     preview_paths = preview_paths_for_project(project)
 
+    # Read env variables
     backend_port = os.environ.get("CLIMATECLAW_BACKEND_PORT", "8502")
     backend_target_port = os.environ.get("CLIMATECLAW_TARGET_PORT", "8502")
     backend_n = int(os.environ.get("CLIMATECLAW_BACKEND_REPLICAS", "1"))
     litellm_n = int(os.environ.get("CLIMATECLAW_LITELLM_REPLICAS", "1"))
-    ollama_n = int(os.environ.get("CLIMATECLAW_OLLAMA_REPLICAS", "1"))
 
     available_mcp_servers = [
         s
@@ -444,18 +423,16 @@ def main():
     replica_counts = {
         "climateclaw": backend_n,
         "litellm": litellm_n,
-        "ollama": ollama_n,
         **mcp_replica_n,
     }
 
+    # Replicate services
     for name, svc in services.items():
         if name == "climateclaw":
             set_project_environment(svc, project)
             new_services.update(expand_service(name, svc, backend_n))
         elif name == "litellm":
             new_services.update(expand_service(name, svc, litellm_n))
-        elif name == "ollama":
-            new_services.update(expand_ollama_service(name, svc, ollama_n))
         elif name in MCP_SERVICES:
             if name == "code-server":
                 new_services.update(
@@ -463,52 +440,45 @@ def main():
                 )
             elif name in available_mcp_servers:
                 new_services.update(expand_service(name, svc, mcp_replica_n[name]))
-        elif name == "freva-web":
-            env = [
-                e
-                for e in svc.get("environment", [])
-                if not e.startswith("CHAT_BOT_URL=")
-            ]
-            env.append(f"CHAT_BOT_URL=http://haproxy:{backend_port}")
-            svc["environment"] = env
-            new_services[name] = svc
         else:
             new_services[name] = svc
 
+    # Update service dependencies on replicated services
     update_service_dependencies(new_services, replica_counts)
     add_litellm_syslog_logging(new_services)
 
+    ### Add HAProxy service to compose
+
+    # HAProxy exposed ports for DEV
     dev_ports = [
         f"{backend_target_port}:{backend_port}",
     ]
     if port_dict.get("code-server"):
         dev_ports.append(f"{port_dict['code-server']}:{port_dict['code-server']}")
+
+    # HAProxy exposed ports for production. We don't expose MCP server ports in prod.
     prod_ports = [
         f"{backend_target_port}:{backend_port}",
     ]
 
     network_name = list(base["networks"].keys())[0]
 
-    haproxy_network = (
-        {
-            network_name: {
-                "aliases": ["ollama"],
-            }
+    haproxy_network = {
+        network_name: {
+            "aliases": haproxy_aliases(available_mcp_servers),
         }
-        if ollama_n > 1
-        else [network_name]
-    )
+    }
 
     log_dir = (
-        "./logs/"
-        if "dev" in compose_path
+        "../logs/"
+        if DEV_MODE
         else "/container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs"
     )
 
     new_services["haproxy"] = {
         "image": "haproxy:3.0-alpine",
         "user": "0:0",
-        "ports": dev_ports if "dev" in compose_path else prod_ports,
+        "ports": dev_ports if DEV_MODE else prod_ports,
         "volumes": [
             "./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro",
             f"{log_dir}:/app/logs",
@@ -524,7 +494,6 @@ def main():
             services=new_services,
             backend_n=backend_n,
             litellm_n=litellm_n,
-            ollama_n=ollama_n,
             available_mcp_servers=available_mcp_servers,
             mcp_replica_n=mcp_replica_n,
         ),
@@ -538,21 +507,22 @@ def main():
 
     output_path.write_text(yaml.dump(out, sort_keys=False))
 
+    # Generate HAProxy config for node
     haproxy_cfg = generate_haproxy(
         services=new_services,
         backend_n=backend_n,
         backend_port=backend_port,
         litellm_n=litellm_n,
-        ollama_n=ollama_n,
         server_list=available_mcp_servers,
         replica_dict=mcp_replica_n,
         port_dict=port_dict,
         timeout=mcp_request_timeout,
     )
 
-    Path("haproxy.cfg").write_text(haproxy_cfg)
+    haproxy_path = input_path.with_name("haproxy.cfg")
+    haproxy_path.write_text(haproxy_cfg)
 
-    print(f"Generated {output_path.name} and haproxy.cfg")
+    print(f"Generated {output_path} and {haproxy_path}")
 
 
 if __name__ == "__main__":
