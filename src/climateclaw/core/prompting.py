@@ -60,14 +60,12 @@ def _resolve_baseline_dir() -> Path:
     raise FileNotFoundError(f"Baseline prompt set not found. Tried: {tried}")
 
 
-def _resolve_gpt5_dir() -> Path:
-    for d in GPT5_DIRS:
-        if all(
-            (d / name).is_file() for name in (STARTING_TXT, SUMMARY_TXT, EXAMPLES_JL)
-        ):
-            return d
-    tried = [str(d.resolve()) for d in GPT5_DIRS]
-    raise FileNotFoundError(f"GPT-5 prompt set not found. Tried: {tried}")
+def _resolve_gpt5_dir_or_placeholder() -> Path:
+    # Placeholder policy: until GPT-5 is implemented, fall back to baseline.
+    logger.warning(
+        "GPT-5 prompting is a placeholder; falling back to BASELINE prompt set."
+    )
+    return _resolve_baseline_dir()
 
 
 def _resolve_local_model_dir() -> Path:
@@ -92,7 +90,7 @@ def _resolve_local_model_dir() -> Path:
 
 def _pick_prompt_dir(model: str) -> Path:
     if model_is_gpt_5(model):
-        return _resolve_gpt5_dir()
+        return _resolve_gpt5_dir_or_placeholder()
     elif model_is_local(model):
         return _resolve_local_model_dir()
     return _resolve_baseline_dir()

@@ -52,7 +52,7 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headl
 # CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
 
-MODEL = "gpt-5.6-luna"  # model to benchmark
+MODEL = "gpt-4.1"  # model to benchmark
 USER_ID = "janedoe"
 RUNS = 10  # number of runs to perform
 CONCURRENCY = 10  # number of concurrent runs to perform
