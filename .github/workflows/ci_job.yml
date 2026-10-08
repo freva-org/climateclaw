@@ -134,4 +134,4 @@ jobs:
 
       - name: Tear down production stack
         if: always()
-        run: docker compose -f docker-compose.yml down -v
+        run: docker compose down -v
