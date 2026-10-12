@@ -123,9 +123,9 @@ services:
   plugin-code-search-server:
     image: plugin-code-search-server-${CLIMATECLAW_INSTANCE_NAME}
     build:
-      context: .
+      context: ..
       dockerfile: docker/plugin-code-search-server/Dockerfile
-    env_file: .env
+    env_file: ../.env
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
       CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
@@ -137,7 +137,7 @@ services:
     networks:
       - climateclaw
     volumes:
-      - ./logs/:/app/logs
+      - ../logs/:/app/logs
     healthcheck:
       test:
         [
