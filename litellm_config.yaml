@@ -22,38 +22,9 @@ model_list:
       api_key: "os.environ/CLIMATECLAW_OPENAI_API_KEY"
   - model_name: "gemma4:31b"
     litellm_params:
-      model: "ollama_chat/gemma4:31b"
-      api_base: "http://ollama:11434"
-    model_info:
-      supports_function_calling: true
-  - model_name: "gemma4:26b"
-    litellm_params:
-      model: "ollama_chat/gemma4:26b"
-      api_base: "http://ollama:11434"
-    model_info:
-      supports_function_calling: true
-  - model_name: "ministral-3:8b"
-    litellm_params:
-      model: "ollama_chat/ministral-3:8b"
-      api_base: "http://ollama:11434"
-    model_info:
-      supports_function_calling: true
-  - model_name: "mistral-small3.2:24b"
-    litellm_params:
-      model: "ollama_chat/mistral-small3.2:24b"
-      api_base: "http://ollama:11434"
-    model_info:
-      supports_function_calling: true
-  - model_name: "mistral-medium-3.5:128b"  # only available size, experimental
-    litellm_params:
-      model: "ollama_chat/mistral-medium-3.5:128b"
-      api_base: "http://ollama:11434"
-    model_info:
-      supports_function_calling: true
-  - model_name: "qwen3.6:35b"  # Mixture Of Experts (Number of Experts: 256) and 3B activated
-    litellm_params:
-      model: "ollama_chat/qwen3.6:35b"
-      api_base: "http://ollama:11434"
+      model: "os.environ/CLIMATECLAW_VLLM_LITELLM_MODEL"
+      api_base: "os.environ/CLIMATECLAW_VLLM_API_BASE"
+      api_key: "os.environ/CLIMATECLAW_VLLM_API_KEY"
     model_info:
       supports_function_calling: true
 

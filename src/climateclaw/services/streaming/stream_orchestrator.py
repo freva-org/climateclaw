@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
-from climateclaw.core.available_chatbots import model_is_ollama, model_supports_images
+from climateclaw.core.available_chatbots import model_is_local, model_supports_images
 from climateclaw.core.heartbeat import heartbeat_content
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.service_factory import Authenticator, ThreadStorage
@@ -189,7 +189,7 @@ async def stream_with_tools(
                     if (
                         args_chunk
                         and tool_name == "code_interpreter"
-                        and not model_is_ollama(model)
+                        and not model_is_local(model)
                     ):
                         # stream arguments chunk immediately
                         yield SVCode(content=args_chunk, id=call_id)
@@ -310,7 +310,7 @@ async def stream_with_tools(
                 ),
                 id=call_id,
             )
-            if model_is_ollama(model):
+            if model_is_local(model):
                 yield tool_v
         else:
             tool_v = SVToolCall(
