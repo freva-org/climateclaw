@@ -13,13 +13,10 @@ from fastmcp import FastMCP
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
-from climateclaw.tools.header_gate import make_header_gate
+from climateclaw.tools.header_gate import RequestIdMiddleware, make_header_gate
 
-logger = configure_logging(__name__, named_log="plugin_code_search_server")
+logger = configure_logging(__name__)
 
-HOST = os.getenv("CLIMATECLAW_MCP_HOST", "0.0.0.0")
-PORT = int(os.getenv("CLIMATECLAW_MCP_PORT", "8053"))
-PATH = os.getenv("CLIMATECLAW_MCP_PATH", "/mcp")  # standard path
 
 # ── Tool Config ────────────────────────────────────────────────────────────────
 GITLAB_ACCESS_TOKEN: Optional[str] = os.getenv("CLIMATECLAW_GITLAB_ACCESS_TOKEN")
@@ -42,17 +39,24 @@ MAX_TOTAL_CODE_CHARS = 100_000  # truncate total fetched code after this limit
 MAX_FILES = 6  # max files the LLM may select in total
 ENTRY_PATTERN = re.compile(r"(wrapper|api)[^/]*\.py$", re.IGNORECASE)
 EXCLUDE_PATTERN = re.compile(r"(^|/)(tests?/|test_|__init__\.py$)", re.IGNORECASE)
+
+
+# ── Server Config ────────────────────────────────────────────────────────────────
+HOST = os.getenv("CLIMATECLAW_MCP_HOST", "0.0.0.0")
+PORT = int(os.getenv("CLIMATECLAW_MCP_PORT", "8053"))
+PATH = os.getenv("CLIMATECLAW_MCP_PATH", "/mcp")  # standard path
 USERNAME = "username"
 MODEL = "model"
 
 
 # ─── App ────────────────────────────────────────────────────────────────────
+mcp = FastMCP("plugin-code-search-server")
+mcp.add_middleware(RequestIdMiddleware())
+logger.info("Starting Freva-Plugin Code Search MCP server on %s:%s%s", HOST, PORT, PATH)
+
 # Per-request header context
 username_ctx: ContextVar[str | None] = ContextVar("username_ctx", default=None)
 model_ctx: ContextVar[str | None] = ContextVar("model_ctx", default=None)
-
-mcp = FastMCP("plugin-code-search-server")
-logger.info("Starting Freva-Plugin Code Search MCP server on %s:%s%s", HOST, PORT, PATH)
 
 # Start the MCP server using Streamable HTTP transport
 app = make_header_gate(
@@ -439,7 +443,7 @@ def validate_plugin_call(
         error_msg = f"Plugin '{plugin}' not found in GitLab project '{project}'."
         return False, error_msg
 
-    # Username hardcoded for now; replace with _get_user() for production
+    # TODO: Username hardcoded for now; replace with _get_user() before merge/deployment
     user_name = "k202218"
     # user_name = _get_user()
     try:

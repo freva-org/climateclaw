@@ -126,6 +126,7 @@ services:
       context: ..
       dockerfile: docker/plugin-code-search-server/Dockerfile
     env_file: ../.env
+    hostname: plugin-code-search-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
       CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}

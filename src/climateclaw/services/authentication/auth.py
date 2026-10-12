@@ -67,7 +67,7 @@ class Authenticator:
 
             try:
                 username: str = await get_username_from_token(
-                    token, rest_url, logger=configure_logging(__name__, user_id=None)
+                    token, rest_url, logger=configure_logging(__name__)
                 )
                 return cls(
                     request=request,
