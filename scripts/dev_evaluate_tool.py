@@ -37,7 +37,10 @@ from climateclaw.services.streaming.stream_orchestrator import (
     prepare_for_stream,
     run_stream,
 )
-from climateclaw.services.streaming.stream_variants import from_sv_to_json
+from climateclaw.services.streaming.stream_variants import (
+    SVToolCall,
+    SVToolOutput,
+)
 
 """
 Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headless means that it runs without a web server, and without any user interaction. It is intended for development and benchmarking purposes.
@@ -52,34 +55,44 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headl
 # CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
 
+################### IMPORTANT NOTE ###################
+# in order to make this evaluation work correctly, ensure the following steps:
+# 1. the MCP tool logic lays in 'src/climateclaw/tools/plugin_code_search/server.py':
+# for isolated testing, comment out everything after the `detect_plugin_project` is called,
+# and replace with the following: `return f"plugin_name: {plugin}, project_name: {project}"`.
+# 2. then, spin up the docker compose environment with all necessary services (dev.sh script)
+# 3. run this evaluation script from the terminal: `uv run scripts/dev_evaluate_tool.py`
+#######################################################
+
 MODEL = "gpt-4.1"  # model to benchmark
 USER_ID = "janedoe"
-RUNS = 10  # number of runs to perform
-CONCURRENCY = 10  # number of concurrent runs to perform
+RUNS = 1  # number of runs to perform
+CONCURRENCY = 1  # number of concurrent runs to perform
 
-PRINT_STREAM = False
-PRINT_PER_RUN_SUMMARY = (
-    False  # print summary of each run (status, prompt, tool call, tool output)
+PRINT_RUN_SUMMARY = (
+    True  # print summary of each run (state, prompt, tool call, tool output)
 )
 SILENCE_LOGGING = True
 
 # run evaluation of tool calls (TP, FP, FN, accuracy, precision, recall)
-EVAL_TOOL = True
-PLOT_METRICS = True  # plot metrics as bar charts at the end of the benchmark
+EVAL_TOOL = False
+PLOT_METRICS = False  # plot metrics as bar charts at the end of the benchmark
 
 ## evaluation suite: direct questions about a plugin + indirect ones (more widely phrased)
 path_to_prompts = (
     Path(__file__).parent / "evaluation" / "benchmark-prompts-plugin-server.json"
 )
-with open(path_to_prompts, "r", encoding="utf-8") as f:
-    BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
-# BENCHMARK = {
-#     "leadtimeselektor": [
-#     "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
-#     "How can I best extract lead times from decadal climate predictions?",
-#     "How are you?",
-#     ]
-# }
+# with open(path_to_prompts, "r", encoding="utf-8") as f:
+#     BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
+
+# for quick sanity checking, use this one and comment out the main benchmark suite
+BENCHMARK = {
+    "leadtimeselektor": [
+        "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
+        "How can I best extract lead times from decadal climate predictions?",
+        "How are you?",
+    ]
+}
 
 path_to_plugins = (
     Path(__file__).parents[1]
@@ -90,16 +103,17 @@ plugins = re.findall(r"\*\*([^*]+)\*\*", plugin_overview)
 ALL_PLUGINS = [p.lower() for p in plugins]
 
 # ──────────────────────────────────────────────────────────────────────────────
-log = configure_logging("dev_script")
+log = configure_logging("plugin-code-server_eval-script")
 
 
 @dataclass
 class RunResult:
     idx: int
     thread_id: str
-    # answer: str
+    state: str
+    duration: float
     tool_name: str
-    tool_args: str
+    tool_args: dict[str, str]
     tool_output: str
 
 
@@ -123,10 +137,9 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
         system_prompt = get_entire_prompt(USER_ID, thread_id, MODEL)
 
         t0 = time.perf_counter()
-        status = "Done"
-        # answer = ""
+        state = "Done"
         tool_name = ""
-        tool_args = ""
+        tool_args = {}
         tool_output = ""
 
         try:
@@ -137,46 +150,68 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
                 system_prompt=system_prompt,
                 storage=Storage,
             ):
-                # if getattr(variant, "variant", None) == "Assistant":
-                #     txt_piece = getattr(variant, "text", "") or ""
-                #     answer += txt_piece
-
-                if getattr(variant, "variant", None) == "ToolCall":
-                    tool_name = getattr(variant, "tool_name", "")
-                    tool_args = getattr(variant, "arg", "")
-
-                if getattr(variant, "variant", None) == "ToolOutput":
-                    tool_output = getattr(variant, "output", "")
-
-                if PRINT_STREAM and getattr(variant, "variant", None) != "Assistant":
-                    print(json.dumps(from_sv_to_json(variant), ensure_ascii=False))
+                if isinstance(variant, SVToolCall):
+                    tool_name = variant.tool_name
+                    tool_args = json.loads(variant.content or "{}")
+                elif isinstance(variant, SVToolOutput):
+                    tool_output = variant.content
 
             await end_and_save_conversation(thread_id, Storage)
-
         except Exception as e:
-            status = f"Error:{e}"
+            state = f"Error:{e}"
 
         duration = time.perf_counter() - t0
-
-        if PRINT_PER_RUN_SUMMARY:
-            print(f"Status: {status},\t Duration: {duration:.2f}s")
-            print(f"Prompt: {prompt}")
-            print(f"called tool: {tool_name}")
-            print(f"  tool args: {tool_args}")
-            print(f"  tool output: {tool_output}\n")
-
         return RunResult(
             idx,
             thread_id,
-            # answer,
+            state,
+            duration,
             tool_name,
             tool_args,
             tool_output,
         )
 
 
+async def run_benchmark_for_prompt(
+    prompt: str, plugin: str, eval_dict: dict[str, list[float]]
+) -> dict[str, list[float]]:
+
+    sem = asyncio.Semaphore(CONCURRENCY)
+    tasks = [asyncio.create_task(_run_once(i, sem, prompt)) for i in range(RUNS)]
+    results = await asyncio.gather(*tasks)
+    assert results, "No results returned from benchmark runs"
+
+    states = [r.state for r in results]
+    durations = [r.duration for r in results]
+    tool_names = [r.tool_name for r in results]
+    tool_args = [r.tool_args for r in results]
+    tool_outputs = [r.tool_output for r in results]
+
+    if PRINT_RUN_SUMMARY:
+        for state, duration, tool_name, tool_arg, tool_output in zip(
+            states, durations, tool_names, tool_args, tool_outputs
+        ):
+            print(f"state: {state},\t Duration: {duration:.2f}s")
+            print(f"Prompt: {prompt}")
+            print(f"called tool: {tool_name}")
+            print(f"  tool args: {tool_arg}")
+            print(f"  tool output: {tool_output}\n")
+
+    if EVAL_TOOL:
+        metrics_dict = _evaluate_tool_call_results(
+            tool_names, tool_args, tool_outputs, plugin
+        )
+        for k, v in metrics_dict.items():
+            eval_dict[k].append(v)
+
+    return eval_dict
+
+
 def _evaluate_tool_call_results(
-    tool_names: list[str], tool_args: list[str], tool_outputs: list[str], plugin: str
+    tool_names: list[str],
+    tool_args: list[dict[str, str]],
+    tool_outputs: list[str],
+    plugin: str,
 ) -> dict[str, float]:
     ## evaluate results w.r.t. whether the plugin tool was called at all by the model
     true_pos_tool = sum(
@@ -254,28 +289,6 @@ def _evaluate_tool_call_results(
         "precision_plugin": precision_plugin,
         "recall_plugin": recall_plugin,
     }
-
-
-async def run_benchmark_for_prompt(
-    prompt: str, plugin: str, eval_dict: dict[str, list[float]]
-) -> dict[str, list[float]]:
-
-    sem = asyncio.Semaphore(CONCURRENCY)
-    tasks = [asyncio.create_task(_run_once(i, sem, prompt)) for i in range(RUNS)]
-    results = await asyncio.gather(*tasks)
-    assert results, "No results returned from benchmark runs"
-    tool_names = [r.tool_name for r in results]
-    tool_args = [r.tool_args for r in results]
-    tool_outputs = [r.tool_output for r in results]
-
-    if EVAL_TOOL:
-        metrics_dict = _evaluate_tool_call_results(
-            tool_names, tool_args, tool_outputs, plugin
-        )
-        for k, v in metrics_dict.items():
-            eval_dict[k].append(v)
-
-    return eval_dict
 
 
 def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:

@@ -368,7 +368,7 @@ async def collect_plugin_context(
     """
 
     def _log_stage(stage: str, files: list[str]):
-        logger.info(
+        logger.debug(
             "%s retrieval step selected %d/%d files for plugin '%s': %s",
             stage,
             len(files),
@@ -401,9 +401,9 @@ async def collect_plugin_context(
     init_files = await select_init_files(
         plugin, user_query, entry_code, remaining, MAX_FILES // 2
     )
+    _log_stage("LLM-based initial", init_files)
     init_files = [entry_file] + init_files
     init_code = fetch_files(project_id, branch, init_files, MAX_TOTAL_CODE_CHARS)
-    _log_stage("Combined LLM-based initial", init_files)
 
     # ── Stage 3: resolve dependencies ───────────────────────────────────
     budget = MAX_TOTAL_CODE_CHARS - sum(len(c) for c in init_code.values())
@@ -449,7 +449,7 @@ def validate_plugin_call(
     try:
         user_access = _has_read_access(project_id, user_name)
         if not user_access:
-            logger.warning(
+            logger.info(
                 "User '%s' does NOT have read access to plugin '%s' in project '%s'.",
                 user_name,
                 plugin,
@@ -517,8 +517,8 @@ async def plugin_code_search(user_query: str) -> str:
     - explicitly asks how a plugin's internal logic works, how to run or configure it,
     or wants plugin code translated or adapted into Python examples;
     - asks a specific climate or weather question involving regional, decadal, or
-    extreme-event analysis (lead time selection, hindcast skill scoring, bias adjustment
-    and drift correction, downscaling, precipitation indices, crop impact, heat waves/HWMID
+    extreme-event analysis (lead time extraction, (hindcast) skill scoring against observation,
+    bias adjustment and drift correction, downscaling, precipitation indices, crop impact, heat waves/HWMID
     climate/extreme indices, region matching, urban heatwave extraction, precipitation
     disaggregation, and plugin creation).
 
@@ -551,7 +551,6 @@ async def plugin_code_search(user_query: str) -> str:
     - "How can I assess the impact of extreme climate events on crop productivity?"
     """
     plugin, project = await detect_plugin_project(user_query)
-    # return f"plugin_name: {plugin}, project_name: {project}"  # only for benchmarking the plugin detection stage
 
     # Validate the plugin call
     project_id = get_project_id(plugin, project)
