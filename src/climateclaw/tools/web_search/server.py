@@ -12,6 +12,7 @@ from climateclaw.tools.active_requests import (
     tracked_request,
 )
 from climateclaw.tools.header_gate import RequestIdMiddleware, make_header_gate
+from climateclaw.tools.models import GenericToolResult
 
 logger = configure_logging(__name__)
 
@@ -53,7 +54,7 @@ client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 
 @mcp.tool()
-async def web_search(query: str) -> dict:
+async def web_search(query: str) -> GenericToolResult:
     """
     Calls a web-search agent to access DKRZ/HPC and ICON model documentation website.
     Args:
@@ -152,14 +153,14 @@ async def web_search(query: str) -> dict:
 
             logger.info(f"Successfully completed web search with query {query}.\n")
 
-            return {"result": resp.output_text, "error": ""}
+            return GenericToolResult(result=resp.output_text)
 
     except asyncio.CancelledError:
         raise
 
     except RequestCancelled:
         logger.info("Web-search cancelled by client. sid=%s rid=%s", sid, rid)
-        return {"result": "", "error": "Request cancelled by client."}
+        return GenericToolResult(error="Request cancelled by client.")
 
     except Exception as e:
         logger.warning("Web-search failed due to error: %s", e)
