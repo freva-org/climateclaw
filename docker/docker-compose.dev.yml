@@ -117,15 +117,15 @@ services:
     hostname: reference-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_MCP_HOST: 0.0.0.0
-      CLIMATECLAW_MCP_PORT: 8053
+      CLIMATECLAW_MCP_PORT: 8054
     ports:
-      - 8053:8053
+      - 8054:8054
     networks:
       - climateclaw
     volumes:
       - ../logs:/app/logs
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8053/healthz')\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8054/healthz')\""]
       interval: 5s
       timeout: 3s
       retries: 20

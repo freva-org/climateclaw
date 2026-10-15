@@ -25,7 +25,7 @@ mcp = FastMCP("reference-server")
 # ── Config ───────────────────────────────────────────────────────────────────
 
 HOST = os.getenv("CLIMATECLAW_MCP_HOST", "0.0.0.0")
-PORT = int(os.getenv("CLIMATECLAW_MCP_PORT", "8053"))
+PORT = int(os.getenv("CLIMATECLAW_MCP_PORT", "8054"))
 PATH = os.getenv("CLIMATECLAW_MCP_PATH", "/mcp")  # standard path
 
 

@@ -14,6 +14,7 @@ MCP_SERVER_CONFIG = {
     "rag-server": {"env": "RAG_SERVER", "port": "8050"},
     "code-server": {"env": "CODE_SERVER", "port": "8051"},
     "web-search-server": {"env": "WEB_SEARCH_SERVER", "port": "8052"},
+    "reference-server": {"env": "REFERENCE_SERVER", "port": "8054"},
 }
 MCP_SERVICES = set(MCP_SERVER_CONFIG)
 
