@@ -13,6 +13,7 @@ from climateclaw.tools.active_requests import (
     tracked_request,
 )
 from climateclaw.tools.header_gate import make_header_gate
+from climateclaw.tools.models import GenericToolResult
 from climateclaw.tools.reference.registry import (
     get_reference,
     reference_catalog,
@@ -78,7 +79,7 @@ Available references:
 async def consult_references(
     question: str,
     references: list[str],
-) -> dict[str, str]:
+) -> GenericToolResult:
     """
     Consult selected reference documents using the same model as the main
     ClimateClaw conversation.
@@ -88,10 +89,12 @@ async def consult_references(
 
     if not references:
         logger.error("Missing tool call parameter: references")
-        return {
-            "result": "",
-            "error": "Missing tool call parameter: references. At least one reference must be selected.",
-        }
+        return GenericToolResult(
+            error=(
+                "Missing tool call parameter: references. "
+                "At least one reference must be selected."
+            )
+        )
 
     selected = [get_reference(reference_id) for reference_id in references]
     citations = [reference.url for reference in selected]
@@ -164,10 +167,7 @@ async def consult_references(
 
             result = first_text(response) + f"\n Citations: {citations}"
 
-            return {
-                "result": result,
-                "error": "",
-            }
+            return GenericToolResult(result=result)
 
     except asyncio.CancelledError:
         raise
@@ -178,10 +178,7 @@ async def consult_references(
             sid,
             rid,
         )
-        return {
-            "result": "",
-            "error": "Request cancelled by client.",
-        }
+        return GenericToolResult(error="Request cancelled by client.")
 
     except Exception as exc:
         logger.warning(
