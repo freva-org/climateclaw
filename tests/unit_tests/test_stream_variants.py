@@ -10,7 +10,6 @@ from climateclaw.services.streaming.stream_variants import (
     SVStreamEnd,
     SVUser,
     cleanup_conversation,
-    create_code_interpreter_output,
     from_json_to_sv,
     from_sv_to_json,
     normalize_code_output,
@@ -42,7 +41,7 @@ def test_cleanup_no_extra_end_if_existing():
     conv: list[StreamVariant] = [
         SVUser(content="hi"),
         SVCode(content="print(1)", id="call_1"),
-        SVCodeOutput(content=create_code_interpreter_output(), id="call_1"),
+        SVCodeOutput(content=CodeInterpreterResult(), id="call_1"),
         SVStreamEnd(content="Done"),
     ]
     out = cleanup_conversation(conv, append_stream_end=True)
@@ -189,7 +188,7 @@ def test_legacy_codeoutput_list_normalizes_to_structured_content():
 def test_normalize_codeoutput_none_returns_empty_output():
     output = normalize_code_output(None)
 
-    assert output == create_code_interpreter_output()
+    assert output == CodeInterpreterResult()
 
 
 def test_normalize_codeoutput_dict_returns_code_interpreter_result():
@@ -216,9 +215,7 @@ def test_legacy_codeoutput_list_normalizes_first_item_to_stdout():
 
     assert isinstance(codeoutput_v, SVCodeOutput)
     assert codeoutput_v.id == "call_1"
-    assert codeoutput_v.content == create_code_interpreter_output(
-        stdout="legacy output"
-    )
+    assert codeoutput_v.content == CodeInterpreterResult(stdout="legacy output")
 
 
 def test_normalize_codeoutput_strips_png_from_display_data():

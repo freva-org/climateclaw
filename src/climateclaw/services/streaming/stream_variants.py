@@ -170,7 +170,7 @@ def cleanup_conversation(
         if pending_code_id is not None and not isinstance(v, SVCodeOutput):
             out.append(
                 SVCodeOutput(
-                    content=create_code_interpreter_output(
+                    content=CodeInterpreterResult(
                         error="No response was received from code-interpreter."
                     ),
                     id=pending_code_id,
@@ -196,7 +196,7 @@ def cleanup_conversation(
         # close dangling code with an empty output
         out.append(
             SVCodeOutput(
-                content=create_code_interpreter_output(
+                content=CodeInterpreterResult(
                     error="No response was received from code-interpreter."
                 ),
                 id=pending_code_id,
@@ -380,24 +380,6 @@ def parse_examples_jsonl(path: str | Path) -> list[StreamVariant]:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def create_code_interpreter_output(
-    stdout: str = "",
-    stderr: str = "",
-    result_repr: str = "",
-    display_data: list = [],
-    error: str = "",
-    created_files: list = [],
-) -> CodeInterpreterResult:
-    return CodeInterpreterResult(
-        stdout=stdout,
-        stderr=stderr,
-        result_repr=result_repr,
-        display_data=display_data,
-        error=error,
-        created_files=created_files,
-    )
-
-
 def _normalize_display_data(value: Any) -> list[dict[str, Any]]:
     if value is None:
         return []
@@ -427,7 +409,7 @@ def normalize_code_output(out: Any) -> CodeInterpreterResult:
     - None
     """
     if out is None:
-        return create_code_interpreter_output()
+        return CodeInterpreterResult()
 
     if isinstance(out, CodeInterpreterResult):
         norm_model = out.model_copy(deep=True)
@@ -454,7 +436,7 @@ def normalize_code_output(out: Any) -> CodeInterpreterResult:
         except (TypeError, json.JSONDecodeError):
             text = str(out)
 
-    return create_code_interpreter_output(stdout=text)
+    return CodeInterpreterResult(stdout=text)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
