@@ -162,10 +162,9 @@ async def acomplete(
     metadata = payload.get("metadata")
     if request_id:
         if isinstance(metadata, dict):
-            metadata = {**metadata, "request_id": request_id}
+            payload["metadata"] = {**metadata, "request_id": request_id}
         else:
-            metadata = {"request_id": request_id}
-    payload["metadata"] = metadata
+            payload["metadata"] = {"request_id": request_id}
 
     # Keep tool execution ordered unless a caller deliberately opts in.
     payload.setdefault("parallel_tool_calls", False)
