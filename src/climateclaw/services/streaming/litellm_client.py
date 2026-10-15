@@ -38,11 +38,40 @@ def _headers() -> dict[str, str]:
     return h
 
 
+async def _raise_for_status(response: httpx.Response) -> None:
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        # Streaming responses have not read their body when headers arrive.
+        await response.aread()
+
+        try:
+            body = response.json()
+            error = body.get("error", body)
+
+            if isinstance(error, dict):
+                detail = error.get("message") or error.get("detail")
+            else:
+                detail = str(error)
+
+            detail = detail or response.text
+        except (ValueError, AttributeError):
+            detail = response.text
+
+        detail = str(detail).strip() or "No error details returned"
+
+        raise httpx.HTTPStatusError(
+            f"LiteLLM returned HTTP {response.status_code}: {detail}",
+            request=exc.request,
+            response=response,
+        ) from exc
+
+
 async def _post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
     timeout = httpx.Timeout(60.0, read=300.0, write=30.0, connect=30.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         r = await client.post(url, json=payload, headers=_headers())
-        r.raise_for_status()
+        await _raise_for_status(r)
         return r.json()
 
 
@@ -139,7 +168,7 @@ async def acomplete(
             async with client.stream(
                 "POST", url, json=payload, headers=_headers()
             ) as r:
-                r.raise_for_status()
+                await _raise_for_status(r)
                 async for line in r.aiter_lines():
                     if not line or not line.startswith("data:"):
                         continue
