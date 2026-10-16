@@ -29,11 +29,6 @@ def _is_responses_endpoint(endpoint: str) -> bool:
     return endpoint.strip("/").endswith("responses")
 
 
-def _passthrough_params(params: dict[str, Any] | None) -> dict[str, Any]:
-    """Copy optional request parameters for payload merging."""
-    return dict(params or {})
-
-
 def _headers() -> dict[str, str]:
     """Build headers for a LiteLLM request."""
     h = {"Content-Type": "application/json"}
@@ -158,8 +153,7 @@ async def acomplete(
     stream: bool = False,
     temperature: float | None = None,
     max_tokens: int | None = None,
-    extra: dict[str, Any] | None = None,
-    **request_params: Any,
+    extra_params: dict[str, Any] | None = None,
 ) -> dict[str, Any] | AsyncIterator[dict[str, Any]]:
     """
     Call LiteLLM v1/chat/completions or v1/responses.
@@ -189,11 +183,8 @@ async def acomplete(
         else:
             payload["max_tokens"] = max_tokens
 
-    if extra:
-        payload.update(extra)
-
-    if request_params:
-        payload.update(_passthrough_params(request_params))
+    if extra_params:
+        payload.update(extra_params)
 
     request_id = get_request_id()
     metadata = payload.get("metadata")
