@@ -91,6 +91,13 @@ async def stream_with_tools(
     store_thread: bool = True,
     logger=None,
 ) -> AsyncIterator[StreamVariant]:
+    """
+    Stream a tool-enabled conversation using Chat Completions.
+
+    This orchestrator targets `/v1/chat/completions` and expects Chat Completions
+    stream chunks (`choices[].delta`). Responses API events are not supported.
+    """
+
     log = logger or DEFAULT_LOGGER
 
     # Append the conversation history to system prompt
