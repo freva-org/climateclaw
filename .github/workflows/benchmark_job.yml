@@ -10,8 +10,11 @@ on:
   workflow_dispatch:
     inputs:
       base:
-        description: "Branch, tag or commit to compare against"
+        description: "Base: branch, tag or commit to compare against"
         default: "main"
+      head:
+        description: "Head: branch, tag or commit to benchmark (empty = the branch this runs on)"
+        default: ""
       concurrency:
         description: "Comma-separated numbers of concurrent users"
         default: "1,4,16,64"
@@ -36,13 +39,19 @@ jobs:
     env:
       # Inputs are passed through env, not interpolated into scripts.
       BASE_REF: ${{ github.base_ref || inputs.base || 'main' }}
-      HEAD_NAME: ${{ github.head_ref || github.ref_name }}
+      # Name shown in the report, and what is checked out for it. On PRs the
+      # head is the PR's latest commit (not GitHub's merge commit).
+      HEAD_NAME: ${{ github.head_ref || inputs.head || github.ref_name }}
+      HEAD_REF: ${{ github.event.pull_request.head.sha || inputs.head || github.sha }}
       CONCURRENCY: ${{ inputs.concurrency || '1,4,16,64' }}
       DURATION: ${{ inputs.duration || '20' }}
       BENCH_WORKERS: ${{ inputs.workers || '1' }}
 
     steps:
-      - name: Checkout head
+      # The benchmark harness (benchmarks/) comes from the ref the workflow
+      # runs on; base and head only provide the backend code under test, so
+      # they need no benchmark code of their own.
+      - name: Checkout benchmark harness
         uses: actions/checkout@v4
 
       - name: Checkout base
@@ -50,6 +59,13 @@ jobs:
         with:
           ref: ${{ env.BASE_REF }}
           path: .bench-base
+
+      - name: Checkout head
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ env.HEAD_REF }}
+          path: .bench-head
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -61,9 +77,8 @@ jobs:
         run: |
           uv sync --group dev
           uv sync --project .bench-base
+          uv sync --project .bench-head
 
-      # The benchmark harness always comes from head, so base needs no
-      # benchmark code of its own; only its backend code is started.
       - name: Benchmark base
         env:
           BENCH_PROJECT_ROOT: .bench-base
@@ -72,6 +87,8 @@ jobs:
             --json base.json
 
       - name: Benchmark head
+        env:
+          BENCH_PROJECT_ROOT: .bench-head
         run: |
           benchmarks/backend/run.sh -c "${CONCURRENCY}" -d "${DURATION}" \
             --json head.json
@@ -79,7 +96,9 @@ jobs:
       - name: Compare
         run: |
           uv run python benchmarks/backend/compare.py base.json head.json \
-            --base-name "${BASE_REF}" --head-name "${HEAD_NAME}" > comment.md
+            --base-name "${BASE_REF}" --base-sha "$(git -C .bench-base rev-parse HEAD)" \
+            --head-name "${HEAD_NAME}" --head-sha "$(git -C .bench-head rev-parse HEAD)" \
+            --repo-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" > comment.md
           {
             cat comment.md
             echo
