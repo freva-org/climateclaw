@@ -1,0 +1,118 @@
+name: Benchmark
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "benchmarks/**"
+      - "pyproject.toml"
+      - "uv.lock"
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Branch, tag or commit to compare against"
+        default: "main"
+      concurrency:
+        description: "Comma-separated numbers of concurrent users"
+        default: "1,4,16,64"
+      duration:
+        description: "Seconds measured per concurrency level"
+        default: "20"
+      workers:
+        description: "Backend uvicorn workers"
+        default: "1"
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend throughput (base vs head)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write  # to post the comparison comment
+    env:
+      # Inputs are passed through env, not interpolated into scripts.
+      BASE_REF: ${{ github.base_ref || inputs.base || 'main' }}
+      HEAD_NAME: ${{ github.head_ref || github.ref_name }}
+      CONCURRENCY: ${{ inputs.concurrency || '1,4,16,64' }}
+      DURATION: ${{ inputs.duration || '20' }}
+      BENCH_WORKERS: ${{ inputs.workers || '1' }}
+
+    steps:
+      - name: Checkout head
+        uses: actions/checkout@v4
+
+      - name: Checkout base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASE_REF }}
+          path: .bench-base
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Sync dependencies
+        run: |
+          uv sync --group dev
+          uv sync --project .bench-base
+
+      # The benchmark harness always comes from head, so base needs no
+      # benchmark code of its own; only its backend code is started.
+      - name: Benchmark base
+        env:
+          BENCH_PROJECT_ROOT: .bench-base
+        run: |
+          benchmarks/backend/run.sh -c "${CONCURRENCY}" -d "${DURATION}" \
+            --json base.json
+
+      - name: Benchmark head
+        run: |
+          benchmarks/backend/run.sh -c "${CONCURRENCY}" -d "${DURATION}" \
+            --json head.json
+
+      - name: Compare
+        run: |
+          uv run python benchmarks/backend/compare.py base.json head.json \
+            --base-name "${BASE_REF}" --head-name "${HEAD_NAME}" > comment.md
+          {
+            cat comment.md
+            echo
+            echo "Backend workers: ${BENCH_WORKERS}, ${DURATION}s per level, runner: $(nproc) CPUs."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Token of PRs from forks is read-only; those only get the job summary.
+      - name: Post or update PR comment
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          marker='<!-- climateclaw-backend-benchmark -->'
+          id=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+            --jq ".[] | select(.body | startswith(\"${marker}\")) | .id" | head -n1)
+          if [ -n "${id}" ]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${id}" \
+              -F body=@comment.md > /dev/null
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+              -F body=@comment.md > /dev/null
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-benchmark
+          path: |
+            base.json
+            head.json
+            comment.md
+          if-no-files-found: ignore
