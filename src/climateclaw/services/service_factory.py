@@ -1,6 +1,8 @@
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.settings import get_server_url_dict, get_settings
@@ -15,14 +17,31 @@ settings = get_settings()
 
 CACHE_ROOT = Path("./cache")
 
+bearer_scheme = HTTPBearer(
+    scheme_name="BearerAuth",
+    auto_error=False,
+)
+
 
 async def auth_dependency(
     request: Request,
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Security(bearer_scheme),
+    ] = None,
+    rest_url: Annotated[
+        str | None,
+        Header(alias="x-freva-rest-url"),
+    ] = None,
 ) -> Authenticator:
     """
     FastAPI dependency:
     - returns the authenticated object (or raises HTTPException)
     """
+    # These parameters let FastAPI describe the request in OpenAPI.
+    # Authenticator.build remains the source of truth to preserve existing
+    # runtime validation, fallback headers, and error responses.
+    _ = credentials, rest_url
     auth = await Authenticator.build(request)
     return auth
 
