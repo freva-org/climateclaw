@@ -28,6 +28,12 @@ on:
 permissions:
   contents: read
 
+# One run per PR (or branch for manual runs): a new push cancels the run for
+# the previous commit, so only the latest commit reports.
+concurrency:
+  group: benchmark-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     name: Backend throughput (base vs head)
@@ -114,15 +120,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
+          # Results for an outdated commit must not replace newer ones.
+          latest=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq .head.sha)
+          if [ "${latest}" != "${HEAD_REF}" ]; then
+            echo "::notice::PR moved on to ${latest}; not posting results for ${HEAD_REF}."
+            exit 0
+          fi
+
           marker='<!-- climateclaw-backend-benchmark -->'
-          id=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
-            --jq ".[] | select(.body | startswith(\"${marker}\")) | .id" | head -n1)
-          if [ -n "${id}" ]; then
-            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${id}" \
-              -F body=@comment.md > /dev/null
-          else
+          mapfile -t ids < <(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+            --jq ".[] | select(.body | startswith(\"${marker}\")) | .id" \
+            | sed '/^$/d')
+          if [ "${#ids[@]}" -eq 0 ]; then
             gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
               -F body=@comment.md > /dev/null
+          else
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${ids[0]}" \
+              -F body=@comment.md > /dev/null
+            # Keep exactly one comment: remove duplicates from earlier races.
+            for id in "${ids[@]:1}"; do
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/issues/comments/${id}"
+            done
           fi
 
       - name: Upload results
