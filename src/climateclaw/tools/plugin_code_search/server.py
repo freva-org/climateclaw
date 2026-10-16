@@ -1,4 +1,5 @@
 import ast
+import asyncio
 import json
 import os
 import re
@@ -9,6 +10,7 @@ from typing import Optional, Tuple
 from urllib.parse import quote as urlquote
 
 import httpx
+from async_lru import alru_cache
 from fastmcp import FastMCP
 
 from climateclaw.core.logging_setup import configure_logging
@@ -21,6 +23,7 @@ logger = configure_logging(__name__)
 # ── Tool Config ────────────────────────────────────────────────────────────────
 GITLAB_ACCESS_TOKEN: Optional[str] = os.getenv("CLIMATECLAW_GITLAB_ACCESS_TOKEN")
 GITLAB_BASE_URL = "https://gitlab.dkrz.de/api/v4"
+GITLAB_CACHE_SECONDS = 600
 FREVA_PROJECT_NAMES = {
     "coming decade": "kd1418",
     "climxtreme": "bm1159",
@@ -28,11 +31,14 @@ FREVA_PROJECT_NAMES = {
     "freva": "freva",
 }
 ALLOWED_FILE_EXTENSIONS = (
-    ".py",
-    ".sh",
-    ".R",
     ".md",
+    ".py",
+    ".R",
     ".rst",
+    ".sh",
+    ".toml",
+    ".yaml",
+    ".yml",
 )  # only fetch these file types
 MAX_FILE_SIZE_BYTES = 50_000  # skip files larger than this
 MAX_TOTAL_CODE_CHARS = 100_000  # truncate total fetched code after this limit
@@ -88,39 +94,78 @@ def _get_model():
 
 async def call_llm(prompt: str) -> str:
     model = _get_model()
-    resp = await acomplete(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw_text = first_text(resp).strip()
-    return raw_text
+    for attempt in range(2):
+        try:
+            resp = await acomplete(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw_text = first_text(resp).strip()
+            return raw_text
+        except Exception as e:
+            await asyncio.sleep(5)  # brief pause before retrying
+            logger.error("Error during LLM call: %s", e)
+            if attempt == 1:
+                return ""
+    return ""
 
 
 # ── GitLab helpers ────────────────────────────────────────────────
-_gitlab_http = httpx.Client(
+_gitlab_http = httpx.AsyncClient(
     base_url=GITLAB_BASE_URL,
     headers={"PRIVATE-TOKEN": GITLAB_ACCESS_TOKEN or ""},
     timeout=30.0,
 )
 
 
-def _fetch_file_raw(project_id: int, file_path: str, branch: str) -> str:
+async def gitlab_healthcheck() -> bool:
+    """Check if the GitLab server is reachable and the access token is valid."""
+    try:
+        resp = await _gitlab_http.get("/projects", params={"per_page": 1})
+        resp.raise_for_status()
+        logger.info("GitLab startup check succeeded.")
+        return True
+    except Exception as e:
+        logger.error(
+            "GitLab startup check failed. "
+            "GitLab server is not reachable or access token has become invalid: %s",
+            e,
+        )
+        return False
+
+
+async def fetch_file_raw(
+    project_id: int, file_path: str, branch: str, max_bytes: int | None = None
+) -> tuple[str, bool]:
+    """
+    Stream a file and stop reading after `max_bytes` (if given), so large files are
+    never downloaded completely. Returns (text, was_truncated).
+    """
     encoded_path = urlquote(file_path, safe="")
-    resp = _gitlab_http.get(
+    async with _gitlab_http.stream(
+        "GET",
         f"/projects/{project_id}/repository/files/{encoded_path}/raw",
         params={"ref": branch},
-    )
-    resp.raise_for_status()
-    return resp.text
+    ) as resp:
+        resp.raise_for_status()
+        data = bytearray()
+        truncated = False
+        async for chunk in resp.aiter_bytes():
+            data.extend(chunk)
+            if max_bytes is not None and len(data) > max_bytes:
+                del data[max_bytes:]
+                truncated = True
+                break
+    return data.decode("utf-8", errors="replace"), truncated
 
 
-def _has_read_access(project_id: int, username: str) -> bool:
+async def has_read_access(project_id: int, username: str) -> bool:
     """
     Check if the given user has at least read access rights to the GitLab project,
     based on the project's visibility, the user's ID as well as membership status.
     """
     # Get project visibility: "public", "internal", or "private"
-    resp = _gitlab_http.get(f"/projects/{project_id}")
+    resp = await _gitlab_http.get(f"/projects/{project_id}")
     resp.raise_for_status()
     visibility = resp.json().get("visibility")
     # Public: everyone can read
@@ -128,7 +173,7 @@ def _has_read_access(project_id: int, username: str) -> bool:
         return True
 
     # Internal: all authenticated (non-external) users can read
-    resp = _gitlab_http.get("/users", params={"username": username})
+    resp = await _gitlab_http.get("/users", params={"username": username})
     resp.raise_for_status()
     users = resp.json()
     user_id = users[0].get("id") if users else None
@@ -139,41 +184,44 @@ def _has_read_access(project_id: int, username: str) -> bool:
         return True
 
     # Private: must have explicit membership
-    resp = _gitlab_http.get(f"/projects/{project_id}/members/all/{user_id}")
+    resp = await _gitlab_http.get(f"/projects/{project_id}/members/all/{user_id}")
     if resp.status_code == 404:
         return False
     resp.raise_for_status()
-    return resp.json().get("access_level") >= 10  # Guest and above can read
+    return resp.json().get("access_level", 0) >= 10  # Guest and above can read
 
 
-def get_project_id(plugin: str, project: str) -> int | None:
-    """Fetch the GitLab project ID for the given plugin name."""
-    encoded = urlquote(f"{project}/plugins4freva/{plugin}", safe="")
-    resp = _gitlab_http.get(f"/projects/{encoded}")
+@alru_cache(maxsize=32, ttl=GITLAB_CACHE_SECONDS)
+async def get_project_id(plugin: str, project: str) -> int | None:
+    """Fetch the GitLab project ID for the given plugin name (cached briefly)."""
+    key = f"{project}/plugins4freva/{plugin}"
+    resp = await _gitlab_http.get(f"/projects/{urlquote(key, safe='')}")
     if resp.status_code == 404:
-        return None
-    resp.raise_for_status()
-    return resp.json().get("id")
+        project_id = None
+    else:
+        resp.raise_for_status()
+        project_id = resp.json().get("id")
+    return project_id
 
 
-def fetch_repo_tree_and_branch(project_id: int) -> tuple[list[str], str]:
+@alru_cache(maxsize=32, ttl=GITLAB_CACHE_SECONDS)
+async def fetch_repo_tree_and_branch(project_id: int) -> tuple[list[str], str]:
     """
-    Return the recursive file tree for a plugin repository as a list of
-    file paths (strings) that match relevant extensions.
+    Return the recursive file tree for a plugin repository as a tuple of
+    file paths (strings) that match relevant extensions, plus the default branch.
+    Results are cached briefly; the tuple keeps the cached value immutable.
     """
     items: list[dict] = []
-    page = 1
-    while True:
-        resp = _gitlab_http.get(
+    page: str | None = "1"
+    while page:
+        resp = await _gitlab_http.get(
             f"/projects/{project_id}/repository/tree",
             params={"recursive": "true", "per_page": 100, "page": page},
         )
         resp.raise_for_status()
-        batch = resp.json()
-        if not batch:
-            break
-        items.extend(batch)
-        page += 1
+        items.extend(resp.json())
+        # GitLab sets an empty X-Next-Page header on the last page
+        page = resp.headers.get("X-Next-Page") or None
 
     # filter to file paths with relevant extensions
     paths = [
@@ -183,13 +231,13 @@ def fetch_repo_tree_and_branch(project_id: int) -> tuple[list[str], str]:
     ]
 
     # Get the default branch of the repository (usually "levante" or "master")
-    resp = _gitlab_http.get(f"/projects/{project_id}")
+    resp = await _gitlab_http.get(f"/projects/{project_id}")
     resp.raise_for_status()
     default_branch = resp.json().get("default_branch")
     return paths, default_branch
 
 
-def fetch_files(
+async def fetch_files(
     project_id: int, branch: str, selected_files: list[str], max_chars: int
 ) -> dict[str, str]:
     """
@@ -198,24 +246,28 @@ def fetch_files(
     """
     collected: dict[str, str] = {}
     budget = max_chars
+
     for file in selected_files:
         if budget <= 0:
             break
         try:
-            content = _fetch_file_raw(project_id, file, branch)
+            content, truncated = await fetch_file_raw(
+                project_id, file, branch, MAX_FILE_SIZE_BYTES
+            )
         except Exception as e:
-            logger.debug(
+            logger.info(
                 "Skipping file %s due to error in fetching content: %s", file, e
             )
             continue
-        if len(content) > MAX_FILE_SIZE_BYTES:
-            content = content[:MAX_FILE_SIZE_BYTES] + "\n... (file truncated)"
+        if truncated:
+            content += "\n... (file truncated)"
         if len(content) > budget:
             content = (
                 content[:budget] + f"\n... (truncated: reached {max_chars} char limit)"
             )
         collected[file] = content
         budget -= len(content)
+
     return collected
 
 
@@ -233,8 +285,10 @@ def extract_method_from_source(source_code: str, method_name: str = "run_tool") 
         # Look for the method definition anywhere in the tree
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == method_name:
-                method_code = ast.get_source_segment(source_code, node)
-                return method_code or "No 'run_tool' method found in the entry file."
+                method_code = ast.get_source_segment(cleaned_code, node)
+                return (
+                    method_code or f"No '{method_name}' method found in the entry file."
+                )
 
         return f"Method '{method_name}' not found in the source code."
 
@@ -267,7 +321,7 @@ def find_entry_file(file_paths: list[str]) -> str:
     return sorted(matches, key=lambda p: (p.count("/"), p))[0]
 
 
-async def _llm_select_files(
+async def llm_select_files(
     prompt: str, file_paths: list[str], num_files: int, fallback: list[str]
 ) -> list[str]:
     """
@@ -287,10 +341,9 @@ async def _llm_select_files(
         select_files = fallback
 
     # Return only paths that exist in repo tree and conform to exclusion pattern
+    allowed_paths = set(file_paths)
     valid_paths = [
-        p
-        for p in select_files
-        if p in set(file_paths) and not EXCLUDE_PATTERN.search(p)
+        p for p in select_files if p in allowed_paths and not EXCLUDE_PATTERN.search(p)
     ]
     return valid_paths[:num_files]  # limit to max number of files
 
@@ -309,8 +362,8 @@ async def select_init_files(
     file_tree = "\n".join(file_paths)
     selection_prompt = (
         f"Task: You are analyzing the files from the '{plugin}' Freva plugin repository, given the user context and the fetched code. "
-        "Prioritize and select the files based on the following rules:\n\n"
-        "- Select the files that are imported or called as scripts in the fetched code, as well as those that seem *most* relevant to answer the user's query.\n"
+        "Rank and select files based on the following rules:\n\n"
+        "- Specifically scan for files that are imported/called as scripts in the fetched code, as well as those seeming *most* relevant to answer the user's query.\n"
         "- For high level usage/configuration questions, prioritize config files, README and docs.\n"
         "- For questions about implementation logic, prioritize source code modules.\n"
         "- Exclude tests, examples, generated files, and any '__init__.py'.\n"
@@ -320,7 +373,7 @@ async def select_init_files(
         f"=== Fetched Code ===\n{fetched_code}\n=== END ===\n\n"
     )
     # Fallback: pick all files from the tree search
-    return await _llm_select_files(
+    return await llm_select_files(
         selection_prompt, file_paths, num_files, fallback=file_paths
     )
 
@@ -339,7 +392,7 @@ async def select_dependency_files(
     file_tree = "\n".join(file_paths)
     selection_prompt = (
         f"Task: You are tracing the code base of the '{plugin}' Freva plugin, given the user query and the already fetched source code. "
-        "Prioritize and select which of the remaining repository files should be read next based on the following rules:\n\n"
+        "Rank and select which of the remaining repository files should be read next based on the following rules:\n\n"
         "- Scan the fetched code for imports or script calls and map each to the matching file using Python module conventions "
         "(e.g., 'from foo.bar import baz' -> 'foo/bar.py').\n"
         "- Ignore imports from third-party libraries (e.g. numpy, xarray, evaluation_system etc.) and focus on the plugin's own source code.\n"
@@ -350,7 +403,7 @@ async def select_dependency_files(
         f"=== Remaining Repository Files ===\n{file_tree}\n=== END ===\n\n"
     )
     # Fallback: pick nothing to avoid fetching irrelevant code
-    return await _llm_select_files(selection_prompt, file_paths, num_files, fallback=[])
+    return await llm_select_files(selection_prompt, file_paths, num_files, fallback=[])
 
 
 async def collect_plugin_context(
@@ -368,7 +421,7 @@ async def collect_plugin_context(
     """
 
     def _log_stage(stage: str, files: list[str]):
-        logger.debug(
+        logger.info(
             "%s retrieval step selected %d/%d files for plugin '%s': %s",
             stage,
             len(files),
@@ -383,7 +436,7 @@ async def collect_plugin_context(
     )
 
     # ── Fetch the repository tree with all files ────────────────────
-    file_paths, branch = fetch_repo_tree_and_branch(project_id)
+    file_paths, branch = await fetch_repo_tree_and_branch(project_id)
     if not file_paths:
         return f"repository is empty for plugin '{plugin}' in branch '{branch}'"
 
@@ -391,9 +444,8 @@ async def collect_plugin_context(
     entry_file = find_entry_file(file_paths)
     _log_stage("Deterministic entry file", [entry_file])
 
-    exec_code = extract_method_from_source(
-        _fetch_file_raw(project_id, entry_file, branch), method_name="run_tool"
-    )
+    entry_source, _ = await fetch_file_raw(project_id, entry_file, branch)
+    exec_code = extract_method_from_source(entry_source, method_name="run_tool")
     entry_code = format_files({entry_file: exec_code})
 
     # ── Stage 2: find & fetch useful files, based on entry file + user context ───────
@@ -403,7 +455,7 @@ async def collect_plugin_context(
     )
     _log_stage("LLM-based initial", init_files)
     init_files = [entry_file] + init_files
-    init_code = fetch_files(project_id, branch, init_files, MAX_TOTAL_CODE_CHARS)
+    init_code = await fetch_files(project_id, branch, init_files, MAX_TOTAL_CODE_CHARS)
 
     # ── Stage 3: resolve dependencies ───────────────────────────────────
     budget = MAX_TOTAL_CODE_CHARS - sum(len(c) for c in init_code.values())
@@ -417,7 +469,7 @@ async def collect_plugin_context(
         max_deps,
     )
     _log_stage("LLM-based dependency", dep_files)
-    deps_code = fetch_files(project_id, branch, dep_files, budget)
+    deps_code = await fetch_files(project_id, branch, dep_files, budget)
 
     # Format the final output with header and fetched code, including dependencies
     code_content = format_files(init_code)
@@ -428,7 +480,7 @@ async def collect_plugin_context(
     return header + code_content
 
 
-def validate_plugin_call(
+async def validate_plugin_call(
     plugin: str, project: str, project_id: int | None
 ) -> Tuple[bool, str]:
     """
@@ -447,7 +499,7 @@ def validate_plugin_call(
     user_name = "k202218"
     # user_name = _get_user()
     try:
-        user_access = _has_read_access(project_id, user_name)
+        user_access = await has_read_access(project_id, user_name)
         if not user_access:
             logger.info(
                 "User '%s' does NOT have read access to plugin '%s' in project '%s'.",
@@ -466,24 +518,26 @@ def validate_plugin_call(
             project,
         )
     except httpx.HTTPError as e:
-        logger.error("Error checking GitLab repo membership: %s", e)
+        logger.warning("Error checking GitLab repo membership: %s", e)
         error_msg = "Plugin code search is currently unavailable (GitLab access error)."
         return False, error_msg
 
     return True, "Validation successful"
 
 
-async def detect_plugin_project(user_query: str) -> tuple[str, str]:
+async def detect_plugin_project(user_query: str) -> tuple[str | None, str | None]:
     """
     Attempt to automatically detect the plugin and project names from the user's query
     by making a call to the LLM.
 
-    Returns a tuple of (plugin_name, project_name):
-    - plugin_name (str): Name of the repo or plugin (e.g. "leadtimeselektor")
-    - project_name (str): Name of the Freva instance (e.g. "kd1418" for "coming decade")
+    Returns a tuple of (plugin, project):
+    - plugin (str): Name of the repo or plugin (e.g. "leadtimeselektor") or None if not detected.
+    - project (str): Name of the Freva instance (e.g. "kd1418" for "coming decade") or None if not detected.
     """
     file_path = Path(__file__).parent / "available_plugins.md"
-    plugin_descriptions = file_path.read_text(encoding="utf-8", newline="\n")
+    plugin_content = file_path.read_text(encoding="utf-8", newline="\n")
+    avail_plugins = re.findall(r"\*\*([^*]+)\*\*", plugin_content, re.MULTILINE)
+
     # let LLM select plugin and project names from the available plugin summaries
     selection_prompt = (
         "Task: Select the semantically best matching Freva plugin & project name for the user query from the provided plugin summaries.\n"
@@ -492,35 +546,40 @@ async def detect_plugin_project(user_query: str) -> tuple[str, str]:
         "- Return exactly one plugin and its corresponding project.\n"
         "- Output must be exactly this format with no extra text: <plugin_name>,<project_name>\n\n"
         f"User query:\n{user_query}\n\n"
-        f"Available plugin summaries:\n{plugin_descriptions}"
+        f"Available plugin summaries:\n{plugin_content}"
     )
     raw_text = await call_llm(selection_prompt)
+
     # format to "<plugin_name>,<project_name>" output
-    plugin_name, project_name = raw_text.split(",", maxsplit=1)
-    plugin_name = plugin_name.strip().lower()
-    project_name = FREVA_PROJECT_NAMES.get(project_name.strip().lower(), "")
+    try:
+        plugin, project = [x.strip().lower() for x in raw_text.split(",", maxsplit=1)]
+    except ValueError:
+        return None, None
+
+    plugin = plugin if plugin in avail_plugins else None
+    project = FREVA_PROJECT_NAMES.get(project)
     logger.info(
         "Auto-detected plugin '%s' and project '%s' for examining code base.",
-        plugin_name,
-        project_name,
+        plugin,
+        project,
     )
-    return plugin_name, project_name
+    return plugin, project
 
 
 @mcp.tool()
 async def plugin_code_search(user_query: str) -> str:
     """
     Fetch relevant source code and documentation files of a Freva data analysis plugin
-    as a repository-grounded code knowledge base.
+    as repository-grounded code knowledge base. Use this tool whenever you think a specific climate or weather-related question can be answered by examining the plugin's source code.
 
     Use this when the user
     - explicitly asks how a plugin's internal logic works, how to run or configure it,
     or wants plugin code translated or adapted into Python examples;
-    - asks a specific climate or weather question involving regional, decadal, or
-    extreme-event analysis (lead time extraction, (hindcast) skill scoring against observation,
-    bias adjustment and drift correction, downscaling, precipitation indices, crop impact, heat waves/HWMID
+    - asks a specific climate or weather-related question involving regional, decadal, or
+    extreme-event analysis
+    (e.g.: lead time extraction, (hindcast) skill scoring against observation, bias adjustment and drift correction, downscaling, precipitation indices, impact on crop growth, heat waves/HWMID),
     climate/extreme indices, region matching, urban heatwave extraction, precipitation
-    disaggregation, and plugin creation).
+    disaggregation, and Freva plugin creation).
 
     Workflow Guidelines:
     - Ground explanations only in returned code context.
@@ -550,11 +609,16 @@ async def plugin_code_search(user_query: str) -> str:
     - "How can I calculate climate prediction skill scores against observations or reanalysis data?"
     - "How can I assess the impact of extreme climate events on crop productivity?"
     """
+    if not await gitlab_healthcheck():
+        return "GitLab server is not reachable or access token has become invalid."
+
     plugin, project = await detect_plugin_project(user_query)
+    if not plugin or not project:
+        return "No plugin or project could be matched from the user query."
 
     # Validate the plugin call
-    project_id = get_project_id(plugin, project)
-    result, message = validate_plugin_call(plugin, project, project_id)
+    project_id = await get_project_id(plugin, project)
+    result, message = await validate_plugin_call(plugin, project, project_id)
     if not result:
         return message
 

@@ -6,7 +6,7 @@ Each of the following sections belongs to a specific Freva instance/project, whe
 * the plugin name; and
 * a brief description of its functionality.
 
-## "coming decade"
+## coming decade
 
 * **leadtimeselektor**: extracts and aggregates lead times from decadal prediction ensembles
 * **problems**: performs skill score calculation of a decadal climate experiment (and a reference experiment, if applicable) against reanalysis or observation
@@ -16,7 +16,7 @@ Each of the following sections belongs to a specific Freva instance/project, whe
 
 ---
 
-## "climxtreme"
+## climxtreme
 
 * **climdexcalc2**: calculates climatological & extreme indices from daily temperature and precipitation data
 * **preproc**: pre-processes spatio-temporal data, converting to CMORized formats
@@ -28,7 +28,7 @@ Each of the following sections belongs to a specific Freva instance/project, whe
 
 ---
 
-## "regiklim"
+## regiklim
 
 * **Climpact**: processes climate model output data for usage as input of impact model studies.
 * **Heat2UrbanImpact**: identifies heatwaves from regional climate model data for usage in urban impact models
@@ -39,6 +39,6 @@ Each of the following sections belongs to a specific Freva instance/project, whe
 
 ---
 
-## "freva"
+## freva
 
 * **freva-plugin-template**: defines a template for creating new Freva plugins, including the necessary structure and files for a plugin to be recognized by the Freva system.

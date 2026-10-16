@@ -66,8 +66,8 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headl
 
 MODEL = "gpt-4.1"  # model to benchmark
 USER_ID = "janedoe"
-RUNS = 1  # number of runs to perform
-CONCURRENCY = 1  # number of concurrent runs to perform
+RUNS = 1  # number of runs to perform -> increase for more thorough benchmarking
+CONCURRENCY = 1  # number of concurrent runs to perform -> increase for more parallelism (aka faster execution)
 
 PRINT_RUN_SUMMARY = (
     True  # print summary of each run (state, prompt, tool call, tool output)
@@ -82,17 +82,17 @@ PLOT_METRICS = False  # plot metrics as bar charts at the end of the benchmark
 path_to_prompts = (
     Path(__file__).parent / "evaluation" / "benchmark-prompts-plugin-server.json"
 )
-# with open(path_to_prompts, "r", encoding="utf-8") as f:
-#     BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
+with open(path_to_prompts, "r", encoding="utf-8") as f:
+    BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
 
 # for quick sanity checking, use this one and comment out the main benchmark suite
-BENCHMARK = {
-    "leadtimeselektor": [
-        "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
-        "How can I best extract lead times from decadal climate predictions?",
-        "How are you?",
-    ]
-}
+# BENCHMARK = {
+#     "leadtimeselektor": [
+#         "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
+#         "How can I best extract lead times from decadal climate predictions?",
+#         "How are you?",
+#     ]
+# }
 
 path_to_plugins = (
     Path(__file__).parents[1]
