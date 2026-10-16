@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 
 from climateclaw.services.streaming.stream_variants import (
     StreamVariant,
@@ -73,11 +74,25 @@ def test_code_wire_roundtrip():
 
 
 def test_user_wire_roundtrip_includes_model():
-    original = SVUser(content="hi", model="gpt-4.1")
+    timestamp = datetime(2026, 9, 11, 12, 0, tzinfo=UTC)
+    original = SVUser(content="hi", model="gpt-4.1", timestamp=timestamp)
     wire = from_sv_to_json(original)
-    assert wire == {"variant": "User", "content": "hi", "model": "gpt-4.1"}
+    assert wire == {
+        "variant": "User",
+        "content": "hi",
+        "model": "gpt-4.1",
+        "timestamp": timestamp,
+    }
     back = from_json_to_sv(wire)
     assert back == original
+
+
+def test_legacy_user_without_timestamp_stays_without_timestamp():
+    back = from_json_to_sv({"variant": "User", "content": "hi", "model": "gpt-4.1"})
+
+    assert isinstance(back, SVUser)
+    assert back.timestamp is None
+    assert "timestamp" not in from_sv_to_json(back)
 
 
 def test_codeoutput_wire_content_is_structured():

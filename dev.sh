@@ -45,6 +45,7 @@ EOF
 
 # Set CLIMATECLAW_DEV flag for everything in this session
 export CLIMATECLAW_DEV=1
+export CLIMATECLAW_NODE_NAME="$(hostname -f 2>/dev/null || hostname)"
 
 CLIMATECLAW_DEBUG="${CLIMATECLAW_DEBUG:-0}"
 ENV_FILE=".env"
