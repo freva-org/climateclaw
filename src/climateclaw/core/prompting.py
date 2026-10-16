@@ -24,8 +24,6 @@ What this module does
 
 Differences from Rust (documented for future parity)
 ----------------------------------------------------
-1) GPT-5: placeholder — we do NOT use GPT-5-specific prompt files yet; we log a warning
-   and fall back to the baseline prompt set.
 """
 
 
@@ -107,7 +105,7 @@ def _load_prompts(
     model: str,
 ) -> dict[Literal["starting", "summary", "examples_path"], str]:
     """
-    Load raw prompt assets for the given model (with GPT-5 placeholder fallback).
+    Load raw prompt assets for the given model.
 
     Returns:
         {
@@ -140,8 +138,6 @@ def _load_examples_as_messages(examples_path: str | Path) -> list[dict]:
         include_images=False,
         include_meta=True,  # parity note: Rust typically drops meta; we keep for now
     )  # type: ignore[return-value]
-    # Note: OpenAIMessage is a class that inherits from TypedDict, so it can be used as a dict by json.dumps.
-    # This means that the above error message can be ignored.
 
 
 def get_entire_prompt(user_id: str, thread_id: str, model: str) -> list[dict[str, Any]]:
@@ -154,13 +150,6 @@ def get_entire_prompt(user_id: str, thread_id: str, model: str) -> list[dict[str
     messages.append(_as_system_message(assets["starting"]))
     messages.extend(_load_examples_as_messages(assets["examples_path"]))
     messages.append(_as_system_message(assets["summary"]))
-
-    # Optional: mark placeholder when model is GPT-5 (useful for debugging)
-    if model_is_gpt_5(model):
-        logger.info(
-            "GPT-5 placeholder active: baseline prompts used for model='%s'.", model
-        )
-
     return messages
 
 
