@@ -12,8 +12,10 @@ def _prod_fixture(tmp_path, monkeypatch):
     repo_root = os.getcwd()
     shutil.copy(repo_root + "/prod.sh", tmp_path / "prod.sh")
     (tmp_path / "prod.sh").chmod(0o755)
-    (tmp_path / "docker-compose.yml").write_text("services: {}\n")
-    (tmp_path / "docker-compose.scaled.yml").write_text("services: {}\n")
+    docker_dir = tmp_path / "docker"
+    docker_dir.mkdir()
+    (docker_dir / "docker-compose.yml").write_text("services: {}\n")
+    (docker_dir / "docker-compose.scaled.yml").write_text("services: {}\n")
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -29,7 +31,7 @@ def _prod_fixture(tmp_path, monkeypatch):
         "exit 0\n",
     )
     _write_executable(
-        tmp_path / "gen_compose.py",
+        docker_dir / "gen_compose.py",
         "#!/usr/bin/env bash\n"
         'echo "gen_compose $* PROJECT=$CLIMATECLAW_PROJECT_NAME"'
         ' >> "$PROD_SH_TEST_LOG"\n'
@@ -70,8 +72,16 @@ def test_prod_sh_project_flag_sets_project_and_uses_default_up_args(
     result = _run_prod(tmp_path, "--project", "codes")
 
     assert result.returncode == 0
-    assert "gen_compose docker-compose.yml codes PROJECT=codes" in log_path.read_text()
-    assert "podman-compose -f docker-compose.scaled.yml up -d" in log_path.read_text()
+    assert (
+        "gen_compose docker/docker-compose.yml codes PROJECT=codes"
+        in log_path.read_text()
+    )
+    assert (
+        "podman-compose "
+        f"--project-name {tmp_path.name} "
+        "--env-file .env -f docker/docker-compose.scaled.yml up -d"
+        in log_path.read_text()
+    )
 
 
 def test_prod_sh_project_equals_flag_sets_project(tmp_path, monkeypatch):
@@ -80,7 +90,10 @@ def test_prod_sh_project_equals_flag_sets_project(tmp_path, monkeypatch):
     result = _run_prod(tmp_path, "--project=codes")
 
     assert result.returncode == 0
-    assert "gen_compose docker-compose.yml codes PROJECT=codes" in log_path.read_text()
+    assert (
+        "gen_compose docker/docker-compose.yml codes PROJECT=codes"
+        in log_path.read_text()
+    )
 
 
 def test_prod_sh_reads_project_from_env_file(tmp_path, monkeypatch):
@@ -90,7 +103,10 @@ def test_prod_sh_reads_project_from_env_file(tmp_path, monkeypatch):
     result = _run_prod(tmp_path)
 
     assert result.returncode == 0
-    assert "gen_compose docker-compose.yml codes PROJECT=codes" in log_path.read_text()
+    assert (
+        "gen_compose docker/docker-compose.yml codes PROJECT=codes"
+        in log_path.read_text()
+    )
 
 
 def test_prod_sh_project_flag_overrides_env_file(tmp_path, monkeypatch):
@@ -100,7 +116,10 @@ def test_prod_sh_project_flag_overrides_env_file(tmp_path, monkeypatch):
     result = _run_prod(tmp_path, "--project", "codes")
 
     assert result.returncode == 0
-    assert "gen_compose docker-compose.yml codes PROJECT=codes" in log_path.read_text()
+    assert (
+        "gen_compose docker/docker-compose.yml codes PROJECT=codes"
+        in log_path.read_text()
+    )
 
 
 def test_prod_sh_preserves_compose_args_after_flags(tmp_path, monkeypatch):
@@ -110,5 +129,9 @@ def test_prod_sh_preserves_compose_args_after_flags(tmp_path, monkeypatch):
 
     assert result.returncode == 0
     log = log_path.read_text()
-    assert "podman-compose -f docker-compose.scaled.yml up --force-recreate" in log
+    assert (
+        "podman-compose "
+        f"--project-name {tmp_path.name} "
+        "--env-file .env -f docker/docker-compose.scaled.yml up --force-recreate" in log
+    )
     assert "--project codes" not in log

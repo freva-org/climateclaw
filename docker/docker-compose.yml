@@ -2,9 +2,9 @@ services:
 
   climateclaw-base:
     # Build manually with:
-    # docker compose -f docker-compose.dev.yml --profile build-only build climateclaw-base
+    # docker compose -f docker/docker-compose.dev.yml --profile build-only build climateclaw-base
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile.base
     image: ghcr.io/freva-org/climateclaw-base:latest
     profiles:
@@ -13,9 +13,9 @@ services:
   climateclaw:
     image: climateclaw-${CLIMATECLAW_INSTANCE_NAME:?Instance name must be set in the .env file to differentiate between instances}
     build:
-      context: .
+      context: ..
       dockerfile: docker/climateclaw/Dockerfile
-    env_file: .env
+    env_file: ../.env
     hostname: climateclaw-${CLIMATECLAW_INSTANCE_NAME}
     ports:
       - "${CLIMATECLAW_TARGET_PORT:-8502}:${CLIMATECLAW_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
@@ -38,9 +38,9 @@ services:
   code-server:
     image: code-server-${CLIMATECLAW_INSTANCE_NAME}
     build:
-      context: .
+      context: ..
       dockerfile: docker/code-server/Dockerfile
-    env_file: .env
+    env_file: ../.env
     hostname: code-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_MCP_HOST: 0.0.0.0
@@ -62,9 +62,9 @@ services:
   web-search-server:
     image: web-search-server-${CLIMATECLAW_INSTANCE_NAME}
     build:
-      context: .
+      context: ..
       dockerfile: docker/web-search-server/Dockerfile
-    env_file: .env
+    env_file: ../.env
     hostname: web-search-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_MCP_HOST: 0.0.0.0
@@ -84,7 +84,7 @@ services:
     image: ghcr.io/berriai/litellm:v1.102.0
     hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
-      - ./litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
+      - ../litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
       - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -96,7 +96,7 @@ services:
         --run_gunicorn
         --detailed_debug
         2>&1 | tee -a /app/logs/litellm.log
-    env_file: .env
+    env_file: ../.env
     environment:
       CLIMATECLAW_VLLM_LITELLM_MODEL: "hosted_vllm/${CLIMATECLAW_VLLM_MODEL_ID:-nvidia/Gemma-4-31B-IT-NVFP4}"
     networks:

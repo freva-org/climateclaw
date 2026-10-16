@@ -42,6 +42,9 @@ class Settings:
     CLEANUP_INTERVAL_MINS: int = int(
         os.getenv("CLIMATECLAW_CLEANUP_INTERVAL_MINS", "30")
     )
+    SYSLOG_PROTOCOL: str = os.getenv("CLIMATECLAW_SYSLOG_PROTOCOL", "tcp")
+    SYSLOG_PORT: int = int(os.getenv("CLIMATECLAW_SYSLOG_PORT", "1514"))
+    SYSLOG_HOST: str | None = os.getenv("CLIMATECLAW_SYSLOG_HOST")
 
 
 # Simple singleton-style accessor
