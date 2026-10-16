@@ -16,6 +16,7 @@ from fastmcp import FastMCP
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
 from climateclaw.tools.header_gate import RequestIdMiddleware, make_header_gate
+from climateclaw.tools.models import GenericToolResult
 
 logger = configure_logging(__name__)
 
@@ -326,7 +327,7 @@ async def llm_select_files(
 ) -> list[str]:
     """
     Ask the LLM for a JSON array of file paths and keep only those that exist
-    in `file_paths`. Returns `fallback` if the LLM response cannot be parsed.
+    in `file_paths`. Returns the value of `fallback` if the LLM response cannot be parsed.
     """
     try:
         raw_text = await call_llm(prompt)
@@ -408,7 +409,7 @@ async def select_dependency_files(
 
 async def collect_plugin_context(
     plugin: str, project: str, project_id: int, user_query: str
-) -> str:
+) -> GenericToolResult:
     """
     Entry-point-driven context retrieval of the plugin code base:
         1. Deterministically find the plugin entry files ('*wrapper*.py' / '*api*.py')
@@ -416,7 +417,7 @@ async def collect_plugin_context(
         2. Let the LLM select the direct dependencies of the entry files plus other
            modules relevant for the user's query, and fetch those.
         3. Let the LLM resolve the direct dependencies of the newly fetched files.
-    Returns a string containing the concatenated relevant source code files,
+    Returns a GenericToolResult object containing the concatenated relevant source code files,
         separated by file and with a header.
     """
 
@@ -438,7 +439,9 @@ async def collect_plugin_context(
     # ── Fetch the repository tree with all files ────────────────────
     file_paths, branch = await fetch_repo_tree_and_branch(project_id)
     if not file_paths:
-        return f"repository is empty for plugin '{plugin}' in branch '{branch}'"
+        return GenericToolResult(
+            error=f"repository is empty for plugin '{plugin}' in branch '{branch}'"
+        )
 
     # ── Stage 1: find & fetch plugin entry ─────────────────────
     entry_file = find_entry_file(file_paths)
@@ -477,7 +480,7 @@ async def collect_plugin_context(
         code_content += "\n\n### ── Dependency files ── ###\n\n" + format_files(
             deps_code
         )
-    return header + code_content
+    return GenericToolResult(result=header + code_content)
 
 
 async def validate_plugin_call(
@@ -567,7 +570,7 @@ async def detect_plugin_project(user_query: str) -> tuple[str | None, str | None
 
 
 @mcp.tool()
-async def plugin_code_search(user_query: str) -> str:
+async def plugin_code_search(user_query: str) -> GenericToolResult:
     """
     Fetch relevant source code and documentation files of a Freva data analysis plugin
     as repository-grounded code knowledge base. Use this tool whenever you think a specific climate or weather-related question can be answered by examining the plugin's source code.
@@ -599,7 +602,7 @@ async def plugin_code_search(user_query: str) -> str:
 
     Returns:
     --------
-        str: Relevant code context (with a header containing the plugin's repo URL),
+        GenericToolResult: Relevant code context (with a header containing the plugin's repo URL),
         including directly imported dependency files; or an error message if the plugin
         is not found, user access is denied, or code retrieval fails.
 
@@ -610,17 +613,21 @@ async def plugin_code_search(user_query: str) -> str:
     - "How can I assess the impact of extreme climate events on crop productivity?"
     """
     if not await gitlab_healthcheck():
-        return "GitLab server is not reachable or access token has become invalid."
+        return GenericToolResult(
+            error="GitLab server is not reachable or access token has become invalid."
+        )
 
     plugin, project = await detect_plugin_project(user_query)
     if not plugin or not project:
-        return "No plugin or project could be matched from the user query."
+        return GenericToolResult(
+            error="No plugin or project could be matched from the user query."
+        )
 
     # Validate the plugin call
     project_id = await get_project_id(plugin, project)
     result, message = await validate_plugin_call(plugin, project, project_id)
     if not result:
-        return message
+        return GenericToolResult(error=message)
 
     # Fetch the plugin code and return it with a header
     logger.info("Fetching source code for plugin '%s'", plugin)
@@ -628,4 +635,6 @@ async def plugin_code_search(user_query: str) -> str:
         return await collect_plugin_context(plugin, project, project_id, user_query)  # type: ignore
     except Exception as e:
         logger.warning("Failed to fetch plugin code for '%s': %s", plugin, e)
-        return f"Failed to retrieve source code for plugin '{plugin}': {e}"
+        return GenericToolResult(
+            error=f"Failed to retrieve source code for plugin '{plugin}': {e}"
+        )
