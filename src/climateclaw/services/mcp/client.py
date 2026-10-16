@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+from climateclaw.core.http_client import get_http_client
 from climateclaw.core.logging_setup import (
     REQUEST_ID_HEADER,
     configure_logging,
@@ -62,6 +63,29 @@ class McpMethodNotFound(McpError): ...
 class McpRequestCancelled(McpError): ...
 
 
+class _ServerHttp:
+    """Requests to one MCP server, sent through the backend's shared HTTP pool."""
+
+    def __init__(self, base_url: str, timeout: httpx.Timeout) -> None:
+        self._base_url = base_url
+        self._timeout = timeout
+
+    async def request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        kwargs.setdefault("timeout", self._timeout)
+        return await get_http_client().request(
+            method, f"{self._base_url}{path}", **kwargs
+        )
+
+    async def get(self, path: str, **kwargs: Any) -> httpx.Response:
+        return await self.request("GET", path, **kwargs)
+
+    async def post(self, path: str, **kwargs: Any) -> httpx.Response:
+        return await self.request("POST", path, **kwargs)
+
+    async def delete(self, path: str, **kwargs: Any) -> httpx.Response:
+        return await self.request("DELETE", path, **kwargs)
+
+
 class McpClient:
     """
     Minimal JSON-RPC over HTTP client with SSE support (FastMCP style).
@@ -80,10 +104,8 @@ class McpClient:
         self._session_id: str | None = None
         self.log = logger or DEFAULT_LOGGER
 
-        # simple shared client
-        self._http = httpx.AsyncClient(
-            base_url=self.base_url,
-            timeout=httpx.Timeout(settings.MCP_REQUEST_TIMEOUT_SEC),
+        self._http = _ServerHttp(
+            self.base_url, httpx.Timeout(settings.MCP_REQUEST_TIMEOUT_SEC)
         )
 
         self._active_request_id: str | None = None
@@ -485,7 +507,6 @@ class McpClient:
             async with self._lock:
                 self._session_id = None
                 self._active_request_id = None
-            await self._http.aclose()
 
 
 # ──────────────────── Helper functions ──────────────────────────────

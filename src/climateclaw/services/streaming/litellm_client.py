@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 
+from climateclaw.core.http_client import get_http_client
 from climateclaw.core.logging_setup import REQUEST_ID_HEADER, get_request_id
 from climateclaw.core.settings import get_settings
 
@@ -44,12 +45,15 @@ def _headers() -> dict[str, str]:
     return h
 
 
+TIMEOUT = httpx.Timeout(60.0, read=300.0, write=30.0, connect=30.0)
+
+
 async def _post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
-    timeout = httpx.Timeout(60.0, read=300.0, write=30.0, connect=30.0)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        r = await client.post(url, json=payload, headers=_headers())
-        r.raise_for_status()
-        return r.json()
+    r = await get_http_client().post(
+        url, json=payload, headers=_headers(), timeout=TIMEOUT
+    )
+    r.raise_for_status()
+    return r.json()
 
 
 def _extract_text(resp: Any) -> str:
@@ -105,27 +109,25 @@ async def acomplete(
     if not stream:
         return await _post_json(url, payload)
 
-    timeout = httpx.Timeout(60.0, read=300.0, write=30.0, connect=30.0)
-    client = httpx.AsyncClient(timeout=timeout)
+    client = get_http_client()
 
     async def _aiter() -> AsyncIterator[dict[str, Any]]:
-        try:
-            async with client.stream(
-                "POST", url, json=payload, headers=_headers()
-            ) as r:
-                r.raise_for_status()
-                async for line in r.aiter_lines():
-                    if not line or not line.startswith("data:"):
-                        continue
-                    data = line[5:].strip()
-                    if data == "[DONE]":
-                        break
-                    try:
-                        yield json.loads(data)
-                    except json.JSONDecodeError:
-                        continue
-        finally:
-            await client.aclose()
+        # Leaving the block (also on break/cancel) returns the connection to
+        # the shared pool; the client itself stays open.
+        async with client.stream(
+            "POST", url, json=payload, headers=_headers(), timeout=TIMEOUT
+        ) as r:
+            r.raise_for_status()
+            async for line in r.aiter_lines():
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    yield json.loads(data)
+                except json.JSONDecodeError:
+                    continue
 
     return _aiter()
 

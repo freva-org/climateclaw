@@ -1,6 +1,6 @@
-import httpx
 from fastapi import HTTPException, status
 
+from climateclaw.core.http_client import get_http_client
 from climateclaw.core.logging_setup import configure_logging
 
 
@@ -46,8 +46,9 @@ async def get_username_from_token(token: str, rest_url: str, logger=None) -> str
     log.debug("Token check URL: %s", url)
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+        resp = await get_http_client().get(
+            url, headers={"Authorization": f"Bearer {token}"}, timeout=10.0
+        )
     except Exception as e:
         # ServiceUnavailable on request error to rest
         log.error("Error sending request to systemuser endpoint: %s", e)

@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from .api import chatbot, static
+from .core.http_client import aclose_http_client
 from .core.logging_setup import (
     REQUEST_ID_HEADER,
     configure_logging,
@@ -60,6 +61,7 @@ async def lifespan(app: FastAPI):
         # Shutdown
         app.state.periodic_cleanup.cancel()
         await app.state.thread_storage.close()
+        await aclose_http_client()
 
 
 app = FastAPI(
