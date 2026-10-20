@@ -40,16 +40,16 @@ services:
     build:
       context: ..
       dockerfile: docker/code-server/Dockerfile
-    env_file: ../.env
     hostname: code-server-${CLIMATECLAW_INSTANCE_NAME}
     environment:
       CLIMATECLAW_MCP_HOST: 0.0.0.0
       CLIMATECLAW_MCP_PORT: 8051
+      CLIMATECLAW_MCP_REQUEST_TIMEOUT_SEC: 900
     volumes:
       - /work:/work:ro
       - /pool/data:/pool/data:ro
       - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
-    cpus: 4
+    cpus: 8
     networks:
       - climateclaw
     healthcheck:
