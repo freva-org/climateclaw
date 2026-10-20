@@ -450,7 +450,7 @@ def main():
 
     # Update service dependencies on replicated services
     update_service_dependencies(new_services, replica_counts)
-    add_litellm_syslog_logging(new_services)
+    # add_litellm_syslog_logging(new_services)
 
     ### Add HAProxy service to compose
 
