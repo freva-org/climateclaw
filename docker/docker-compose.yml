@@ -49,7 +49,7 @@ services:
       - /work:/work:ro
       - /pool/data:/pool/data:ro
       - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
-    cpus: 4
+    cpus: 8
     networks:
       - climateclaw
     healthcheck:
