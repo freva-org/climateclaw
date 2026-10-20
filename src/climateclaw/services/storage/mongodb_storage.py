@@ -106,7 +106,7 @@ class ThreadStorage:
 
         # compute topic if missing
         if not topic or topic == "No topic yet":
-            topic = await summarize_topic(content)
+            topic = "No topic yet" if settings.DEV else await summarize_topic(content)
 
         all_stream = [from_sv_to_json(v) for v in merged_sv] if merged_sv else []
         doc = {

@@ -450,7 +450,7 @@ def main():
 
     # Update service dependencies on replicated services
     update_service_dependencies(new_services, replica_counts)
-    add_litellm_syslog_logging(new_services)
+    # add_litellm_syslog_logging(new_services)
 
     ### Add HAProxy service to compose
 
@@ -481,7 +481,7 @@ def main():
     )
 
     new_services["haproxy"] = {
-        "image": "haproxy:3.0-alpine",
+        "image": "haproxy:3.4.4-alpine",
         "user": "0:0",
         "ports": dev_ports if DEV_MODE else prod_ports,
         "volumes": [
