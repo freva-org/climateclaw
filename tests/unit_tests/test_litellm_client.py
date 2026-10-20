@@ -5,7 +5,6 @@ import pytest
 
 from climateclaw.services.streaming.litellm_client import (
     acomplete,
-    first_message,
     first_text,
     tool_calls,
 )
@@ -159,20 +158,6 @@ def test_responses_helpers_extract_text_message_and_tool_calls():
             },
         }
     ]
-    assert first_message(resp) == {
-        "role": "assistant",
-        "content": "hello world",
-        "tool_calls": [
-            {
-                "id": "call_1",
-                "type": "function",
-                "function": {
-                    "name": "lookup_reference",
-                    "arguments": '{"topic":"ice"}',
-                },
-            }
-        ],
-    }
 
 
 def test_chat_helpers_extract_text_refusal_and_tool_calls():

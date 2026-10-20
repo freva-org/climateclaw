@@ -279,28 +279,8 @@ def tool_calls(resp: dict[str, Any]) -> list[dict[str, Any]]:
     return response_calls
 
 
-def first_message(resp: dict[str, Any]) -> dict[str, Any] | None:
-    """Return the first assistant message, if present."""
-    try:
-        choices = resp.get("choices") or []
-        if choices:
-            return choices[0].get("message")
-
-        if "output" not in resp and "output_text" not in resp:
-            return None
-
-        return {
-            "role": "assistant",
-            "content": first_text(resp),
-            "tool_calls": tool_calls(resp),
-        }
-    except Exception:
-        return None
-
-
 __all__ = [
     "acomplete",
-    "first_message",
     "first_text",
     "tool_calls",
 ]
