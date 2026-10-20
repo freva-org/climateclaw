@@ -82,66 +82,6 @@ async def _post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
         return r.json()
 
 
-def _extract_text(resp: Any) -> str:
-    """Extract assistant text from either supported response format."""
-    if not isinstance(resp, dict):
-        return ""
-
-    # Chat Completions responses are identified by the top-level `choices` field.
-    # Assistant text (or a refusal) lives in the first choice's `message`.
-    if "choices" in resp:
-        choices = resp.get("choices") or []
-        if not isinstance(choices, list) or not choices:
-            return ""
-
-        # `n > 1` can produce alternative choices, but ClimateClaw follows one
-        # conversation path and therefore intentionally uses only the first.
-        choice = choices[0]
-        if not isinstance(choice, dict):
-            return ""
-
-        message = choice.get("message") or {}
-        if not isinstance(message, dict):
-            return ""
-
-        content = message.get("content")
-        if isinstance(content, str):
-            return content
-
-        refusal = message.get("refusal")
-        return refusal if isinstance(refusal, str) else ""
-
-    # Responses API payloads are identified by `output` or the `output_text` fields.
-    if "output" not in resp and "output_text" not in resp:
-        return ""
-
-    output_text = resp.get("output_text")
-    if isinstance(output_text, str):
-        return output_text
-
-    text_parts: list[str] = []
-    for item in resp.get("output") or []:
-        # Ignore non-message items such as reasoning and function calls
-        if not isinstance(item, dict) or item.get("type") != "message":
-            continue
-
-        for content in item.get("content") or []:
-            if not isinstance(content, dict):
-                continue
-
-            if content.get("type") in {"output_text", "text"}:
-                text = content.get("text")
-            elif content.get("type") == "refusal":
-                text = content.get("refusal")
-            else:
-                continue
-
-            if isinstance(text, str):
-                text_parts.append(text)
-
-    return "".join(text_parts)
-
-
 # ──── Public API - supports v1/chat/completions and v1/responses ────────────────
 
 
@@ -224,7 +164,62 @@ async def acomplete(
 
 def first_text(resp: Any) -> str:
     """Return the first assistant text from a completion response."""
-    return _extract_text(resp)
+    if not isinstance(resp, dict):
+        return ""
+
+    # Chat Completions responses are identified by the top-level `choices` field.
+    # Assistant text (or a refusal) lives in the first choice's `message`.
+    if "choices" in resp:
+        choices = resp.get("choices") or []
+        if not isinstance(choices, list) or not choices:
+            return ""
+
+        # `n > 1` can produce alternative choices, but ClimateClaw follows one
+        # conversation path and therefore intentionally uses only the first.
+        choice = choices[0]
+        if not isinstance(choice, dict):
+            return ""
+
+        message = choice.get("message") or {}
+        if not isinstance(message, dict):
+            return ""
+
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+
+        refusal = message.get("refusal")
+        return refusal if isinstance(refusal, str) else ""
+
+    # Responses API payloads are identified by `output` or the `output_text` fields.
+    if "output" not in resp and "output_text" not in resp:
+        return ""
+
+    output_text = resp.get("output_text")
+    if isinstance(output_text, str):
+        return output_text
+
+    text_parts: list[str] = []
+    for item in resp.get("output") or []:
+        # Ignore non-message items such as reasoning and function calls
+        if not isinstance(item, dict) or item.get("type") != "message":
+            continue
+
+        for content in item.get("content") or []:
+            if not isinstance(content, dict):
+                continue
+
+            if content.get("type") in {"output_text", "text"}:
+                text = content.get("text")
+            elif content.get("type") == "refusal":
+                text = content.get("refusal")
+            else:
+                continue
+
+            if isinstance(text, str):
+                text_parts.append(text)
+
+    return "".join(text_parts)
 
 
 def tool_calls(resp: dict[str, Any]) -> list[dict[str, Any]]:
