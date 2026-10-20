@@ -60,8 +60,9 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headl
 # 1. the MCP tool logic lays in 'src/climateclaw/tools/plugin_code_search/server.py':
 # for isolated testing, comment out everything after `detect_plugin_project` is called, and replace with:
 # return GenericToolResult(result=f"plugin_name: {plugin}, project_name: {project}")
-# 2. then, spin up the docker compose environment with all necessary services (dev.sh script)
-# 3. run this evaluation script from the terminal: `uv run scripts/dev_evaluate_tool.py`
+# 2. change username to a valid one: either in this script via `Auth = Authenticator.local(username="<your_username>")` or in server.py's `validate_plugin_call` function
+# 3. then, spin up the docker compose environment with all necessary services (dev.sh script)
+# 4. run this evaluation script from the terminal: `uv run scripts/dev_evaluate_tool.py`
 #######################################################
 
 MODEL = "gpt-4.1"  # model to benchmark
