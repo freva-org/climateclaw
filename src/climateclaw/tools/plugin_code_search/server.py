@@ -78,7 +78,7 @@ app = make_header_gate(
 def _get_user():
     user = username_ctx.get()
     if not user:
-        logger.warning(f"Missing required header '{USERNAME}'! ")
+        logger.error(f"Missing required header '{USERNAME}'! ")
         return "unknown_user"
     else:
         return user
@@ -87,7 +87,7 @@ def _get_user():
 def _get_model():
     model = model_ctx.get()
     if not model:
-        logger.warning(f"Missing required header '{MODEL}'! ")
+        logger.error(f"Missing required header '{MODEL}'! ")
         return MODEL
     else:
         return model
@@ -510,7 +510,7 @@ async def validate_plugin_call(
             )
             error_msg = (
                 f"User access for {user_name} to plugin '{plugin}' denied! "
-                f"Get access by being added to GitLab project '{project}'."
+                f"Get access by being added to DKRZ GitLab project '{project}'."
             )
             return False, error_msg
         logger.info(
