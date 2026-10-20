@@ -11,7 +11,8 @@ from climateclaw.tools.active_requests import (
     current_ids,
     tracked_request,
 )
-from climateclaw.tools.header_gate import make_header_gate
+from climateclaw.tools.header_gate import RequestIdMiddleware, make_header_gate
+from climateclaw.tools.models import CodeInterpreterResult
 
 from .code_execution import (
     EXEC_TIMEOUT,
@@ -23,11 +24,10 @@ from .helpers import sanitize_code, should_restart_after
 from .kernels import KERNEL_REGISTRY, get_sid_lock, shutdown_kernel
 from .safety_check import check_code_safety
 
-SERVICE_NAME = os.getenv("HOSTNAME") or "code_server"
-
-logger = configure_logging(__name__, named_log=SERVICE_NAME)
+logger = configure_logging(__name__)
 
 mcp = FastMCP("code-interpreter-server")
+mcp.add_middleware(RequestIdMiddleware())
 
 # ── Config ───────────────────────────────────────────────────────────────────
 REQUEST_TIMEOUT = int(os.getenv("CLIMATECLAW_MCP_REQUEST_TIMEOUT_SEC", "600"))
@@ -87,7 +87,7 @@ def get_cwd():
 
 def _run_code_request(
     sid: str, code: str, working_dir: str, req: ActiveRequest
-) -> dict:
+) -> CodeInterpreterResult:
     lock = get_sid_lock(sid)
     with lock:
         if req.cancelled_thread.is_set():
@@ -113,7 +113,7 @@ def _run_code_request(
 
 
 @mcp.tool()
-async def code_interpreter(code: str) -> dict:
+async def code_interpreter(code: str) -> CodeInterpreterResult:
     """
     Execute Python in a Jupyter-like IPython Kernel.
     Returns a structured dict with all outputs (stdout, stderr, result_rep, display_data, error)
@@ -137,13 +137,7 @@ async def code_interpreter(code: str) -> dict:
             f"{violation.description} (matched: {violation.match!r})"
         )
         logger.warning(msg)
-        return {
-            "stdout": "",
-            "stderr": "",
-            "result_repr": "",
-            "display_data": [],
-            "error": msg,
-        }
+        return CodeInterpreterResult(error=msg)
 
     logger.info("Code block is safe to execute..")
 
@@ -160,44 +154,20 @@ async def code_interpreter(code: str) -> dict:
         logger.info(
             f"code_interpreter: execution cancelled for sid={session_id} request_id={request_id}"
         )
-        return {
-            "stdout": "",
-            "stderr": "",
-            "result_repr": "",
-            "display_data": [],
-            "error": "Execution cancelled by client",
-        }
+        return CodeInterpreterResult(error="Execution cancelled by client")
 
     except InterruptedError as e:
         logger.info(
             f"code_interpreter: execution interrupted unexpectedly for sid={session_id} request_id={request_id}"
         )
-        return {
-            "stdout": "",
-            "stderr": "",
-            "result_repr": "",
-            "display_data": [],
-            "error": f"Execution interrupted unexpectedly {e}",
-        }
+        return CodeInterpreterResult(error=f"Execution interrupted unexpectedly {e}")
 
     except TimeoutError as e:
         msg = f"Execution failed: {e}"
         logger.exception(f"code_interpreter: execution timeout {msg}")
-        return {
-            "stdout": "",
-            "stderr": "",
-            "result_repr": "",
-            "display_data": [],
-            "error": msg,
-        }
+        return CodeInterpreterResult(error=msg)
 
     except Exception as e:
         msg = f"Execution failed: {type(e).__name__}: {e}"
         logger.exception(f"code_interpreter: execution error {e}")
-        return {
-            "stdout": "",
-            "stderr": "",
-            "result_repr": "",
-            "display_data": [],
-            "error": msg,
-        }
+        return CodeInterpreterResult(error=msg)

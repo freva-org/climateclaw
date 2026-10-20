@@ -9,6 +9,7 @@ RUN dnf install -y curl bzip2 awk git \
     && dnf clean all
 
 RUN mkdir /app
+
 WORKDIR /app
 
 # -------------------
@@ -30,7 +31,7 @@ RUN set -eux; \
 
 ENV PATH="/opt/conda/bin:$PATH"
 
-RUN conda create --name env "python>=3.13" pip uv \
+RUN conda create --name env "python=3.13" pip uv \
  && conda init bash \
  && echo "conda activate env" >> ~/.bashrc \
  && conda run -n env python -m pip install --no-cache-dir uv
