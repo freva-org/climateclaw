@@ -58,8 +58,7 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headl
 ################### IMPORTANT NOTE ###################
 # in order to make this evaluation work correctly, ensure the following steps:
 # 1. the MCP tool logic lays in 'src/climateclaw/tools/plugin_code_search/server.py':
-# for isolated testing, comment out everything after the `detect_plugin_project` is called,
-# and replace with the following: `return f"plugin_name: {plugin}, project_name: {project}"`.
+# for isolated testing, comment out everything after `detect_plugin_project` is called, and replace with:
 # 2. then, spin up the docker compose environment with all necessary services (dev.sh script)
 # 3. run this evaluation script from the terminal: `uv run scripts/dev_evaluate_tool.py`
 #######################################################
@@ -75,7 +74,7 @@ PRINT_RUN_SUMMARY = (
 SILENCE_LOGGING = True
 
 # run evaluation of tool calls (TP, FP, FN, accuracy, precision, recall)
-EVAL_TOOL = False
+EVAL_TOOL = True
 PLOT_METRICS = False  # plot metrics as bar charts at the end of the benchmark
 
 ## evaluation suite: direct questions about a plugin + indirect ones (more widely phrased)
@@ -154,7 +153,7 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
                     tool_name = variant.tool_name
                     tool_args = json.loads(variant.content or "{}")
                 elif isinstance(variant, SVToolOutput):
-                    tool_output = variant.content
+                    tool_output = variant.content.result
 
             await end_and_save_conversation(thread_id, Storage)
         except Exception as e:
@@ -354,7 +353,7 @@ async def main() -> None:
     if SILENCE_LOGGING:
         silence_logger()
 
-    eval_dict = defaultdict(list)
+    eval_dict: dict[str, list[float]] = defaultdict(list)
     prompt_count = sum(len(prompts) * RUNS for prompts in BENCHMARK.values())
     with tqdm(total=prompt_count, desc="Evaluation", unit="prompt") as progress:
         for plugin, prompts in BENCHMARK.items():

@@ -498,9 +498,7 @@ async def validate_plugin_call(
         error_msg = f"Plugin '{plugin}' not found in GitLab project '{project}'."
         return False, error_msg
 
-    # TODO: Username hardcoded for now; replace with _get_user() before merge/deployment
-    user_name = "k202218"
-    # user_name = _get_user()
+    user_name = _get_user()
     try:
         user_access = await has_read_access(project_id, user_name)
         if not user_access:
@@ -555,12 +553,14 @@ async def detect_plugin_project(user_query: str) -> tuple[str | None, str | None
 
     # format to "<plugin_name>,<project_name>" output
     try:
-        plugin, project = [x.strip().lower() for x in raw_text.split(",", maxsplit=1)]
+        plugin_raw, project_raw = [
+            x.strip().lower() for x in raw_text.split(",", maxsplit=1)
+        ]
     except ValueError:
         return None, None
 
-    plugin = plugin if plugin in avail_plugins else None
-    project = FREVA_PROJECT_NAMES.get(project)
+    plugin = plugin_raw if plugin_raw in avail_plugins else None
+    project = FREVA_PROJECT_NAMES.get(project_raw)
     logger.info(
         "Auto-detected plugin '%s' and project '%s' for examining code base.",
         plugin,
@@ -626,13 +626,13 @@ async def plugin_code_search(user_query: str) -> GenericToolResult:
     # Validate the plugin call
     project_id = await get_project_id(plugin, project)
     result, message = await validate_plugin_call(plugin, project, project_id)
-    if not result:
+    if not result or project_id is None:
         return GenericToolResult(error=message)
 
     # Fetch the plugin code and return it with a header
     logger.info("Fetching source code for plugin '%s'", plugin)
     try:
-        return await collect_plugin_context(plugin, project, project_id, user_query)  # type: ignore
+        return await collect_plugin_context(plugin, project, project_id, user_query)
     except Exception as e:
         logger.warning("Failed to fetch plugin code for '%s': %s", plugin, e)
         return GenericToolResult(
