@@ -167,9 +167,9 @@ async def acomplete(
         "stream": stream,
     }
 
-    is_responses = _is_responses_endpoint(endpoint)
+    is_responses_api = _is_responses_endpoint(endpoint)
 
-    if is_responses:
+    if is_responses_api:
         payload["input"] = list(messages)
     else:
         payload["messages"] = list(messages)
@@ -178,7 +178,7 @@ async def acomplete(
         payload["temperature"] = temperature
 
     if max_tokens is not None:
-        if is_responses:
+        if is_responses_api:
             payload["max_output_tokens"] = max_tokens
         else:
             payload["max_tokens"] = max_tokens
