@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import List
 
-from climateclaw.core.available_chatbots import default_chatbot_local
+from climateclaw.core.available_chatbots import default_chatbot
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
 from climateclaw.services.streaming.stream_variants import StreamVariant, SVUser
@@ -101,7 +101,8 @@ async def summarize_topic(content: List[StreamVariant]) -> str:
     try:
         resp = await acomplete(
             messages=[{"role": "user", "content": prompt}],
-            model=default_chatbot_local(),
+            # model=default_chatbot_local(),
+            model=default_chatbot(),
             max_tokens=30,
             temperature=0.1,
         )
