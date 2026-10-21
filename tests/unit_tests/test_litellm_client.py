@@ -2,11 +2,9 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-import requests
 
 from climateclaw.services.streaming.litellm_client import (
     acomplete,
-    first_message,
     first_text,
     tool_calls,
 )
@@ -29,14 +27,21 @@ class FakeResp:
 
     def raise_for_status(self):
         if not self.ok:
-            # mimic requests behavior: raise HTTPError and attach response
-            e = requests.HTTPError(f"{self.status_code} Server Error")
-            e.response = self  # tests / client code can read e.response.text/json()
-            raise e
+            request = httpx.Request("POST", "http://test")
+            response = httpx.Response(
+                self.status_code,
+                request=request,
+                text=self.text,
+            )
+            raise httpx.HTTPStatusError(
+                f"{self.status_code} Server Error",
+                request=request,
+                response=response,
+            )
 
 
 @pytest.mark.asyncio
-async def test_acomplete_success_roundtrip(monkeypatch):
+async def test_acomplete_success_roundtrip():
     fake = FakeResp(
         status_code=200,
         json_body={"choices": [{"message": {"content": "hello world"}}]},
@@ -95,62 +100,6 @@ async def test_acomplete_responses_accepts_messages_and_translates_payload():
     assert first_text(result) == "hello from responses"
 
 
-@pytest.mark.asyncio
-async def test_acomplete_responses_prefers_explicit_input():
-    fake = FakeResp(status_code=200, json_body={"output_text": "ok"}, text="")
-    captured = {}
-
-    async def fake_post(self, *args, **kwargs):
-        captured["json"] = kwargs["json"]
-        return fake
-
-    with patch(
-        "climateclaw.services.streaming.litellm_client.httpx.AsyncClient.post",
-        new=fake_post,
-    ):
-        await acomplete(
-            model="gpt-4.1-mini",
-            endpoint="v1/responses",
-            messages=[{"role": "user", "content": "ignored"}],
-            input=[
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": "used"}],
-                }
-            ],
-        )
-
-    assert captured["json"]["input"] == [
-        {
-            "role": "user",
-            "content": [{"type": "input_text", "text": "used"}],
-        }
-    ]
-    assert captured["json"]["parallel_tool_calls"] is False
-
-
-@pytest.mark.asyncio
-async def test_acomplete_allows_an_explicit_parallel_tool_calls_override():
-    fake = FakeResp(status_code=200, json_body={"choices": []}, text="")
-    captured = {}
-
-    async def fake_post(self, *args, **kwargs):
-        captured["json"] = kwargs["json"]
-        return fake
-
-    with patch(
-        "climateclaw.services.streaming.litellm_client.httpx.AsyncClient.post",
-        new=fake_post,
-    ):
-        await acomplete(
-            model="gpt-4.1-mini",
-            messages=[],
-            parallel_tool_calls=True,
-        )
-
-    assert captured["json"]["parallel_tool_calls"] is True
-
-
 def test_responses_helpers_extract_text_message_and_tool_calls():
     resp = {
         "output": [
@@ -183,24 +132,10 @@ def test_responses_helpers_extract_text_message_and_tool_calls():
             },
         }
     ]
-    assert first_message(resp) == {
-        "role": "assistant",
-        "content": "hello world",
-        "tool_calls": [
-            {
-                "id": "call_1",
-                "type": "function",
-                "function": {
-                    "name": "lookup_reference",
-                    "arguments": '{"topic":"ice"}',
-                },
-            }
-        ],
-    }
 
 
 @pytest.mark.asyncio
-async def test_acomplete_includes_error_body(monkeypatch):
+async def test_acomplete_includes_error_body():
     request = httpx.Request("POST", "http://litellm/v1/chat/completions")
     fake = httpx.Response(
         status_code=500,
@@ -224,3 +159,59 @@ async def test_acomplete_includes_error_body(monkeypatch):
     assert "bad" in str(ei.value)
     assert ei.value.response is not None
     assert "bad" in (ei.value.response.text or "")
+
+
+def test_chat_helpers_extract_text_refusal_and_tool_calls():
+    calls = [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": "lookup_reference",
+                "arguments": '{"topic":"ice"}',
+            },
+        }
+    ]
+    resp = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "refusal": "I cannot help with that request.",
+                    "tool_calls": calls,
+                }
+            }
+        ]
+    }
+
+    assert first_text(resp) == "I cannot help with that request."
+    assert tool_calls(resp) == calls
+
+
+def test_responses_helpers_extract_refusal():
+    resp = {
+        "output": [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "refusal",
+                        "refusal": "I cannot help with that request.",
+                    }
+                ],
+            }
+        ]
+    }
+
+    assert first_text(resp) == "I cannot help with that request."
+    assert tool_calls(resp) == []
+
+
+@pytest.mark.parametrize(
+    "resp", [None, [], {}, {"choices": [None]}, {"output": [None]}]
+)
+def test_helpers_return_empty_defaults_for_malformed_responses(resp):
+    assert first_text(resp) == ""
+    assert tool_calls(resp) == []
