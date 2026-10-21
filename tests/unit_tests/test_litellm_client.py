@@ -1,9 +1,13 @@
 from unittest.mock import patch
 
+import httpx
 import pytest
-import requests
 
-from climateclaw.services.streaming.litellm_client import acomplete, first_text
+from climateclaw.services.streaming.litellm_client import (
+    acomplete,
+    first_text,
+    tool_calls,
+)
 
 
 class FakeResp:
@@ -23,14 +27,21 @@ class FakeResp:
 
     def raise_for_status(self):
         if not self.ok:
-            # mimic requests behavior: raise HTTPError and attach response
-            e = requests.HTTPError(f"{self.status_code} Server Error")
-            e.response = self  # tests / client code can read e.response.text/json()
-            raise e
+            request = httpx.Request("POST", "http://test")
+            response = httpx.Response(
+                self.status_code,
+                request=request,
+                text=self.text,
+            )
+            raise httpx.HTTPStatusError(
+                f"{self.status_code} Server Error",
+                request=request,
+                response=response,
+            )
 
 
 @pytest.mark.asyncio
-async def test_acomplete_success_roundtrip(monkeypatch):
+async def test_acomplete_success_roundtrip():
     fake = FakeResp(
         status_code=200,
         json_body={"choices": [{"message": {"content": "hello world"}}]},
@@ -52,11 +63,49 @@ async def test_acomplete_success_roundtrip(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_acomplete_includes_error_body(monkeypatch):
+async def test_acomplete_responses_accepts_messages_and_translates_payload():
     fake = FakeResp(
+        status_code=200,
+        json_body={"output_text": "hello from responses"},
+        text='{"output_text":"hello from responses"}',
+    )
+    captured = {}
+
+    async def fake_post(self, *args, **kwargs):
+        captured["url"] = args[0]
+        captured["json"] = kwargs["json"]
+        return fake
+
+    with patch(
+        "climateclaw.services.streaming.litellm_client.httpx.AsyncClient.post",
+        new=fake_post,
+    ):
+        result = await acomplete(
+            model="gpt-4.1-mini",
+            endpoint="/v1/responses",
+            messages=[{"role": "user", "content": "hi"}],
+            max_tokens=25,
+            temperature=0.2,
+        )
+
+    assert captured["url"].endswith("/v1/responses")
+    assert captured["json"] == {
+        "model": "gpt-4.1-mini",
+        "stream": False,
+        "input": [{"role": "user", "content": "hi"}],
+        "temperature": 0.2,
+        "max_output_tokens": 25,
+    }
+    assert first_text(result) == "hello from responses"
+
+
+@pytest.mark.asyncio
+async def test_acomplete_includes_error_body():
+    request = httpx.Request("POST", "http://litellm/v1/chat/completions")
+    fake = httpx.Response(
         status_code=500,
-        json_body={"error": {"message": "bad"}},
-        text='{"error":"bad"}',
+        json={"error": {"message": "bad"}},
+        request=request,
     )
 
     async def fake_post(self, *args, **kwargs):
@@ -67,10 +116,101 @@ async def test_acomplete_includes_error_body(monkeypatch):
             "climateclaw.services.streaming.litellm_client.httpx.AsyncClient.post",
             new=fake_post,
         ),
-        pytest.raises(requests.HTTPError) as ei,
+        pytest.raises(httpx.HTTPStatusError) as ei,
     ):
         await acomplete(model="x", messages=[])
 
-    assert "500 Server Error" in str(ei.value)
+    assert "LiteLLM returned HTTP 500" in str(ei.value)
+    assert "bad" in str(ei.value)
     assert ei.value.response is not None
     assert "bad" in (ei.value.response.text or "")
+
+
+def test_responses_helpers_extract_text_message_and_tool_calls():
+    resp = {
+        "output": [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [
+                    {"type": "output_text", "text": "hello "},
+                    {"type": "output_text", "text": "world"},
+                ],
+            },
+            {
+                "type": "function_call",
+                "id": "fc_1",
+                "call_id": "call_1",
+                "name": "lookup_reference",
+                "arguments": '{"topic":"ice"}',
+            },
+        ]
+    }
+
+    assert first_text(resp) == "hello world"
+    assert tool_calls(resp) == [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": "lookup_reference",
+                "arguments": '{"topic":"ice"}',
+            },
+        }
+    ]
+
+
+def test_chat_helpers_extract_text_refusal_and_tool_calls():
+    calls = [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": "lookup_reference",
+                "arguments": '{"topic":"ice"}',
+            },
+        }
+    ]
+    resp = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "refusal": "I cannot help with that request.",
+                    "tool_calls": calls,
+                }
+            }
+        ]
+    }
+
+    assert first_text(resp) == "I cannot help with that request."
+    assert tool_calls(resp) == calls
+
+
+def test_responses_helpers_extract_refusal():
+    resp = {
+        "output": [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "refusal",
+                        "refusal": "I cannot help with that request.",
+                    }
+                ],
+            }
+        ]
+    }
+
+    assert first_text(resp) == "I cannot help with that request."
+    assert tool_calls(resp) == []
+
+
+@pytest.mark.parametrize(
+    "resp", [None, [], {}, {"choices": [None]}, {"output": [None]}]
+)
+def test_helpers_return_empty_defaults_for_malformed_responses(resp):
+    assert first_text(resp) == ""
+    assert tool_calls(resp) == []
