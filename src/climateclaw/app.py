@@ -8,7 +8,6 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.utils import get_openapi
 
 from .api import chatbot, static
 from .core.heartbeat import collect_performance_metrics
@@ -95,56 +94,6 @@ app = FastAPI(
     openapi_url="/api/chatbot/openapi.json",
     lifespan=lifespan,
 )
-
-
-def custom_openapi():
-    if app.openapi_schema:
-        return app.openapi_schema
-
-    openapi_schema = get_openapi(
-        title=app.title,
-        version=app.version,
-        routes=app.routes,
-    )
-
-    security_schemes = openapi_schema.setdefault("components", {}).setdefault(
-        "securitySchemes", {}
-    )
-    security_schemes["BearerAuth"] = {
-        "type": "http",
-        "scheme": "bearer",
-    }
-    security_schemes["FrevaRestUrl"] = {
-        "type": "apiKey",
-        "in": "header",
-        "name": "x-freva-rest-url",
-    }
-    security_schemes["FrevaThreadId"] = {
-        "type": "apiKey",
-        "in": "header",
-        "name": "X-Freva-Thread-Id",
-    }
-
-    for path, path_item in openapi_schema.get("paths", {}).items():
-        if not path.startswith("/api/chatbot/"):
-            continue
-
-        for operation in path_item.values():
-            if not isinstance(operation, dict):
-                continue
-            operation.setdefault("security", []).append(
-                {
-                    "BearerAuth": [],
-                    "FrevaRestUrl": [],
-                    "FrevaThreadId": [],
-                }
-            )
-
-    app.openapi_schema = openapi_schema
-    return app.openapi_schema
-
-
-setattr(app, "openapi", custom_openapi)
 
 
 # CORS – mirror the permissive defaults (might need to adjust later)
