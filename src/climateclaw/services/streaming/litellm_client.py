@@ -91,6 +91,8 @@ async def acomplete(
     endpoint: str = "v1/chat/completions",
     messages: Iterable[dict[str, Any]],
     stream: bool = False,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: str = "auto",
     temperature: float | None = None,
     max_tokens: int | None = None,
     extra_params: dict[str, Any] | None = None,
@@ -113,6 +115,10 @@ async def acomplete(
         payload["input"] = list(messages)
     else:
         payload["messages"] = list(messages)
+
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = tool_choice
 
     if temperature is not None:
         payload["temperature"] = temperature

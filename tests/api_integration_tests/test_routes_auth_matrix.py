@@ -70,7 +70,7 @@ async def test_routes_succeed_with_auth_and_username_injection(
                 json={
                     "thread_id": "t-123",
                     "input": "hi there",
-                    "chatbot": "gemma4:31b",
+                    "chatbot": "deepseek-v4.1",
                 },
             )
             assert r.status_code == 200

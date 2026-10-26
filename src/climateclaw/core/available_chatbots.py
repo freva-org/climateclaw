@@ -165,7 +165,7 @@ def default_chatbot_local() -> str:
     """
     Default local chatbot.
     """
-    return "gemma4:31b"
+    return "deepseek-v4.1"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -206,7 +206,7 @@ def model_supports_images(model: str) -> bool:
     """
     True for names starting with the defined list.
     """
-    vision_models = ("gpt", "qwen3.6", "gemma4", "mistral", "ministral")
+    vision_models = ("gpt", "qwen3.6", "gemma4", "deepseek", "mistral", "ministral")
     return model.startswith(vision_models)
 
 
