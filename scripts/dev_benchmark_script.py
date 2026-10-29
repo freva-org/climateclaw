@@ -146,7 +146,7 @@ async def main() -> None:
     tasks = [asyncio.create_task(_run_once(i, sem)) for i in range(RUNS)]
     results = await asyncio.gather(*tasks)
 
-    if results:
+    if PRINT_FINAL_SUMMARY and results:
         ok = [r for r in results if r.status == "Done"]
         errs = [r for r in results if r.status != "Done"]
         avg = sum(r.duration_s for r in results) / len(results)
@@ -156,22 +156,19 @@ async def main() -> None:
         total_chunks = sum(r.chunks for r in results)
         total_chars = sum(r.chars for r in results)
 
-        if PRINT_FINAL_SUMMARY:
-            print("\n=== Summary ===")
-            print(f"model={MODEL} runs={RUNS} concurrency={CONCURRENCY}")
-            print(f"success={len(ok)} errors={len(errs)}")
-            print(
-                f"avg_time={avg:.3f}s p50_time={p50:.3f}s fastest={fastest.duration_s:.3f}s slowest={slowest.duration_s:.3f}s"
-            )
-            print(f"total_chunks={total_chunks} total_chars={total_chars}")
-            print(
-                f"Assistant answer sample (from run {fastest.idx}):\n\n{fastest.answer}"
-            )
+        print("\n=== Summary ===")
+        print(f"model={MODEL} runs={RUNS} concurrency={CONCURRENCY}")
+        print(f"success={len(ok)} errors={len(errs)}")
+        print(
+            f"avg_time={avg:.3f}s p50_time={p50:.3f}s fastest={fastest.duration_s:.3f}s slowest={slowest.duration_s:.3f}s"
+        )
+        print(f"total_chunks={total_chunks} total_chars={total_chars}")
+        print(f"Assistant answer sample (from run {fastest.idx}):\n\n{fastest.answer}")
 
-            if errs:
-                print("errors:")
-                for r in errs[:10]:
-                    print(f"  run={r.idx} thread={r.thread_id} status={r.status}")
+        if errs:
+            print("errors:")
+            for r in errs[:10]:
+                print(f"  run={r.idx} thread={r.thread_id} status={r.status}")
 
 
 if __name__ == "__main__":

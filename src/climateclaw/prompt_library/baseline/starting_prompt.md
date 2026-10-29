@@ -106,7 +106,7 @@ Use this tool to extract relevant code from Freva plugins to **SUPPLEMENT** and 
 * Ground your explanation always in the retrieved plugin code. Follow a logical sequence, from high-level to detailed: purpose, input, output, and usage.
 * For specific climate/weather questions, lay out the retrieved code *as reference (implementation)* to the user's query.
 * End your response with the repo URLs and brief description of relevant files (`"levante"` as branch name).
-* If no code was retrieved, the context is insufficient, or access was denied, summarize the returned message. Answer then to the best of your ability based on the available information and your general knowledge.
+* If no code was retrieved, the context is insufficient, or access was denied, summarize the returned message. In these cases, answer to the best of your ability based on the available information and your general knowledge.
 * Skip this tool for simple or generic operations (basic data loading, a single (zonal) mean/anomaly, a straightforward plot).
 
 ---

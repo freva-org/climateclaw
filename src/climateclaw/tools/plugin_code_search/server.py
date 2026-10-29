@@ -137,10 +137,10 @@ async def gitlab_healthcheck() -> bool:
 
 async def fetch_file_raw(
     project_id: int, file_path: str, branch: str, max_bytes: int | None = None
-) -> tuple[str, bool]:
+) -> str:
     """
     Stream a file and stop reading after `max_bytes` (if given), so large files are
-    never downloaded completely. Returns (text, was_truncated).
+    never downloaded completely. Truncated content gets a marker appended.
     """
     encoded_path = urlquote(file_path, safe="")
     async with _gitlab_http.stream(
@@ -157,7 +157,11 @@ async def fetch_file_raw(
                 del data[max_bytes:]
                 truncated = True
                 break
-    return data.decode("utf-8", errors="replace"), truncated
+
+    content = data.decode("utf-8", errors="replace")
+    if truncated:
+        content += "\n... (file truncated)"
+    return content
 
 
 async def has_read_access(project_id: int, username: str) -> bool:
@@ -242,26 +246,28 @@ async def fetch_files(
     project_id: int, branch: str, selected_files: list[str], max_chars: int
 ) -> dict[str, str]:
     """
-    Fetch the raw content of selected files until the total character count
-    reaches `max_chars`. Returns a mapping of file path -> content.
+    Fetch the raw content of selected files in parallel and truncate them if applicable
+    to fit within the character budget. Returns a mapping of file path -> content.
     """
     collected: dict[str, str] = {}
     budget = max_chars
 
-    for file in selected_files:
+    results = await asyncio.gather(
+        *[
+            fetch_file_raw(project_id, file, branch, MAX_FILE_SIZE_BYTES)
+            for file in selected_files
+        ],
+        return_exceptions=True,
+    )
+
+    for file, content in zip(selected_files, results):
         if budget <= 0:
             break
-        try:
-            content, truncated = await fetch_file_raw(
-                project_id, file, branch, MAX_FILE_SIZE_BYTES
-            )
-        except Exception as e:
+        if isinstance(content, BaseException):
             logger.info(
-                "Skipping file %s due to error in fetching content: %s", file, e
+                "Skipping file %s due to error in fetching content: %s", file, content
             )
             continue
-        if truncated:
-            content += "\n... (file truncated)"
         if len(content) > budget:
             content = (
                 content[:budget] + f"\n... (truncated: reached {max_chars} char limit)"
@@ -275,26 +281,19 @@ async def fetch_files(
 # ── Other helpers ────────────────────────────────────────────────
 
 
-def extract_method_from_source(source_code: str, method_name: str = "run_tool") -> str:
+def extract_method_from_source(
+    source_code: str, method_name: str = "run_tool"
+) -> Optional[str]:
     """Parses a Python source string and returns the code of a specific method."""
     try:
-        # Clean tabs and fix uneven leading indentation
-        cleaned_code = source_code.expandtabs(4)
-        cleaned_code = textwrap.dedent(cleaned_code)
-        # Parse the cleaned source code
+        cleaned_code = textwrap.dedent(source_code.expandtabs(4))
         tree = ast.parse(cleaned_code)
-        # Look for the method definition anywhere in the tree
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == method_name:
-                method_code = ast.get_source_segment(cleaned_code, node)
-                return (
-                    method_code or f"No '{method_name}' method found in the entry file."
-                )
-
-        return f"Method '{method_name}' not found in the source code."
-
+                return ast.get_source_segment(cleaned_code, node)
     except SyntaxError as e:
-        return f"Syntax error in the provided source code: {e}"
+        logger.warning("Could not parse source for '%s': %s", method_name, e)
+    return None
 
 
 def format_files(files: dict[str, str]) -> str:
@@ -319,15 +318,19 @@ def find_entry_file(file_paths: list[str]) -> str:
         for p in file_paths
         if ENTRY_PATTERN.search(p) and not EXCLUDE_PATTERN.search(p)
     ]
-    return sorted(matches, key=lambda p: (p.count("/"), p))[0]
+    try:
+        entry_file = sorted(matches, key=lambda p: (p.count("/"), p))[0]
+        return entry_file
+    except IndexError:
+        return "No entry file found matching the pattern."
 
 
-async def llm_select_files(
-    prompt: str, file_paths: list[str], num_files: int, fallback: list[str]
+async def llm_file_selection(
+    prompt: str, file_paths: list[str], num_files: int
 ) -> list[str]:
     """
     Ask the LLM for a JSON array of file paths and keep only those that exist
-    in `file_paths`. Returns the value of `fallback` if the LLM response cannot be parsed.
+    in `file_paths`. Returns all `file_paths` if the LLM response cannot be parsed.
     """
     try:
         raw_text = await call_llm(prompt)
@@ -339,7 +342,9 @@ async def llm_select_files(
         select_files: list[str] = json.loads(raw_text.strip())
     except Exception as e:
         logger.warning("LLM file selection failed (%s); falling back to heuristic.", e)
-        select_files = fallback
+    finally:
+        if "select_files" not in locals():
+            select_files = file_paths
 
     # Return only paths that exist in repo tree and conform to exclusion pattern
     allowed_paths = set(file_paths)
@@ -357,12 +362,12 @@ async def select_init_files(
     num_files: int,
 ) -> list[str]:
     """
-    Fallback if no entry file was found: let the LLM pick the most relevant files
-    from the repo tree for the user's query.
+    Select the most relevant files from the repository based on the user query and
+    the already fetched code that runs the plugin.
     """
     file_tree = "\n".join(file_paths)
     selection_prompt = (
-        f"Task: You are analyzing the files from the '{plugin}' Freva plugin repository, given the user context and the fetched code. "
+        f"Task: You are analyzing the files from the '{plugin}' Freva plugin repository, given the user context and the fetched code already fetched that runs the plugin. "
         "Rank and select files based on the following rules:\n\n"
         "- Specifically scan for files that are imported/called as scripts in the fetched code, as well as those seeming *most* relevant to answer the user's query.\n"
         "- For high level usage/configuration questions, prioritize config files, README and docs.\n"
@@ -374,9 +379,7 @@ async def select_init_files(
         f"=== Fetched Code ===\n{fetched_code}\n=== END ===\n\n"
     )
     # Fallback: pick all files from the tree search
-    return await llm_select_files(
-        selection_prompt, file_paths, num_files, fallback=file_paths
-    )
+    return await llm_file_selection(selection_prompt, file_paths, num_files)
 
 
 async def select_dependency_files(
@@ -404,7 +407,7 @@ async def select_dependency_files(
         f"=== Remaining Repository Files ===\n{file_tree}\n=== END ===\n\n"
     )
     # Fallback: pick nothing to avoid fetching irrelevant code
-    return await llm_select_files(selection_prompt, file_paths, num_files, fallback=[])
+    return await llm_file_selection(selection_prompt, file_paths, num_files)
 
 
 async def collect_plugin_context(
@@ -447,9 +450,11 @@ async def collect_plugin_context(
     entry_file = find_entry_file(file_paths)
     _log_stage("Deterministic entry file", [entry_file])
 
-    entry_source, _ = await fetch_file_raw(project_id, entry_file, branch)
+    entry_source = await fetch_file_raw(project_id, entry_file, branch)
     exec_code = extract_method_from_source(entry_source, method_name="run_tool")
-    entry_code = format_files({entry_file: exec_code})
+    entry_code = format_files(
+        {entry_file: exec_code if exec_code is not None else entry_source}
+    )
 
     # ── Stage 2: find & fetch useful files, based on entry file + user context ───────
     remaining = [p for p in file_paths if p != entry_file]
@@ -457,13 +462,19 @@ async def collect_plugin_context(
         plugin, user_query, entry_code, remaining, MAX_FILES // 2
     )
     _log_stage("LLM-based initial", init_files)
-    init_files = [entry_file] + init_files
-    init_code = await fetch_files(project_id, branch, init_files, MAX_TOTAL_CODE_CHARS)
+    init_code = {entry_file: entry_source}
+    base_code = await fetch_files(
+        project_id,
+        branch,
+        init_files,
+        MAX_TOTAL_CODE_CHARS,
+    )
+    init_code.update(base_code)
 
     # ── Stage 3: resolve dependencies ───────────────────────────────────
-    budget = MAX_TOTAL_CODE_CHARS - sum(len(c) for c in init_code.values())
+    budget = MAX_TOTAL_CODE_CHARS - sum(len(c) for c in base_code.values())
     remaining = [p for p in file_paths if p not in init_code]
-    max_deps = MAX_FILES - len(init_files)
+    max_deps = MAX_FILES - len(init_code)
     dep_files = await select_dependency_files(
         plugin,
         user_query,
@@ -634,7 +645,7 @@ async def plugin_code_search(user_query: str) -> GenericToolResult:
     try:
         return await collect_plugin_context(plugin, project, project_id, user_query)
     except Exception as e:
-        logger.warning("Failed to fetch plugin code for '%s': %s", plugin, e)
+        logger.error("Failed to fetch plugin code for '%s': %s", plugin, e)
         return GenericToolResult(
             error=f"Failed to retrieve source code for plugin '{plugin}': {e}"
         )

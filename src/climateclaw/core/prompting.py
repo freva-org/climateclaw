@@ -150,6 +150,12 @@ def get_entire_prompt(user_id: str, thread_id: str, model: str) -> list[dict[str
     messages.append(_as_system_message(assets["starting"]))
     messages.extend(_load_examples_as_messages(assets["examples_path"]))
     messages.append(_as_system_message(assets["summary"]))
+
+    # Optional: mark placeholder when model is GPT-5 (useful for debugging)
+    if model_is_gpt_5(model):
+        logger.info(
+            "GPT-5 placeholder active: baseline prompts used for model='%s'.", model
+        )
     return messages
 
 

@@ -446,13 +446,8 @@ async def stream_with_tools(
             include_images=model_supports_images(model),
         ):
             if isinstance(r, FinalSummary):
-                (
-                    tool_out_v,
-                    tool_msgs,
-                ) = (
-                    r.var_block,
-                    r.tool_messages,
-                )
+                tool_out_v = r.var_block
+                tool_msgs = r.tool_messages
                 break
             else:
                 yield r  # Streaming the result to endpoint
