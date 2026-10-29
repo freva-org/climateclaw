@@ -109,7 +109,7 @@ services:
       start_period: 10s
 
   litellm:
-    image: ghcr.io/berriai/litellm:v1.102.0
+    image: ghcr.io/berriai/litellm:v1.106.5
     hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
       - ../litellm_config.dev.yaml:/app/config.yaml # Development config excludes the deployment-only vLLM model
@@ -124,6 +124,8 @@ services:
         --run_gunicorn
         2>&1 | tee -a /app/logs/litellm.log
     env_file: ../.env
+    environment:
+      LITELLM_MASTER_KEY: "sk-cafecafecafecafecafecafecafecafecafecafecafecafecafecafecafecafe"
     ports:
       - "4000:4000" # Expose LiteLLM port to the host machine for direct access if needed, e.g. local dev
     networks:
