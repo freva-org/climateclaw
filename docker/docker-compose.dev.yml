@@ -16,6 +16,7 @@ services:
     environment:
       CLIMATECLAW_DEV: ${CLIMATECLAW_DEV}
       CLIMATECLAW_DEBUG: ${CLIMATECLAW_DEBUG:-0}
+      CLIMATECLAW_LITELLM_MASTER_KEY: &litellm_master_key "sk-cafecafecafecafecafecafecafecafecafecafecafecafecafecafecafecafe" # Dev-only key, shared with litellm below
     hostname: climateclaw-${CLIMATECLAW_INSTANCE_NAME}
     ports:
       - "${CLIMATECLAW_TARGET_PORT:-8502}:${CLIMATECLAW_BACKEND_PORT:-8502}" # If either is unset, the default value will be used.
@@ -125,7 +126,7 @@ services:
         2>&1 | tee -a /app/logs/litellm.log
     env_file: ../.env
     environment:
-      LITELLM_MASTER_KEY: "sk-cafecafecafecafecafecafecafecafecafecafecafecafecafecafecafecafe"
+      CLIMATECLAW_LITELLM_MASTER_KEY: *litellm_master_key
     ports:
       - "4000:4000" # Expose LiteLLM port to the host machine for direct access if needed, e.g. local dev
     networks:
