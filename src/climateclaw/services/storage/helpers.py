@@ -22,7 +22,7 @@ CACHE_ROOT = Path("./cache")
 class Thread:
     user_id: str
     thread_id: str
-    date: str  # ISO 8601
+    last_activity: str  # ISO 8601
     topic: str
     content: list[StreamVariant]
 
