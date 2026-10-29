@@ -214,3 +214,30 @@ def test_responses_helpers_extract_refusal():
 def test_helpers_return_empty_defaults_for_malformed_responses(resp):
     assert first_text(resp) == ""
     assert tool_calls(resp) == []
+
+
+def test_headers_prefer_litellm_master_key(monkeypatch):
+    from climateclaw.services.streaming import litellm_client
+
+    monkeypatch.setattr(litellm_client, "LITELLM_MASTER_KEY", "sk-master")
+    monkeypatch.setattr(litellm_client, "OPENAI_API_KEY", "sk-openai")
+
+    assert litellm_client._headers()["Authorization"] == "Bearer sk-master"
+
+
+def test_headers_fall_back_to_openai_key(monkeypatch):
+    from climateclaw.services.streaming import litellm_client
+
+    monkeypatch.setattr(litellm_client, "LITELLM_MASTER_KEY", "")
+    monkeypatch.setattr(litellm_client, "OPENAI_API_KEY", "sk-openai")
+
+    assert litellm_client._headers()["Authorization"] == "Bearer sk-openai"
+
+
+def test_headers_without_any_key(monkeypatch):
+    from climateclaw.services.streaming import litellm_client
+
+    monkeypatch.setattr(litellm_client, "LITELLM_MASTER_KEY", "")
+    monkeypatch.setattr(litellm_client, "OPENAI_API_KEY", "")
+
+    assert "Authorization" not in litellm_client._headers()
