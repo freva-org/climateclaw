@@ -2,6 +2,7 @@ import asyncio
 import os
 from typing import Any
 
+import httpx
 from fastmcp import FastMCP
 
 from climateclaw.core.logging_setup import configure_logging
@@ -160,6 +161,23 @@ async def web_search(query: str) -> GenericToolResult:
     except RequestCancelled:
         logger.info("Web-search cancelled by client. sid=%s rid=%s", sid, rid)
         return GenericToolResult(error="Request cancelled by client.")
+
+    except httpx.HTTPStatusError as e:
+        status = e.response.status_code
+        if status not in (401, 403):
+            logger.warning("Web-search failed due to error: %s", e)
+            raise RuntimeError(f"Web-search failed: {e}") from e
+        # The result reaches the end user, so config details and the upstream
+        # error (which may echo part of the key) only go to the server log.
+        logger.error(
+            "Web-search authentication failed: %s. Check CLIMATECLAW_OPENAI_API_KEY "
+            "for the model provider and CLIMATECLAW_LITELLM_MASTER_KEY for the "
+            "LiteLLM proxy.",
+            e,
+        )
+        return GenericToolResult(
+            error=f"Web-search unavailable: the API key was rejected (HTTP {status})."
+        )
 
     except Exception as e:
         logger.warning("Web-search failed due to error: %s", e)
