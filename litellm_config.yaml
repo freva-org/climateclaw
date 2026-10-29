@@ -30,3 +30,6 @@ model_list:
 
 litellm_settings:
   drop_params: true # If true, drop all parameters not in the model_list from the request
+
+general_settings:
+  master_key: "os.environ/CLIMATECLAW_LITELLM_MASTER_KEY" # Shared with the backend
