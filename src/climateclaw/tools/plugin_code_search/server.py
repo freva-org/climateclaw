@@ -329,8 +329,10 @@ async def llm_file_selection(
     prompt: str, file_paths: list[str], num_files: int
 ) -> list[str]:
     """
-    Ask the LLM for a JSON array of file paths and keep only those that exist
-    in `file_paths`. Returns all `file_paths` if the LLM response cannot be parsed.
+    Ask the LLM for a JSON array of file paths and keep only those that
+    exist in `file_paths`. Falls back to using all available `file_paths`
+    if the LLM response is invalid, empty or cannot be parsed.
+    Returns all `file_paths` if the LLM response cannot be parsed.
     """
     try:
         raw_text = await call_llm(prompt)
@@ -343,7 +345,8 @@ async def llm_file_selection(
     except Exception as e:
         logger.warning("LLM file selection failed (%s); falling back to heuristic.", e)
     finally:
-        if "select_files" not in locals():
+        # fallback in case the LLM response is invalid or empty
+        if "select_files" not in locals() or not select_files:
             select_files = file_paths
 
     # Return only paths that exist in repo tree and conform to exclusion pattern
