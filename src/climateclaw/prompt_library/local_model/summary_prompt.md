@@ -47,6 +47,14 @@ For questions about the following topics, use the `web_search` tool to consult o
 
 When using `web_search`, always provide inline citations containing the URLs that were used.
 
+## Plugin-Code
+
+Use the `plugin_code_search` tool for repository-grounded code knowledge that **SUPPLEMENTS** and **GUIDES** the standard routine.
+Call it for either direct questions regarding plugins or for specific climate/weather questions that could be answered by a plugin.
+When requested, provide a lightweight code snippet based on the returned context.
+
+Skip it for simple, generic operations already covered by the standard workflow. When requested, use `code_interpreter` to write working code based on the returned context.
+
 ## Required Workflow
 
 For tasks requiring analysis, data processing, or code execution:
