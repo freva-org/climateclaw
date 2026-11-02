@@ -402,3 +402,43 @@ async def test_stream_with_tools_preserves_raw_invalid_non_code_tool_call(
     tool_outputs = [item for item in items if isinstance(item, SVToolOutput)]
     assert len(tool_outputs) == 1
     assert "Invalid arguments for tool web_search" in str(tool_outputs[0].content)
+
+
+@pytest.mark.asyncio
+async def test_run_stream_hides_upstream_error_from_client(
+    patch_registry, patch_thread_storage, monkeypatch
+):
+    from climateclaw.core.logging_setup import set_request_id
+    from climateclaw.services.streaming.stream_orchestrator import run_stream
+    from climateclaw.services.streaming.stream_variants import SVServerError
+
+    patch_registry({"t-err": []})
+    set_request_id("req-123")
+
+    async def failing_stream_with_tools(**kwargs):
+        raise RuntimeError(
+            "LiteLLM returned HTTP 401: Incorrect API key provided: sk-proj-****4DCj"
+        )
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(
+        stream_orchestrator, "stream_with_tools", failing_stream_with_tools
+    )
+
+    items = [
+        item
+        async for item in run_stream(
+            model="gpt-4.1",
+            thread_id="t-err",
+            user_input="hi",
+            system_prompt=[],
+            storage=patch_thread_storage,
+            store_thread=False,
+        )
+    ]
+
+    errors = [i for i in items if isinstance(i, SVServerError)]
+    assert len(errors) == 1
+    assert "req-123" in errors[0].content
+    for leaked in ("401", "API key", "sk-", "LiteLLM"):
+        assert leaked not in errors[0].content

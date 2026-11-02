@@ -9,7 +9,7 @@ from typing import Any
 
 from climateclaw.core.available_chatbots import model_is_local, model_supports_images
 from climateclaw.core.heartbeat import heartbeat_content
-from climateclaw.core.logging_setup import configure_logging
+from climateclaw.core.logging_setup import client_error_message, configure_logging
 from climateclaw.services.service_factory import Authenticator, ThreadStorage
 from climateclaw.services.streaming.active_conversations import (
     ConversationState,
@@ -552,7 +552,13 @@ async def run_stream(
             stream_state.finished = True
         except Exception as e:
             log.exception("Stream error: %s", e)
-            err_v = SVServerError(content=str(e))
+            # Upstream errors can carry config details and key fragments.
+            err_v = SVServerError(
+                content=client_error_message(
+                    "Something went wrong while generating the response. "
+                    "Please try again later."
+                )
+            )
             end_v = SVStreamEnd(content="Stream ended with an error.")
             await add_to_conversation(
                 thread_id, [err_v], storage=storage, store_thread=store_thread
