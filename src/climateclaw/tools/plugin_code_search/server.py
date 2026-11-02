@@ -329,10 +329,9 @@ async def llm_file_selection(
     prompt: str, file_paths: list[str], num_files: int
 ) -> list[str]:
     """
-    Ask the LLM for a JSON array of file paths and keep only those that
+    Ask the LLM for a JSON array of file paths. Keep and return only those that
     exist in `file_paths`. Falls back to using all available `file_paths`
     if the LLM response is invalid, empty or cannot be parsed.
-    Returns all `file_paths` if the LLM response cannot be parsed.
     """
     try:
         raw_text = await call_llm(prompt)
