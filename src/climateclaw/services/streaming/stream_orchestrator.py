@@ -482,13 +482,38 @@ async def stream_with_tools(
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+# Upstream failures the user can act on. Anything else (bad keys, missing models,
+# proxy errors) is for operators and gets the generic message.
+UNAVAILABLE_STATUSES = {429, 502, 503, 529}  # rate limit, quota, overload, outage
+
+
 def _client_error(error: Exception, model: str) -> str:
     """What to tell the user about a failed turn."""
-    if isinstance(error, httpx.HTTPStatusError) and error.response.status_code == 429:
-        # Rate limited or out of quota upstream; another model may still work.
-        return (
-            f"The model {model} is not available right now. Please try another model."
-        )
+    if isinstance(error, httpx.TimeoutException):
+        return f"The model {model} took too long to respond. Please try again."
+
+    if isinstance(error, httpx.HTTPStatusError):
+        status = error.response.status_code
+        # LiteLLM names its exception class in the message, e.g.
+        # "litellm.ContextWindowExceededError: ...".
+        if "ContextWindowExceededError" in str(error):
+            return (
+                f"This conversation is too long for {model}. "
+                "Please start a new chat or try a model with a larger context."
+            )
+        if "ContentPolicyViolationError" in str(error):
+            return (
+                "The request was blocked by the model provider's content filter. "
+                "Please rephrase it."
+            )
+        if status in UNAVAILABLE_STATUSES:
+            return (
+                f"The model {model} is not available right now. "
+                "Please try another model."
+            )
+        if status == 504:
+            return f"The model {model} took too long to respond. Please try again."
+
     return "Something went wrong while generating the response. Please try again later."
 
 
