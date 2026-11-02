@@ -402,3 +402,38 @@ async def test_stream_with_tools_preserves_raw_invalid_non_code_tool_call(
     tool_outputs = [item for item in items if isinstance(item, SVToolOutput)]
     assert len(tool_outputs) == 1
     assert "Invalid arguments for tool web_search" in str(tool_outputs[0].content)
+
+
+@pytest.mark.asyncio
+async def test_stream_with_tools_passes_tools_in_acomplete_signature(
+    patch_registry, patch_thread_storage
+):
+    import inspect
+
+    from climateclaw.services.streaming.litellm_client import acomplete
+
+    tools = [tool_schema("code_interpreter", {"code": {"type": "string"}}, ["code"])]
+    register_fake_mcp(patch_registry, "t-tools", DummyMcpManager(tools))
+    calls = []
+
+    async def fake_acomplete(**kwargs):
+        # Fails like the real client would on an unknown keyword argument.
+        inspect.signature(acomplete).bind(**kwargs)
+        calls.append(kwargs)
+        return fake_assistant_stream()
+
+    items = [
+        item
+        async for item in stream_with_tools(
+            model="gpt-4.1",
+            thread_id="t-tools",
+            messages=[],
+            acomplete_func=fake_acomplete,
+            stream_state=StreamState(),
+            storage=patch_thread_storage,
+            store_thread=False,
+        )
+    ]
+
+    assert calls[0]["extra_params"] == {"tools": tools, "tool_choice": "auto"}
+    assert any(isinstance(i, SVAssistant) for i in items)

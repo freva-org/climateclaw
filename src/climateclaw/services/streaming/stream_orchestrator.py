@@ -130,8 +130,7 @@ async def stream_with_tools(
                 model=model,
                 messages=messages,
                 stream=True,
-                tools=tools,
-                tool_choice="auto",
+                extra_params={"tools": tools, "tool_choice": "auto"},
             )
         )
     else:
