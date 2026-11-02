@@ -442,3 +442,51 @@ async def test_run_stream_hides_upstream_error_from_client(
     assert "req-123" in errors[0].content
     for leaked in ("401", "API key", "sk-", "LiteLLM"):
         assert leaked not in errors[0].content
+
+
+@pytest.mark.asyncio
+async def test_run_stream_suggests_another_model_on_rate_limit(
+    patch_registry, patch_thread_storage, monkeypatch
+):
+    import httpx
+
+    from climateclaw.core.logging_setup import set_request_id
+    from climateclaw.services.streaming.stream_orchestrator import run_stream
+    from climateclaw.services.streaming.stream_variants import SVServerError
+
+    patch_registry({"t-429": []})
+    set_request_id("req-rl")
+
+    async def rate_limited_stream_with_tools(**kwargs):
+        request = httpx.Request("POST", "http://litellm:4000/v1/chat/completions")
+        response = httpx.Response(429, request=request)
+        raise httpx.HTTPStatusError(
+            "LiteLLM returned HTTP 429: RateLimitError: quota exceeded for sk-proj-x",
+            request=request,
+            response=response,
+        )
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(
+        stream_orchestrator, "stream_with_tools", rate_limited_stream_with_tools
+    )
+
+    items = [
+        item
+        async for item in run_stream(
+            model="gpt-4.1",
+            thread_id="t-429",
+            user_input="hi",
+            system_prompt=[],
+            storage=patch_thread_storage,
+            store_thread=False,
+        )
+    ]
+
+    errors = [i for i in items if isinstance(i, SVServerError)]
+    assert len(errors) == 1
+    assert "gpt-4.1" in errors[0].content
+    assert "another model" in errors[0].content
+    assert "req-rl" in errors[0].content
+    for leaked in ("429", "RateLimitError", "sk-", "LiteLLM"):
+        assert leaked not in errors[0].content
