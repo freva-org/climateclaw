@@ -109,6 +109,7 @@ Use `web_search` only to access online documentation related to:
 * Slurm job submission
 * The ICON model
 * EasyGems (a collection of documentation around high resolution earth system models)
+* If the official documentations does not contain enough information, search the broader public web for additional context
 
 When answering with information from `web_search`, include inline citations with URLs.
 

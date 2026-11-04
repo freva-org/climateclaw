@@ -100,6 +100,60 @@ async def test_acomplete_responses_accepts_messages_and_translates_payload():
 
 
 @pytest.mark.asyncio
+async def test_acomplete_includes_tool_configuration_when_tools_are_provided():
+    fake = FakeResp(status_code=200, json_body={})
+    captured = {}
+    tools = [
+        {
+            "type": "function",
+            "function": {"name": "lookup_reference", "parameters": {}},
+        }
+    ]
+
+    async def fake_post(self, *args, **kwargs):
+        captured["json"] = kwargs["json"]
+        return fake
+
+    with patch(
+        "climateclaw.services.streaming.litellm_client.httpx.AsyncClient.post",
+        new=fake_post,
+    ):
+        await acomplete(
+            model="test-model",
+            messages=[],
+            tools=tools,
+            tool_choice="required",
+        )
+
+    assert captured["json"]["tools"] == tools
+    assert captured["json"]["tool_choice"] == "required"
+
+
+@pytest.mark.asyncio
+async def test_acomplete_omits_tool_configuration_when_tools_are_empty():
+    fake = FakeResp(status_code=200, json_body={})
+    captured = {}
+
+    async def fake_post(self, *args, **kwargs):
+        captured["json"] = kwargs["json"]
+        return fake
+
+    with patch(
+        "climateclaw.services.streaming.litellm_client.httpx.AsyncClient.post",
+        new=fake_post,
+    ):
+        await acomplete(
+            model="test-model",
+            messages=[],
+            tools=[],
+            tool_choice="required",
+        )
+
+    assert "tools" not in captured["json"]
+    assert "tool_choice" not in captured["json"]
+
+
+@pytest.mark.asyncio
 async def test_acomplete_includes_error_body():
     request = httpx.Request("POST", "http://litellm/v1/chat/completions")
     fake = httpx.Response(
