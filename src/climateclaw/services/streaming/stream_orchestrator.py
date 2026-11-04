@@ -7,9 +7,11 @@ from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
+
 from climateclaw.core.available_chatbots import model_is_local, model_supports_images
 from climateclaw.core.heartbeat import heartbeat_content
-from climateclaw.core.logging_setup import configure_logging
+from climateclaw.core.logging_setup import client_error_message, configure_logging
 from climateclaw.services.service_factory import Authenticator, ThreadStorage
 from climateclaw.services.streaming.active_conversations import (
     ConversationState,
@@ -480,6 +482,41 @@ async def stream_with_tools(
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+# Upstream failures the user can act on. Anything else (bad keys, missing models,
+# proxy errors) is for operators and gets the generic message.
+UNAVAILABLE_STATUSES = {429, 502, 503, 529}  # rate limit, quota, overload, outage
+
+
+def _client_error(error: Exception, model: str) -> str:
+    """What to tell the user about a failed turn."""
+    if isinstance(error, httpx.TimeoutException):
+        return f"The model {model} took too long to respond. Please try again."
+
+    if isinstance(error, httpx.HTTPStatusError):
+        status = error.response.status_code
+        # LiteLLM names its exception class in the message, e.g.
+        # "litellm.ContextWindowExceededError: ...".
+        if "ContextWindowExceededError" in str(error):
+            return (
+                f"This conversation is too long for {model}. "
+                "Please start a new chat or try a model with a larger context."
+            )
+        if "ContentPolicyViolationError" in str(error):
+            return (
+                "The request was blocked by the model provider's content filter. "
+                "Please rephrase it."
+            )
+        if status in UNAVAILABLE_STATUSES:
+            return (
+                f"The model {model} is not available right now. "
+                "Please try another model."
+            )
+        if status == 504:
+            return f"The model {model} took too long to respond. Please try again."
+
+    return "Something went wrong while generating the response. Please try again later."
+
+
 async def run_stream(
     *,
     model: str,
@@ -552,7 +589,8 @@ async def run_stream(
             stream_state.finished = True
         except Exception as e:
             log.exception("Stream error: %s", e)
-            err_v = SVServerError(content=str(e))
+            # Upstream errors can carry config details and key fragments.
+            err_v = SVServerError(content=client_error_message(_client_error(e, model)))
             end_v = SVStreamEnd(content="Stream ended with an error.")
             await add_to_conversation(
                 thread_id, [err_v], storage=storage, store_thread=store_thread

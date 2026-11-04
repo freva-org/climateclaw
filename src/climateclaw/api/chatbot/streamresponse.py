@@ -14,7 +14,7 @@ from climateclaw.core.available_chatbots import (
     default_chatbot,
     default_chatbot_local,
 )
-from climateclaw.core.logging_setup import configure_logging
+from climateclaw.core.logging_setup import client_error_message, configure_logging
 from climateclaw.core.prompting import get_entire_prompt
 from climateclaw.services.service_factory import (
     Authenticator,
@@ -241,7 +241,9 @@ async def streamresponse(
         msg = f"Stream preparation has failed: {e}"
         logger.exception(msg, extra={"thread_id": thread_id})
         # Normalize response to a clean HTTP 500 instead of a partial stream
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+        raise HTTPException(
+            status_code=500, detail=client_error_message("Internal Server Error")
+        )
 
     async def event_stream():
         try:
