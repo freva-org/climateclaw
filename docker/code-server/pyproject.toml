@@ -12,4 +12,5 @@ dependencies = [
     "ipython>=9.6.0",
     "jupyter-client>=8.6.3",
     "ipykernel>=7.1.0",
+    "six",
 ]
