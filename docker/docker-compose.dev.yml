@@ -166,6 +166,8 @@ services:
         --run_gunicorn
         2>&1 | tee -a /app/logs/litellm.log
     env_file: ../.env
+    environment:
+      CLIMATECLAW_VLLM_LITELLM_MODEL: "hosted_vllm/${CLIMATECLAW_VLLM_MODEL_ID}"
     ports:
       - "4000:4000" # Expose LiteLLM port to the host machine for direct access if needed, e.g. local dev
     networks:

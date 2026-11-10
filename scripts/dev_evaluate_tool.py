@@ -85,17 +85,17 @@ PLOT_METRICS = False  # plot metrics as bar charts at the end of the benchmark
 path_to_prompts = (
     Path(__file__).parent / "evaluation" / "benchmark-prompts-plugin-server.json"
 )
-with open(path_to_prompts, "r", encoding="utf-8") as f:
-    BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
+# with open(path_to_prompts, "r", encoding="utf-8") as f:
+#     BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
 
 # for quick sanity checking, use this one and comment out the main benchmark suite
-# BENCHMARK = {
-#     "leadtimeselektor": [
-#         "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
-#         "How can I best extract lead times from decadal climate predictions?",
-#         "How are you?",
-#     ]
-# }
+BENCHMARK = {
+    "leadtimeselektor": [
+        "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
+        # "How can I best extract lead times from decadal climate predictions?",
+        # "How are you?",
+    ]
+}
 
 path_to_plugins = (
     Path(__file__).parents[1]
