@@ -37,6 +37,12 @@ def get_request_id() -> str | None:
     return REQUEST_ID_CONTEXT.get() or None
 
 
+def client_error_message(message: str) -> str:
+    """A message safe to show clients; details belong in the server log."""
+    request_id = get_request_id()
+    return f"{message} (request id: {request_id})" if request_id else message
+
+
 def set_request_id(request_id: str | None):
     return REQUEST_ID_CONTEXT.set(request_id or None)
 

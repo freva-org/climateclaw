@@ -402,3 +402,192 @@ async def test_stream_with_tools_preserves_raw_invalid_non_code_tool_call(
     tool_outputs = [item for item in items if isinstance(item, SVToolOutput)]
     assert len(tool_outputs) == 1
     assert "Invalid arguments for tool web_search" in str(tool_outputs[0].content)
+
+
+@pytest.mark.asyncio
+async def test_run_stream_hides_upstream_error_from_client(
+    patch_registry, patch_thread_storage, monkeypatch
+):
+    from climateclaw.core.logging_setup import set_request_id
+    from climateclaw.services.streaming.stream_orchestrator import run_stream
+    from climateclaw.services.streaming.stream_variants import SVServerError
+
+    patch_registry({"t-err": []})
+    set_request_id("req-123")
+
+    async def failing_stream_with_tools(**kwargs):
+        raise RuntimeError(
+            "LiteLLM returned HTTP 401: Incorrect API key provided: sk-proj-****4DCj"
+        )
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(
+        stream_orchestrator, "stream_with_tools", failing_stream_with_tools
+    )
+
+    items = [
+        item
+        async for item in run_stream(
+            model="gpt-4.1",
+            thread_id="t-err",
+            user_input="hi",
+            system_prompt=[],
+            storage=patch_thread_storage,
+            store_thread=False,
+        )
+    ]
+
+    errors = [i for i in items if isinstance(i, SVServerError)]
+    assert len(errors) == 1
+    assert "req-123" in errors[0].content
+    for leaked in ("401", "API key", "sk-", "LiteLLM"):
+        assert leaked not in errors[0].content
+
+
+@pytest.mark.asyncio
+async def test_run_stream_suggests_another_model_on_rate_limit(
+    patch_registry, patch_thread_storage, monkeypatch
+):
+    import httpx
+
+    from climateclaw.core.logging_setup import set_request_id
+    from climateclaw.services.streaming.stream_orchestrator import run_stream
+    from climateclaw.services.streaming.stream_variants import SVServerError
+
+    patch_registry({"t-429": []})
+    set_request_id("req-rl")
+
+    async def rate_limited_stream_with_tools(**kwargs):
+        request = httpx.Request("POST", "http://litellm:4000/v1/chat/completions")
+        response = httpx.Response(429, request=request)
+        raise httpx.HTTPStatusError(
+            "LiteLLM returned HTTP 429: RateLimitError: quota exceeded for sk-proj-x",
+            request=request,
+            response=response,
+        )
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(
+        stream_orchestrator, "stream_with_tools", rate_limited_stream_with_tools
+    )
+
+    items = [
+        item
+        async for item in run_stream(
+            model="gpt-4.1",
+            thread_id="t-429",
+            user_input="hi",
+            system_prompt=[],
+            storage=patch_thread_storage,
+            store_thread=False,
+        )
+    ]
+
+    errors = [i for i in items if isinstance(i, SVServerError)]
+    assert len(errors) == 1
+    assert "gpt-4.1" in errors[0].content
+    assert "another model" in errors[0].content
+    assert "req-rl" in errors[0].content
+    for leaked in ("429", "RateLimitError", "sk-", "LiteLLM"):
+        assert leaked not in errors[0].content
+
+
+def _http_error(status: int, text: str):
+    import httpx
+
+    request = httpx.Request("POST", "http://litellm:4000/v1/chat/completions")
+    response = httpx.Response(status, request=request)
+    return httpx.HTTPStatusError(
+        f"LiteLLM returned HTTP {status}: {text}", request=request, response=response
+    )
+
+
+def _timeout_error():
+    import httpx
+
+    return httpx.ReadTimeout("timed out")
+
+
+@pytest.mark.parametrize(
+    ("make_error", "expected"),
+    [
+        (
+            lambda: _http_error(
+                400,
+                "litellm.ContextWindowExceededError: This model's maximum context "
+                "length is 128000 tokens",
+            ),
+            ["too long for gpt-4.1", "new chat"],
+        ),
+        (
+            lambda: _http_error(
+                400,
+                "litellm.ContentPolicyViolationError: Your request was rejected "
+                "as a result of our safety system",
+            ),
+            ["content filter", "rephrase"],
+        ),
+        (
+            lambda: _http_error(503, "litellm.ServiceUnavailableError: overloaded"),
+            ["gpt-4.1 is not available", "another model"],
+        ),
+        (
+            lambda: _http_error(502, "Bad Gateway"),
+            ["gpt-4.1 is not available", "another model"],
+        ),
+        (
+            lambda: _http_error(529, "litellm.InternalServerError: Overloaded"),
+            ["gpt-4.1 is not available", "another model"],
+        ),
+        (
+            lambda: _http_error(504, "litellm.Timeout: Request timed out"),
+            ["gpt-4.1 took too long", "try again"],
+        ),
+        (_timeout_error, ["gpt-4.1 took too long", "try again"]),
+        (
+            lambda: _http_error(400, "litellm.BadRequestError: invalid tool schema"),
+            ["Something went wrong"],
+        ),
+        (
+            lambda: _http_error(401, "litellm.AuthenticationError: bad key sk-x"),
+            ["Something went wrong"],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_run_stream_maps_upstream_errors_to_user_messages(
+    patch_registry, patch_thread_storage, monkeypatch, make_error, expected
+):
+    from climateclaw.core.logging_setup import set_request_id
+    from climateclaw.services.streaming.stream_orchestrator import run_stream
+    from climateclaw.services.streaming.stream_variants import SVServerError
+
+    patch_registry({"t-map": []})
+    set_request_id("req-map")
+
+    async def failing_stream_with_tools(**kwargs):
+        raise make_error()
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(
+        stream_orchestrator, "stream_with_tools", failing_stream_with_tools
+    )
+
+    items = [
+        item
+        async for item in run_stream(
+            model="gpt-4.1",
+            thread_id="t-map",
+            user_input="hi",
+            system_prompt=[],
+            storage=patch_thread_storage,
+            store_thread=False,
+        )
+    ]
+
+    errors = [i for i in items if isinstance(i, SVServerError)]
+    assert len(errors) == 1
+    for text in [*expected, "req-map"]:
+        assert text in errors[0].content
+    for leaked in ("HTTP", "litellm", "LiteLLM", "Error:", "sk-", "tokens"):
+        assert leaked not in errors[0].content
