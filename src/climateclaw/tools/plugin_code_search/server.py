@@ -369,9 +369,9 @@ async def select_init_files(
     """
     file_tree = "\n".join(file_paths)
     selection_prompt = (
-        f"Task: You are analyzing the files from the '{plugin}' Freva plugin repository, given the user context and the fetched code already fetched that runs the plugin. "
+        f"Task: You are analyzing the files from the '{plugin}' Freva plugin repository, given the user context and the fetched code (`run_tool` method) that runs the plugin. "
         "Rank and select files based on the following rules:\n\n"
-        "- Specifically scan for files that are imported/called as scripts in the fetched code, as well as those seeming *most* relevant to answer the user's query.\n"
+        "- Always select the module that is called in the `run_tool` method; additionally select files that seem most relevant to the user's query.\n"
         "- For high level usage/configuration questions, prioritize config files, README and docs.\n"
         "- For questions about implementation logic, prioritize source code modules.\n"
         "- Exclude tests, examples, generated files, and any '__init__.py'.\n"

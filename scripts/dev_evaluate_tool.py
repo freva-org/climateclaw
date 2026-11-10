@@ -24,6 +24,7 @@ os.environ["CLIMATECLAW_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
 os.environ["CLIMATECLAW_PLUGIN_CODE_SEARCH_SERVER_URL"] = "http://localhost:8053"
 os.environ["CLIMATECLAW_MONGODB_HOST"] = "localhost"
 
+from climateclaw.core.available_chatbots import default_chatbot
 from climateclaw.core.logging_setup import configure_logging, silence_logger
 from climateclaw.core.prompting import get_entire_prompt
 from climateclaw.services.authentication.auth import Authenticator
@@ -65,7 +66,8 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headl
 # 4. run this evaluation script from the terminal: `uv run scripts/dev_evaluate_tool.py`
 #######################################################
 
-MODEL = "gpt-4.1"  # model to benchmark
+# model to benchmark; replace with custom one if needed and available
+MODEL = default_chatbot()
 USER_ID = "janedoe"
 RUNS = 1  # number of runs to perform -> increase for more thorough benchmarking
 CONCURRENCY = 1  # number of concurrent runs to perform -> increase for more parallelism (aka faster execution)
