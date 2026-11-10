@@ -20,7 +20,7 @@ model_list:
     litellm_params:
       model: openai/gpt-4.1-mini
       api_key: "os.environ/CLIMATECLAW_OPENAI_API_KEY"
-  - model_name: "gemma4:31b"
+  - model_name: "deepseek-v4.1"
     litellm_params:
       model: "os.environ/CLIMATECLAW_VLLM_LITELLM_MODEL"
       api_base: "os.environ/CLIMATECLAW_VLLM_API_BASE"

@@ -31,6 +31,9 @@ CLIMATECLAW_LITELLM_CONFIG_PATH = "LITELLM_CONFIG"
 DEFAULT_CONFIG_BASENAME = "litellm_config.yaml"
 DEV_CONFIG_BASENAME = "litellm_config.dev.yaml"
 
+# Read once at import time; override via the CLIMATECLAW_DEFAULT_LOCAL_MODEL env variable.
+DEFAULT_LOCAL_MODEL = os.getenv("CLIMATECLAW_DEFAULT_LOCAL_MODEL") or "deepseek-v4.1"
+
 
 def _config_basename() -> str:
     """Select the development catalog when the application runs in dev mode."""
@@ -164,8 +167,10 @@ def default_chatbot() -> str:
 def default_chatbot_local() -> str:
     """
     Default local chatbot.
+
+    Set from ``CLIMATECLAW_DEFAULT_LOCAL_MODEL`` at import time (see ``DEFAULT_LOCAL_MODEL``).
     """
-    return "gemma4:31b"
+    return DEFAULT_LOCAL_MODEL
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -206,7 +211,7 @@ def model_supports_images(model: str) -> bool:
     """
     True for names starting with the defined list.
     """
-    vision_models = ("gpt", "qwen3.6", "gemma4", "mistral", "ministral")
+    vision_models = ("gpt", "qwen3.6", "gemma4", "deepseek", "mistral", "ministral")
     return model.startswith(vision_models)
 
 
