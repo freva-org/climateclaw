@@ -47,7 +47,7 @@ from climateclaw.services.streaming.stream_variants import (
 Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headless means that it runs without a web server, and without any user interaction. It is intended for development and benchmarking purposes.
 
 - Config below (no argparse).
-- Disk-only persistence (never Mongo).
+- One shared MongoDB storage instance, closed when evaluation exits.
 - RUNS/CONCURRENCY for benchmarks; set CONCURRENCY=1 for clean mode.
 - Uses ONE global McpManager; orchestrator ties MCP session to thread_id.
 """
@@ -72,9 +72,7 @@ USER_ID = "janedoe"
 RUNS = 1  # number of runs to perform -> increase for more thorough benchmarking
 CONCURRENCY = 1  # number of concurrent runs to perform -> increase for more parallelism (aka faster execution)
 
-PRINT_RUN_SUMMARY = (
-    True  # print summary of each run (state, prompt, tool call, tool output)
-)
+PRINT_RUN_SUMMARY = True  # print summary of each run (state, prompt, tool called, tool args, tool output)
 SILENCE_LOGGING = True
 
 # run evaluation of tool calls (TP, FP, FN, accuracy, precision, recall)
@@ -85,17 +83,21 @@ PLOT_METRICS = False  # plot metrics as bar charts at the end of the benchmark
 path_to_prompts = (
     Path(__file__).parent / "evaluation" / "benchmark-prompts-plugin-server.json"
 )
-# with open(path_to_prompts, "r", encoding="utf-8") as f:
-#     BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
+with open(path_to_prompts, "r", encoding="utf-8") as f:
+    BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
 
 # for quick sanity checking, use this one and comment out the main benchmark suite
-BENCHMARK = {
-    "leadtimeselektor": [
-        "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
-        # "How can I best extract lead times from decadal climate predictions?",
-        # "How are you?",
-    ]
-}
+# BENCHMARK = {
+#     "leadtimeselektor": [
+#         "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
+#     ],
+#     "problems": [
+#         "How can I calculate climate prediction skill scores against observations or reanalysis data?",
+#     ],
+#     "crops": [
+#         "How can I assess the impact of extreme climate events on crop productivity?",
+#     ],
+# }
 
 path_to_plugins = (
     Path(__file__).parents[1]
@@ -120,20 +122,23 @@ class RunResult:
     tool_output: str
 
 
-async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
+async def _run_once(
+    idx: int, sem: asyncio.Semaphore, prompt: str, storage: ThreadStorage
+) -> RunResult:
+    """Run a single benchmark run for the given prompt and storage context."""
+
     async with sem:
         thread_id = await new_thread_id()
         read_history = False
 
         Auth = Authenticator.local(username="dev_user")
-        Storage = await ThreadStorage.create()
         create_dir_at_cache(thread_id)
 
         await prepare_for_stream(
             thread_id=thread_id,
             user_id=USER_ID,
             Auth=Auth,
-            Storage=Storage,
+            Storage=storage,
             read_history=read_history,
         )
 
@@ -151,7 +156,7 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
                 thread_id=thread_id,
                 user_input=prompt,
                 system_prompt=system_prompt,
-                storage=Storage,
+                storage=storage,
             ):
                 if isinstance(variant, SVToolCall):
                     tool_name = variant.tool_name
@@ -160,7 +165,7 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
                     result = variant.content.result
                     tool_output = result if result else variant.content.error
 
-            await end_and_save_conversation(thread_id, Storage)
+            await end_and_save_conversation(thread_id, storage)
         except Exception as e:
             state = f"Error:{e}"
 
@@ -177,11 +182,17 @@ async def _run_once(idx: int, sem: asyncio.Semaphore, prompt: str) -> RunResult:
 
 
 async def run_benchmark_for_prompt(
-    prompt: str, plugin: str, eval_dict: dict[str, list[float]]
+    prompt: str,
+    plugin: str,
+    eval_dict: dict[str, list[float]],
+    storage: ThreadStorage,
 ) -> dict[str, list[float]]:
+    """Run the benchmark for a given prompt and plugin."""
 
     sem = asyncio.Semaphore(CONCURRENCY)
-    tasks = [asyncio.create_task(_run_once(i, sem, prompt)) for i in range(RUNS)]
+    tasks = [
+        asyncio.create_task(_run_once(i, sem, prompt, storage)) for i in range(RUNS)
+    ]
     results = await asyncio.gather(*tasks)
     assert results, "No results returned from benchmark runs"
 
@@ -355,18 +366,25 @@ def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
 
 
 async def main() -> None:
+    print(f"\nStarting evaluation of 'plugin_code_search' tool for model {MODEL} ...")
     if SILENCE_LOGGING:
         silence_logger()
 
     eval_dict: dict[str, list[float]] = defaultdict(list)
     prompt_count = sum(len(prompts) * RUNS for prompts in BENCHMARK.values())
-    with tqdm(total=prompt_count, desc="Evaluation", unit="prompt") as progress:
-        for plugin, prompts in BENCHMARK.items():
-            progress.set_postfix_str(f"plugin={plugin}")
-            for prompt in prompts:
-                # print(f"\n=== Running benchmark for prompt: {prompt} ===")
-                eval_dict = await run_benchmark_for_prompt(prompt, plugin, eval_dict)
-                progress.update(RUNS)
+    storage = await ThreadStorage.create()
+    try:
+        with tqdm(total=prompt_count, desc="Evaluation", unit="prompt") as progress:
+            for plugin, prompts in BENCHMARK.items():
+                progress.set_postfix_str(f"plugin={plugin}")
+                for prompt in prompts:
+                    # print(f"\n=== Running benchmark for prompt: {prompt} ===")
+                    eval_dict = await run_benchmark_for_prompt(
+                        prompt, plugin, eval_dict, storage
+                    )
+                    progress.update(RUNS)
+    finally:
+        await storage.close()
 
     # compute average metrics across all prompts
     if EVAL_TOOL:
@@ -377,11 +395,13 @@ async def main() -> None:
         for k, v in avg_metrics.items():
             print(f"  {k:<17}: {v:.1%}")
 
+    print("\nEvaluation completed.")
     # plot metrics as bar charts (one for tool, one for plugin)
     if PLOT_METRICS and EVAL_TOOL:
         eval_dir = Path(__file__).parent / "evaluation"
         eval_dir.mkdir(parents=True, exist_ok=True)
         plot_metrics(avg_metrics, eval_dir)
+        print(f"Results saved in {Path(__file__).parent / 'evaluation'}")
 
 
 if __name__ == "__main__":

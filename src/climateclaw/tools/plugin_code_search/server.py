@@ -25,6 +25,7 @@ logger = configure_logging(__name__)
 GITLAB_ACCESS_TOKEN: Optional[str] = os.getenv("CLIMATECLAW_GITLAB_ACCESS_TOKEN")
 GITLAB_BASE_URL = "https://gitlab.dkrz.de/api/v4"
 GITLAB_CACHE_SECONDS = 600
+
 FREVA_PROJECT_NAMES = {
     "coming decade": "kd1418",
     "climxtreme": "bm1159",
@@ -46,6 +47,23 @@ MAX_TOTAL_CODE_CHARS = 100_000  # truncate total fetched code after this limit
 MAX_FILES = 6  # max files the LLM may select in total
 ENTRY_PATTERN = re.compile(r"(wrapper|api)[^/]*\.py$", re.IGNORECASE)
 EXCLUDE_PATTERN = re.compile(r"(^|/)(tests?/|test_|__init__\.py$)", re.IGNORECASE)
+
+EXTENDED_TOOL_DESCRIPTION = """
+Use this tool for questions about a Freva plugin's internal logic, usage, or configuration,
+requests to translate plugin code into Python examples, and complex climate or weather
+analysis questions that can be answered from plugin source code. Ground responses in the
+retrieved code context and include the plugin and project names.
+
+Workflow Guidelines:
+    1. First, always give a high-level explanation of how the plugin works and how to use
+       it, including its plugin and project names. Add specifics as needed.
+    2. Provide an implementation ONLY when requested. Translate only the plugin's core
+       logic into a lightweight Python snippet with a concise plan. Replace `cdo` with
+       `xarray` operations and prioritize workflow correctness over non-critical details
+       such as retries, fallbacks, and logging.
+    - Mention modules, classes, and functions only when asked for more detail.
+    - Call this tool again for follow-up questions not sufficiently covered by prior results.
+"""
 
 
 # ── Server Config ────────────────────────────────────────────────────────────────
@@ -582,31 +600,22 @@ async def detect_plugin_project(user_query: str) -> tuple[str | None, str | None
     return plugin, project
 
 
-@mcp.tool()
+@mcp.tool(description=EXTENDED_TOOL_DESCRIPTION)
 async def plugin_code_search(user_query: str) -> GenericToolResult:
     """
     Fetch relevant source code and documentation files of a Freva data analysis plugin
     as repository-grounded code knowledge base. Use this tool whenever you think a specific climate or weather-related question can be answered by examining the plugin's source code.
 
     Use this when the user
-    - explicitly asks how a plugin's internal logic works, how to run or configure it,
-    or wants plugin code translated or adapted into Python examples;
-    - asks a specific climate or weather-related question involving regional, decadal, or
-    extreme-event analysis
-    (e.g.: lead time extraction, (hindcast) skill scoring against observation, bias adjustment and drift correction, downscaling, precipitation indices, impact on crop growth, heat waves/HWMID),
-    climate/extreme indices, region matching, urban heatwave extraction, precipitation
-    disaggregation, and Freva plugin creation).
-
-    Workflow Guidelines:
-    - Ground explanations only in returned code context.
-    - Handle retrieved plugin code in two separate steps:
-      1. **First step (always) – only high level:** a factful explanation of how the plugin works and how to use it (including plugin and project names).
-      2. **Second step (only if requested) – implementation:** turn the plugin's *core logic* into a lightweight Python snippet with a concise plan.
-    - reference modules, classes, and functions only when asked for more detail.
-    - call it again for follow-up questions *not* sufficiently covered by prior results.
-    - only implement the plugin's *core logic* in a lightweight Python snippet - for that:
-        - replace `cdo` with `xarray` operations
-        - prioritize workflow correctness over mirroring non-critical details (e.g. multiple tries, fallbacks, logging)
+    1. directly asks how a plugin's internal logic works, how to run or configure it, or requests plugin code translated into Python examples; or
+    2. asks a *more complex* climate/weather question touching any of these specialized analysis topics — and in that case, **proactively call the tool** to anchor the analysis in existing plugin logic:
+        - decadal prediction: lead time selection/aggregation, skill score evaluation against reanalysis/observations, cross-validation, recalibration/bias correction, or tercile statistics
+        - climate and extreme indices from daily temperature or precipitation data, including their visualization
+        - extreme-event impact assessment: crop productivity under compound events, heat wave evaluation (HWMID), or intensity-duration-frequency analysis
+        - precipitation analysis: indices, return periods, or sub-hourly temporal disaggregation
+        - spatio-temporal data pre-processing, CMORization, or EOF/PCA analysis
+        - regional climate analysis: heatwave identification for urban impact, climatically similar district matching, or climate model output processing for impact studies
+        - creating or structuring a new Freva plugin
 
     Args:
     -----
@@ -622,7 +631,7 @@ async def plugin_code_search(user_query: str) -> GenericToolResult:
     Examples:
     ---------
     - "How does the 'leadtimeselektor' plugin work from a high-level perspective?"
-    - "How can I calculate climate prediction skill scores against observations or reanalysis data?"
+    - "How can I calculate climate prediction skill scores against observational data?"
     - "How can I assess the impact of extreme climate events on crop productivity?"
     """
     if not await gitlab_healthcheck():
