@@ -1,0 +1,13 @@
+[project]
+name = "reference-server"
+version = "0.1.0"
+description = "MCP server for curated ClimateClaw reference material"
+readme = "README.md"
+requires-python = ">=3.13"
+
+dependencies = [
+    "fastapi>=0.116.1",
+    "fastmcp>=2.12.4",
+    "httpx>=0.28.1",
+    "uvicorn[standard]>=0.35.0",
+]

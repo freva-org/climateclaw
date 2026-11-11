@@ -106,6 +106,7 @@ async def web_search(query: str) -> GenericToolResult:
 
             request_params: dict[str, Any] = {
                 "tool_choice": "auto",
+                "parallel_tool_calls": False,
                 "tools": [
                     {
                         "type": "web_search",

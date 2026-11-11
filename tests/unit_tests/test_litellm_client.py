@@ -95,6 +95,7 @@ async def test_acomplete_responses_accepts_messages_and_translates_payload():
         "input": [{"role": "user", "content": "hi"}],
         "temperature": 0.2,
         "max_output_tokens": 25,
+        "parallel_tool_calls": False,
     }
     assert first_text(result) == "hello from responses"
 

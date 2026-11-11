@@ -140,6 +140,9 @@ async def acomplete(
         else:
             payload["metadata"] = {"request_id": request_id}
 
+    # Keep tool execution ordered unless a caller deliberately opts in.
+    payload.setdefault("parallel_tool_calls", False)
+
     if not stream:
         return await _post_json(url, payload)
 
