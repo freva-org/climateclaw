@@ -154,6 +154,33 @@ async def test_acomplete_omits_tool_configuration_when_tools_are_empty():
     assert "tool_choice" not in captured["json"]
 
 
+@pytest.mark.asyncio
+async def test_acomplete_includes_error_body():
+    request = httpx.Request("POST", "http://litellm/v1/chat/completions")
+    fake = httpx.Response(
+        status_code=500,
+        json={"error": {"message": "bad"}},
+        request=request,
+    )
+
+    async def fake_post(self, *args, **kwargs):
+        return fake
+
+    with (
+        patch(
+            "climateclaw.services.streaming.litellm_client.httpx.AsyncClient.post",
+            new=fake_post,
+        ),
+        pytest.raises(httpx.HTTPStatusError) as ei,
+    ):
+        await acomplete(model="x", messages=[])
+
+    assert "LiteLLM returned HTTP 500" in str(ei.value)
+    assert "bad" in str(ei.value)
+    assert ei.value.response is not None
+    assert "bad" in (ei.value.response.text or "")
+
+
 def test_responses_helpers_extract_text_message_and_tool_calls():
     resp = {
         "output": [
@@ -186,33 +213,6 @@ def test_responses_helpers_extract_text_message_and_tool_calls():
             },
         }
     ]
-
-
-@pytest.mark.asyncio
-async def test_acomplete_includes_error_body():
-    request = httpx.Request("POST", "http://litellm/v1/chat/completions")
-    fake = httpx.Response(
-        status_code=500,
-        json={"error": {"message": "bad"}},
-        request=request,
-    )
-
-    async def fake_post(self, *args, **kwargs):
-        return fake
-
-    with (
-        patch(
-            "climateclaw.services.streaming.litellm_client.httpx.AsyncClient.post",
-            new=fake_post,
-        ),
-        pytest.raises(httpx.HTTPStatusError) as ei,
-    ):
-        await acomplete(model="x", messages=[])
-
-    assert "LiteLLM returned HTTP 500" in str(ei.value)
-    assert "bad" in str(ei.value)
-    assert ei.value.response is not None
-    assert "bad" in (ei.value.response.text or "")
 
 
 def test_chat_helpers_extract_text_refusal_and_tool_calls():
