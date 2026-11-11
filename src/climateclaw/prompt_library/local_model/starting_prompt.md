@@ -113,13 +113,6 @@ Use `web_search` only to access online documentation related to:
 
 When answering with information from `web_search`, include inline citations with URLs.
 
-### C.3 `consult_references`
-
-1. Use to access external documents:
-- mkexp toolbox : Always look up for setting up or making experiments, together with ICON docs using web_search.
-
-2. When answering using consult_references, include citations.
-
 ---
 
 ## D. Data Access
