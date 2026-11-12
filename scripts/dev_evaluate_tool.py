@@ -84,21 +84,21 @@ PLOT_METRICS = False  # plot metrics as bar charts at the end of the benchmark
 path_to_prompts = (
     Path(__file__).parent / "evaluation" / "benchmark-prompts-plugin-server.json"
 )
-# with open(path_to_prompts, "r", encoding="utf-8") as f:
-#     BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
+with open(path_to_prompts, "r", encoding="utf-8") as f:
+    BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
 
 # for quick sanity checking, use this one and comment out the main benchmark suite
-BENCHMARK = {
-    "leadtimeselektor": [
-        "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
-    ],
-    "problems": [
-        "How can I calculate climate prediction skill scores against observations or reanalysis data?",
-    ],
-    "crops": [
-        "How can I assess the impact of extreme climate events on crop productivity?",
-    ],
-}
+# BENCHMARK = {
+#     "leadtimeselektor": [
+#         "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
+#     ],
+#     "problems": [
+#         "How can I calculate climate prediction skill scores against observations or reanalysis data?",
+#     ],
+#     "crops": [
+#         "How can I assess the impact of extreme climate events on crop productivity?",
+#     ],
+# }
 
 path_to_plugins = (
     Path(__file__).parents[1]
@@ -126,20 +126,6 @@ class RunResult:
     duration: float
     tool_calls: dict[str, ToolCall]
     tool_outputs: dict[str, str]
-
-
-# def _tool_call_id(variant: SVToolCall | SVToolOutput) -> str:
-#     """Find the correlation ID shared by a tool call and its output."""
-#     for attribute in ("tool_call_id", "call_id", "id"):
-#         for obj in (variant, variant.content):
-#             value = (
-#                 obj.get(attribute)
-#                 if isinstance(obj, dict)
-#                 else getattr(obj, attribute, None)
-#             )
-#             if value is not None:
-#                 return str(value)
-#     raise ValueError("Tool event has no call ID")
 
 
 async def _run_once(

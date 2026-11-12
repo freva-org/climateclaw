@@ -596,7 +596,8 @@ async def detect_plugin_project(user_query: str) -> tuple[str | None, str | None
     except ValueError:
         return None, None
 
-    plugin = next((name for name in avail_plugins if name.lower() == plugin_raw), None)
+    avail_plugins = [p.lower() for p in avail_plugins]
+    plugin = plugin_raw if plugin_raw in avail_plugins else None
     project = FREVA_PROJECT_NAMES.get(project_raw)
     logger.info(
         "Auto-detected plugin '%s' and project '%s' for examining code base.",
