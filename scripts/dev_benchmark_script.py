@@ -18,6 +18,7 @@ os.environ["CLIMATECLAW_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
 os.environ["CLIMATECLAW_PLUGIN_CODE_SEARCH_SERVER_URL"] = "http://localhost:8053"
 os.environ["CLIMATECLAW_MONGODB_HOST"] = "localhost"
 
+from climateclaw.core.available_chatbots import default_chatbot
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.prompting import get_entire_prompt
 from climateclaw.services.authentication.auth import Authenticator
@@ -31,7 +32,7 @@ from climateclaw.services.streaming.stream_orchestrator import (
     prepare_for_stream,
     run_stream,
 )
-from climateclaw.services.streaming.stream_variants import from_sv_to_json
+from climateclaw.services.streaming.stream_variants import SVAssistant, from_sv_to_json
 
 """
 Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headless means that it runs without a web server, and without any user interaction. It is intended for development and benchmarking purposes.
@@ -46,7 +47,7 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headl
 # CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
 
-MODEL = "gpt-5.6-luna"  # model to benchmark
+MODEL = default_chatbot()  # model to benchmark
 USER_ID = "janedoe"
 PROMPT = "Hi, who are you?"
 
@@ -106,13 +107,13 @@ async def _run_once(idx: int, sem: asyncio.Semaphore) -> RunResult:
                 system_prompt=system_prompt,
                 storage=Storage,
             ):
-                if getattr(variant, "variant", None) == "Assistant":
-                    txt = getattr(variant, "text", "") or ""
+                if isinstance(variant, SVAssistant):
+                    txt = variant.content
                     chunk_count += 1
                     char_count += len(txt)
                     answer += txt
 
-                if PRINT_STREAM and getattr(variant, "variant", None) != "Assistant":
+                if PRINT_STREAM and not isinstance(variant, SVAssistant):
                     print(json.dumps(from_sv_to_json(variant), ensure_ascii=False))
 
             await end_and_save_conversation(thread_id, Storage)

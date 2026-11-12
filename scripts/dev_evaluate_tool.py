@@ -67,6 +67,7 @@ Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headl
 #######################################################
 
 # model to benchmark; replace with custom one if needed and available
+TOOL = "plugin_code_search"
 MODEL = default_chatbot()
 USER_ID = "janedoe"
 RUNS = 1  # number of runs to perform -> increase for more thorough benchmarking
@@ -83,21 +84,21 @@ PLOT_METRICS = False  # plot metrics as bar charts at the end of the benchmark
 path_to_prompts = (
     Path(__file__).parent / "evaluation" / "benchmark-prompts-plugin-server.json"
 )
-with open(path_to_prompts, "r", encoding="utf-8") as f:
-    BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
+# with open(path_to_prompts, "r", encoding="utf-8") as f:
+#     BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
 
 # for quick sanity checking, use this one and comment out the main benchmark suite
-# BENCHMARK = {
-#     "leadtimeselektor": [
-#         "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
-#     ],
-#     "problems": [
-#         "How can I calculate climate prediction skill scores against observations or reanalysis data?",
-#     ],
-#     "crops": [
-#         "How can I assess the impact of extreme climate events on crop productivity?",
-#     ],
-# }
+BENCHMARK = {
+    "leadtimeselektor": [
+        "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
+    ],
+    "problems": [
+        "How can I calculate climate prediction skill scores against observations or reanalysis data?",
+    ],
+    "crops": [
+        "How can I assess the impact of extreme climate events on crop productivity?",
+    ],
+}
 
 path_to_plugins = (
     Path(__file__).parents[1]
@@ -112,14 +113,33 @@ log = configure_logging("plugin-code-server_eval-script")
 
 
 @dataclass
+class ToolCall:
+    name: str
+    args: dict[str, str]
+
+
+@dataclass
 class RunResult:
     idx: int
     thread_id: str
     state: str
     duration: float
-    tool_name: str
-    tool_args: dict[str, str]
-    tool_output: str
+    tool_calls: dict[str, ToolCall]
+    tool_outputs: dict[str, str]
+
+
+# def _tool_call_id(variant: SVToolCall | SVToolOutput) -> str:
+#     """Find the correlation ID shared by a tool call and its output."""
+#     for attribute in ("tool_call_id", "call_id", "id"):
+#         for obj in (variant, variant.content):
+#             value = (
+#                 obj.get(attribute)
+#                 if isinstance(obj, dict)
+#                 else getattr(obj, attribute, None)
+#             )
+#             if value is not None:
+#                 return str(value)
+#     raise ValueError("Tool event has no call ID")
 
 
 async def _run_once(
@@ -146,9 +166,8 @@ async def _run_once(
 
         t0 = time.perf_counter()
         state = "Done"
-        tool_name = ""
-        tool_args = {}
-        tool_output = ""
+        tool_calls: dict[str, ToolCall] = {}
+        tool_outputs: dict[str, str] = {}
 
         try:
             async for variant in run_stream(
@@ -159,11 +178,14 @@ async def _run_once(
                 storage=storage,
             ):
                 if isinstance(variant, SVToolCall):
-                    tool_name = variant.tool_name
-                    tool_args = json.loads(variant.content or "{}")
+                    tool_calls[variant.id] = ToolCall(
+                        variant.tool_name, json.loads(variant.content or "{}")
+                    )
                 elif isinstance(variant, SVToolOutput):
                     result = variant.content.result
-                    tool_output = result if result else variant.content.error
+                    tool_outputs[variant.id] = (
+                        result if result else variant.content.error or ""
+                    )
 
             await end_and_save_conversation(thread_id, storage)
         except Exception as e:
@@ -175,9 +197,8 @@ async def _run_once(
             thread_id,
             state,
             duration,
-            tool_name,
-            tool_args,
-            tool_output,
+            tool_calls,
+            tool_outputs,
         )
 
 
@@ -196,26 +217,25 @@ async def run_benchmark_for_prompt(
     results = await asyncio.gather(*tasks)
     assert results, "No results returned from benchmark runs"
 
-    states = [r.state for r in results]
-    durations = [r.duration for r in results]
-    tool_names = [r.tool_name for r in results]
-    tool_args = [r.tool_args for r in results]
-    tool_outputs = [r.tool_output for r in results]
-
     if PRINT_RUN_SUMMARY:
-        for state, duration, tool_name, tool_arg, tool_output in zip(
-            states, durations, tool_names, tool_args, tool_outputs
-        ):
-            print(f"state: {state},\t Duration: {duration:.2f}s")
+        for result in results:
+            print(f"state: {result.state},\t Duration: {result.duration:.2f}s")
             print(f"Prompt: {prompt}")
-            print(f"called tool: {tool_name}")
-            print(f"  tool args: {tool_arg}")
-            print(f"  tool output: {tool_output}\n")
+            if not result.tool_calls:
+                print("No tool calls made.")
+                continue
+
+            for call_id, call in result.tool_calls.items():
+                print(f"called tool: {call.name} (call ID: {call_id})")
+                print(f"  tool args: {call.args}")
+                print(f"  tool output: {result.tool_outputs.get(call_id, '')}")
+                # only print results until first correct tool call/output
+                if call.name == TOOL:
+                    break
+            print()
 
     if EVAL_TOOL:
-        metrics_dict = _evaluate_tool_call_results(
-            tool_names, tool_args, tool_outputs, plugin
-        )
+        metrics_dict = _evaluate_tool_call_results(results, plugin)
         for k, v in metrics_dict.items():
             eval_dict[k].append(v)
 
@@ -223,48 +243,39 @@ async def run_benchmark_for_prompt(
 
 
 def _evaluate_tool_call_results(
-    tool_names: list[str],
-    tool_args: list[dict[str, str]],
-    tool_outputs: list[str],
+    results: list[RunResult],
     plugin: str,
 ) -> dict[str, float]:
-    ## evaluate results w.r.t. whether the plugin tool was called at all by the model
-    true_pos_tool = sum(
-        [
-            1
-            for tc, ta in zip(tool_names, tool_args)
-            if tc == "plugin_code_search" and "user_query" in ta
-        ]
-    )
-    false_pos_tool = sum(
-        [1 for tc in tool_names if tc != "plugin_code_search" and tc]
-    )  # model called a plugin, but it was the wrong one
-    false_neg_tool = sum(
-        [1 for tc in tool_names if not tc]
-    )  # model did not call any plugin, but should have done so
-
-    ## evaluate results w.r.t. whether the correct plugin was selected by the model
+    """Evaluate the tool call results for a given plugin for (in-)correct tool and plugin calls."""
+    # Count each outcome at most once per run, even if a tool is called repeatedly.
+    true_pos_tool = false_pos_tool = false_neg_tool = 0
+    true_pos_plugin = false_pos_plugin = false_neg_plugin = 0
     remaining_plugins = [p for p in ALL_PLUGINS if p != plugin]
-    correct_tool_calls = [
-        True if tc == "plugin_code_search" else False for tc in tool_names
-    ]
-    true_pos_plugin = sum(
-        [1 for to, tc in zip(tool_outputs, correct_tool_calls) if plugin in to and tc]
-    )  # model called the correct plugin and got the correct output
-    false_pos_plugin = sum(
-        [
-            1
-            for to, tc in zip(tool_outputs, correct_tool_calls)
-            if any([p in to for p in remaining_plugins]) and tc
-        ]
-    )  # model called a plugin, but it was the wrong one
-    false_neg_plugin = sum(
-        [
-            1
-            for to, tc in zip(tool_outputs, correct_tool_calls)
-            if not any([p in to for p in ALL_PLUGINS]) and tc
-        ]
-    )  # model did not call any known plugin, but should have done so
+
+    for result in results:
+        correct_calls = {
+            call_id: call
+            for call_id, call in result.tool_calls.items()
+            if call.name == TOOL
+        }
+        if any("user_query" in call.args for call in correct_calls.values()):
+            true_pos_tool += 1
+        elif not correct_calls and result.tool_calls:
+            false_pos_tool += 1
+        else:
+            false_neg_tool += 1
+
+        if correct_calls:
+            outputs = [
+                result.tool_outputs.get(call_id, "") for call_id in correct_calls
+            ]
+            true_pos_plugin += int(any(plugin in output for output in outputs))
+            false_pos_plugin += int(
+                any(p in output for output in outputs for p in remaining_plugins)
+            )
+            false_neg_plugin += int(
+                not any(p in output for output in outputs for p in ALL_PLUGINS)
+            )
 
     # compute metrics
     accuracy_tool = true_pos_tool / RUNS
@@ -307,6 +318,7 @@ def _evaluate_tool_call_results(
 
 
 def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
+    """Plot evaluation metrics for the tool and plugin."""
     current_date = datetime.today().strftime("%Y-%m-%d")
     # pie chart for tool/plugin TP, FP, FN
     fig, axs = plt.subplots(1, 2, figsize=(12, 6))
@@ -329,10 +341,10 @@ def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
             autopct="%1.1f%%",
             textprops=dict(fontsize=14, color="white", fontweight="bold"),
         )
-        ax.legend(pie.wedges, metrics, title="Metrics", loc="best", fontsize=14)
+        ax.legend(pie[0], metrics, title="Metrics", loc="best", fontsize=14)
         ax.set_title(title, fontsize=16)
     plt.suptitle(
-        f"Evaluation Metrics for 'plugin_code_search' tool (Model: {MODEL}, Runs/Query: 30)"
+        f"Evaluation Metrics for '{TOOL}' tool (Model: {MODEL}, Runs/Query: 30)"
     )
     plt.tight_layout()
     plt.subplots_adjust(wspace=0.4)
@@ -358,7 +370,7 @@ def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
     axs[1].bar(plugin_metrics.keys(), plugin_metrics.values())
     axs[1].set_title("Plugin Metrics")
     plt.suptitle(
-        f"Evaluation Metrics for 'plugin_code_search' tool (Model: {MODEL}, Runs/Query: 30)"
+        f"Evaluation Metrics for '{TOOL}' tool (Model: {MODEL}, Runs/Query: 30)"
     )
     plt.tight_layout()
     plt.subplots_adjust(wspace=0.3)
@@ -366,7 +378,8 @@ def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
 
 
 async def main() -> None:
-    print(f"\nStarting evaluation of 'plugin_code_search' tool for model {MODEL} ...")
+    """Main entry point for evaluating the tool."""
+    print(f"\nStarting evaluation of '{TOOL}' tool for model '{MODEL}' ...")
     if SILENCE_LOGGING:
         silence_logger()
 

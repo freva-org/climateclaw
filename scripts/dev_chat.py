@@ -20,6 +20,7 @@ import logging
 from typing import Any
 
 from climateclaw.api.chatbot.streamresponse import _sse_data
+from climateclaw.core.available_chatbots import default_chatbot
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.prompting import get_entire_prompt
 from climateclaw.core.settings import get_settings
@@ -70,7 +71,7 @@ settings = get_settings()
 # CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
 
-MODEL = "gpt-5.6-luna"  # model to use
+MODEL = default_chatbot()  # model to use
 USER_ID = "janedoe"
 
 PRINT_DEBUG = False  # Print non-Assistant stream variants (ServerHint, etc.)

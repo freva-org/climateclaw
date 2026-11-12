@@ -15,6 +15,7 @@ from fastmcp import FastMCP
 
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
+from climateclaw.tools.active_requests import ACTIVE_REQUESTS
 from climateclaw.tools.header_gate import RequestIdMiddleware, make_header_gate
 from climateclaw.tools.models import GenericToolResult
 
@@ -90,6 +91,7 @@ app = make_header_gate(
     header_name_list=[USERNAME, MODEL],
     logger=logger,
     mcp_path=PATH,
+    on_cancel_request=ACTIVE_REQUESTS.cancel,
 )
 
 
@@ -195,7 +197,7 @@ async def has_read_access(project_id: int, username: str) -> bool:
     if visibility == "public":
         return True
 
-    # Internal: all authenticated (non-external) users can read
+    # Internal: all authenticated users can read
     resp = await _gitlab_http.get("/users", params={"username": username})
     resp.raise_for_status()
     users = resp.json()
@@ -353,17 +355,21 @@ async def llm_file_selection(
     """
     try:
         raw_text = await call_llm(prompt)
-        # Strip markdown code fences if present
-        if raw_text.startswith("```"):
-            raw_text = "\n".join(raw_text.split("\n")[1:])
-        if raw_text.endswith("```"):
-            raw_text = "\n".join(raw_text.split("\n")[:-1])
-        select_files: list[str] = json.loads(raw_text.strip())
+        # Strip all markdown code fence markers
+        raw_text = re.sub(r"```", "", raw_text)
+        parsed_files = json.loads(raw_text.strip())
+        if not isinstance(parsed_files, list) or not all(
+            isinstance(path, str) for path in parsed_files
+        ):
+            raise ValueError("Expected a JSON array of file path strings")
+        select_files: list[str] = parsed_files
     except Exception as e:
-        logger.warning("LLM file selection failed (%s); falling back to heuristic.", e)
+        logger.warning(
+            "LLM file selection or parsing failed (%s); falling back to heuristic.", e
+        )
     finally:
-        # fallback in case the LLM response is invalid or empty
-        if "select_files" not in locals() or not select_files:
+        # Fallback when selection failed, but preserve a valid empty array
+        if "select_files" not in locals():
             select_files = file_paths
 
     # Return only paths that exist in repo tree and conform to exclusion pattern
@@ -540,8 +546,8 @@ async def validate_plugin_call(
                 project,
             )
             error_msg = (
-                f"User access for {user_name} to plugin '{plugin}' denied! "
-                f"Get access by being added to DKRZ GitLab project '{project}'."
+                f"User access for {user_name} to plugin '{plugin}' denied! Possible solutions: "
+                f"Get access by being added to DKRZ GitLab project '{project}', change your user permission for this project, or log in with appropriate credentials."
             )
             return False, error_msg
         logger.info(
@@ -590,7 +596,7 @@ async def detect_plugin_project(user_query: str) -> tuple[str | None, str | None
     except ValueError:
         return None, None
 
-    plugin = plugin_raw if plugin_raw in avail_plugins else None
+    plugin = next((name for name in avail_plugins if name.lower() == plugin_raw), None)
     project = FREVA_PROJECT_NAMES.get(project_raw)
     logger.info(
         "Auto-detected plugin '%s' and project '%s' for examining code base.",
