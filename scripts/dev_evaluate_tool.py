@@ -291,12 +291,12 @@ def _evaluate_tool_call_results(
         "true_pos_tool": true_pos_tool / RUNS,
         "false_pos_tool": false_pos_tool / RUNS,
         "false_neg_tool": false_neg_tool / RUNS,
-        "true_pos_plugin": true_pos_plugin / RUNS,
-        "false_pos_plugin": false_pos_plugin / RUNS,
-        "false_neg_plugin": false_neg_plugin / RUNS,
         "accuracy_tool": accuracy_tool,
         "precision_tool": precision_tool,
         "recall_tool": recall_tool,
+        "true_pos_plugin": true_pos_plugin / RUNS,
+        "false_pos_plugin": false_pos_plugin / RUNS,
+        "false_neg_plugin": false_neg_plugin / RUNS,
         "accuracy_plugin": accuracy_plugin,
         "precision_plugin": precision_plugin,
         "recall_plugin": recall_plugin,
@@ -391,8 +391,10 @@ async def main() -> None:
         print(
             f"\n=== Average metrics [in %] across all prompts ({RUNS} runs/prompt) ==="
         )
-        for k, v in avg_metrics.items():
+        for i, (k, v) in enumerate(avg_metrics.items()):
             print(f"  {k:<17}: {v:.1%}")
+            if i == len(avg_metrics) // 2 - 1:
+                print()
 
     print("\nEvaluation completed.")
     # plot metrics as bar charts (one for tool, one for plugin)

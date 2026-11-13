@@ -9,7 +9,7 @@ Each of the following sections belongs to a specific Freva instance/project, whe
 ## coming decade
 
 * **leadtimeselektor**: extracts and aggregates lead times from decadal prediction ensembles
-* **problems**: performs skill score calculation of a decadal climate experiment (and a reference experiment, if applicable) against reanalysis or observation
+* **problems**: performs calculation of verification/skill metrics from a (decadal) climate prediction (and a reference experiment, if applicable) against reanalysis or observation
 * **cvprepare**: prepares cross-validation datasets for decadal prediction skill assessment
 * **recalibration**: re-calibrates decadal climate data to observations for correction of model drift and bias
 * **terciles**: computes tercile-based statistics for prediction skill assessment
