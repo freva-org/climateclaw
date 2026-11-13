@@ -1,0 +1,409 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import re
+import sys
+import time
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+
+from matplotlib import pyplot as plt
+from tqdm import tqdm
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+os.environ["CLIMATECLAW_DEV"] = "1"  # "1"/"true"/"yes" means dev mode
+os.environ["CLIMATECLAW_LITE_LLM_ADDRESS"] = "http://localhost:4000"
+os.environ["CLIMATECLAW_RAG_SERVER_URL"] = "http://localhost:8050"
+os.environ["CLIMATECLAW_CODE_SERVER_URL"] = "http://localhost:8051"
+os.environ["CLIMATECLAW_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
+os.environ["CLIMATECLAW_PLUGIN_CODE_SEARCH_SERVER_URL"] = "http://localhost:8053"
+os.environ["CLIMATECLAW_MONGODB_HOST"] = "localhost"
+
+from climateclaw.core.available_chatbots import default_chatbot
+from climateclaw.core.logging_setup import configure_logging, silence_logger
+from climateclaw.core.prompting import get_entire_prompt
+from climateclaw.services.authentication.auth import Authenticator
+from climateclaw.services.storage.helpers import create_dir_at_cache
+from climateclaw.services.storage.mongodb_storage import ThreadStorage
+from climateclaw.services.streaming.active_conversations import (
+    end_and_save_conversation,
+    new_thread_id,
+)
+from climateclaw.services.streaming.stream_orchestrator import (
+    prepare_for_stream,
+    run_stream,
+)
+from climateclaw.services.streaming.stream_variants import (
+    SVToolCall,
+    SVToolOutput,
+)
+
+"""
+Headless dev/benchmark runner mirroring /chatbot/streamresponse behaviour. Headless means that it runs without a web server, and without any user interaction. It is intended for development and benchmarking purposes.
+
+- Config below (no argparse).
+- One shared MongoDB storage instance, closed when evaluation exits.
+- RUNS/CONCURRENCY for benchmarks; set CONCURRENCY=1 for clean mode.
+- Uses ONE global McpManager; orchestrator ties MCP session to thread_id.
+"""
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CONFIG
+# ──────────────────────────────────────────────────────────────────────────────
+
+################### IMPORTANT NOTE ###################
+# in order to make this evaluation work correctly, ensure the following steps:
+# 1. the MCP tool logic lays in 'src/climateclaw/tools/plugin_code_search/server.py':
+# for isolated testing, comment out everything after `detect_plugin_project` is called, and replace with:
+# return GenericToolResult(result=f"plugin_name: {plugin}, project_name: {project}")
+# 2. change username to a valid one: either in this script via `Auth = Authenticator.local(username="<your_username>")` or in server.py's `validate_plugin_call` function
+# 3. then, spin up the docker compose environment with all necessary services (dev.sh script)
+# 4. run this evaluation script from the terminal: `uv run scripts/dev_evaluate_tool.py`
+#######################################################
+
+# model to benchmark; replace with custom one if needed and available
+TOOL = "plugin_code_search"
+MODEL = default_chatbot()
+USER_ID = "janedoe"
+RUNS = 1  # number of runs to perform -> increase for more thorough benchmarking
+CONCURRENCY = 1  # number of concurrent runs to perform -> increase for more parallelism (aka faster execution)
+
+PRINT_RUN_SUMMARY = True  # print summary of each run (state, prompt, tool called, tool args, tool output)
+SILENCE_LOGGING = True
+
+# run evaluation of tool calls (TP, FP, FN, accuracy, precision, recall)
+EVAL_TOOL = True
+PLOT_METRICS = False  # plot metrics as bar charts at the end of the benchmark
+
+## evaluation suite: direct questions about a plugin + indirect ones (more widely phrased)
+path_to_prompts = (
+    Path(__file__).parent / "evaluation" / "benchmark-prompts-plugin-server.json"
+)
+with open(path_to_prompts, "r", encoding="utf-8") as f:
+    BENCHMARK = {k.lower(): v for k, v in json.load(f).items()}
+
+# for quick sanity checking, use this one and comment out the main benchmark suite
+# BENCHMARK = {
+#     "leadtimeselektor": [
+#         "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
+#     ],
+#     "problems": [
+#         "How can I calculate climate prediction skill scores against observations or reanalysis data?",
+#     ],
+#     "crops": [
+#         "How can I assess the impact of extreme climate events on crop productivity?",
+#     ],
+# }
+
+path_to_plugins = (
+    Path(__file__).parents[1]
+    / "src/climateclaw/tools/plugin_code_search/available_plugins.md"
+)
+plugin_overview = path_to_plugins.read_text(encoding="utf-8")
+plugins = re.findall(r"\*\*([^*]+)\*\*", plugin_overview)
+ALL_PLUGINS = [p.lower() for p in plugins]
+
+# ──────────────────────────────────────────────────────────────────────────────
+log = configure_logging("plugin-code-server_eval-script")
+
+
+@dataclass
+class ToolCall:
+    name: str
+    args: dict[str, str]
+
+
+@dataclass
+class RunResult:
+    idx: int
+    thread_id: str
+    state: str
+    duration: float
+    tool_calls: dict[str, ToolCall]
+    tool_outputs: dict[str, str]
+
+
+async def _run_once(
+    idx: int, sem: asyncio.Semaphore, prompt: str, storage: ThreadStorage
+) -> RunResult:
+    """Run a single benchmark run for the given prompt and storage context."""
+
+    async with sem:
+        thread_id = await new_thread_id()
+        read_history = False
+
+        Auth = Authenticator.local(username="dev_user")
+        create_dir_at_cache(thread_id)
+
+        await prepare_for_stream(
+            thread_id=thread_id,
+            user_id=USER_ID,
+            Auth=Auth,
+            Storage=storage,
+            read_history=read_history,
+        )
+
+        system_prompt = get_entire_prompt(USER_ID, thread_id, MODEL)
+
+        t0 = time.perf_counter()
+        state = "Done"
+        tool_calls: dict[str, ToolCall] = {}
+        tool_outputs: dict[str, str] = {}
+
+        try:
+            async for variant in run_stream(
+                model=MODEL,
+                thread_id=thread_id,
+                user_input=prompt,
+                system_prompt=system_prompt,
+                storage=storage,
+            ):
+                if isinstance(variant, SVToolCall):
+                    tool_calls[variant.id] = ToolCall(
+                        variant.tool_name, json.loads(variant.content or "{}")
+                    )
+                elif isinstance(variant, SVToolOutput):
+                    result = variant.content.result
+                    tool_outputs[variant.id] = (
+                        result if result else variant.content.error or ""
+                    )
+
+            await end_and_save_conversation(thread_id, storage)
+        except Exception as e:
+            state = f"Error:{e}"
+
+        duration = time.perf_counter() - t0
+        return RunResult(
+            idx,
+            thread_id,
+            state,
+            duration,
+            tool_calls,
+            tool_outputs,
+        )
+
+
+async def run_benchmark_for_prompt(
+    prompt: str,
+    plugin: str,
+    eval_dict: dict[str, list[float]],
+    storage: ThreadStorage,
+) -> dict[str, list[float]]:
+    """Run the benchmark for a given prompt and plugin."""
+
+    sem = asyncio.Semaphore(CONCURRENCY)
+    tasks = [
+        asyncio.create_task(_run_once(i, sem, prompt, storage)) for i in range(RUNS)
+    ]
+    results = await asyncio.gather(*tasks)
+    assert results, "No results returned from benchmark runs"
+
+    if PRINT_RUN_SUMMARY:
+        for result in results:
+            print(f"state: {result.state},\t Duration: {result.duration:.2f}s")
+            print(f"Prompt: {prompt}")
+            if not result.tool_calls:
+                print("No tool calls made.")
+                continue
+
+            for call_id, call in result.tool_calls.items():
+                print(f"called tool: {call.name} (call ID: {call_id})")
+                print(f"  tool args: {call.args}")
+                print(f"  tool output: {result.tool_outputs.get(call_id, '')}")
+                # only print results until first correct tool call/output
+                if call.name == TOOL:
+                    break
+            print()
+
+    if EVAL_TOOL:
+        metrics_dict = _evaluate_tool_call_results(results, plugin)
+        for k, v in metrics_dict.items():
+            eval_dict[k].append(v)
+
+    return eval_dict
+
+
+def _evaluate_tool_call_results(
+    results: list[RunResult],
+    plugin: str,
+) -> dict[str, float]:
+    """Evaluate the tool call results for a given plugin for (in-)correct tool and plugin calls."""
+    # Count each outcome at most once per run, even if a tool is called repeatedly.
+    true_pos_tool = false_pos_tool = false_neg_tool = 0
+    true_pos_plugin = false_pos_plugin = false_neg_plugin = 0
+    remaining_plugins = [p for p in ALL_PLUGINS if p != plugin]
+
+    for result in results:
+        correct_calls = {
+            call_id: call
+            for call_id, call in result.tool_calls.items()
+            if call.name == TOOL
+        }
+        if any("user_query" in call.args for call in correct_calls.values()):
+            true_pos_tool += 1
+        elif not correct_calls and result.tool_calls:
+            false_pos_tool += 1
+        else:
+            false_neg_tool += 1
+
+        if correct_calls:
+            outputs = [
+                result.tool_outputs.get(call_id, "") for call_id in correct_calls
+            ]
+            true_pos_plugin += int(any(plugin in output for output in outputs))
+            false_pos_plugin += int(
+                any(p in output for output in outputs for p in remaining_plugins)
+            )
+            false_neg_plugin += int(
+                not any(p in output for output in outputs for p in ALL_PLUGINS)
+            )
+
+    # compute metrics
+    accuracy_tool = true_pos_tool / RUNS
+    precision_tool = (
+        true_pos_tool / (true_pos_tool + false_pos_tool)
+        if (true_pos_tool + false_pos_tool) > 0
+        else 0
+    )
+    recall_tool = (
+        true_pos_tool / (true_pos_tool + false_neg_tool)
+        if (true_pos_tool + false_neg_tool) > 0
+        else 0
+    )
+    accuracy_plugin = true_pos_plugin / RUNS
+    precision_plugin = (
+        true_pos_plugin / (true_pos_plugin + false_pos_plugin)
+        if (true_pos_plugin + false_pos_plugin) > 0
+        else 0
+    )
+    recall_plugin = (
+        true_pos_plugin / (true_pos_plugin + false_neg_plugin)
+        if (true_pos_plugin + false_neg_plugin) > 0
+        else 0
+    )
+
+    return {
+        "true_pos_tool": true_pos_tool / RUNS,
+        "false_pos_tool": false_pos_tool / RUNS,
+        "false_neg_tool": false_neg_tool / RUNS,
+        "accuracy_tool": accuracy_tool,
+        "precision_tool": precision_tool,
+        "recall_tool": recall_tool,
+        "true_pos_plugin": true_pos_plugin / RUNS,
+        "false_pos_plugin": false_pos_plugin / RUNS,
+        "false_neg_plugin": false_neg_plugin / RUNS,
+        "accuracy_plugin": accuracy_plugin,
+        "precision_plugin": precision_plugin,
+        "recall_plugin": recall_plugin,
+    }
+
+
+def plot_metrics(avg_metrics: dict[str, float], save_dir: Path) -> None:
+    """Plot evaluation metrics for the tool and plugin."""
+    current_date = datetime.today().strftime("%Y-%m-%d")
+    # pie chart for tool/plugin TP, FP, FN
+    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+    metrics = ["TP", "FP", "FN"]
+    tool_metrics = {
+        "True Positives": avg_metrics.get("true_pos_tool", 0),
+        "False Positives": avg_metrics.get("false_pos_tool", 0),
+        "False Negatives": avg_metrics.get("false_neg_tool", 0),
+    }
+    plugin_metrics = {
+        "True Positives": avg_metrics.get("true_pos_plugin", 0),
+        "False Positives": avg_metrics.get("false_pos_plugin", 0),
+        "False Negatives": avg_metrics.get("false_neg_plugin", 0),
+    }
+    charts = [tool_metrics, plugin_metrics]
+    titles = ["Tool Call", "Plugin Call"]
+    for ax, chart, title in zip(axs, charts, titles):
+        pie = ax.pie(
+            chart.values(),
+            autopct="%1.1f%%",
+            textprops=dict(fontsize=14, color="white", fontweight="bold"),
+        )
+        ax.legend(pie[0], metrics, title="Metrics", loc="best", fontsize=14)
+        ax.set_title(title, fontsize=16)
+    plt.suptitle(
+        f"Evaluation Metrics for '{TOOL}' tool (Model: {MODEL}, Runs/Query: 30)"
+    )
+    plt.tight_layout()
+    plt.subplots_adjust(wspace=0.4)
+    plt.savefig(save_dir / f"tool_evaluation_pie_charts_{current_date}.png", dpi=400)
+
+    # bar chart for tool/plugin accuracy, precision, recall
+    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+    for ax in axs:
+        ax.set_ylim(0, 1)
+        ax.set_ylabel("Metric Value", labelpad=12)
+    tool_metrics = {
+        "Accuracy": avg_metrics.get("accuracy_tool", 0),
+        "Precision": avg_metrics.get("precision_tool", 0),
+        "Recall": avg_metrics.get("recall_tool", 0),
+    }
+    plugin_metrics = {
+        "Accuracy": avg_metrics.get("accuracy_plugin", 0),
+        "Precision": avg_metrics.get("precision_plugin", 0),
+        "Recall": avg_metrics.get("recall_plugin", 0),
+    }
+    axs[0].bar(tool_metrics.keys(), tool_metrics.values())
+    axs[0].set_title("Tool Metrics")
+    axs[1].bar(plugin_metrics.keys(), plugin_metrics.values())
+    axs[1].set_title("Plugin Metrics")
+    plt.suptitle(
+        f"Evaluation Metrics for '{TOOL}' tool (Model: {MODEL}, Runs/Query: 30)"
+    )
+    plt.tight_layout()
+    plt.subplots_adjust(wspace=0.3)
+    plt.savefig(save_dir / f"tool_evaluation_metrics_{current_date}.png", dpi=400)
+
+
+async def main() -> None:
+    """Main entry point for evaluating the tool."""
+    print(f"\nStarting evaluation of '{TOOL}' tool for model '{MODEL}' ...")
+    if SILENCE_LOGGING:
+        silence_logger()
+
+    eval_dict: dict[str, list[float]] = defaultdict(list)
+    prompt_count = sum(len(prompts) * RUNS for prompts in BENCHMARK.values())
+    storage = await ThreadStorage.create()
+    try:
+        with tqdm(total=prompt_count, desc="Evaluation", unit="prompt") as progress:
+            for plugin, prompts in BENCHMARK.items():
+                progress.set_postfix_str(f"plugin={plugin}")
+                for prompt in prompts:
+                    # print(f"\n=== Running benchmark for prompt: {prompt} ===")
+                    eval_dict = await run_benchmark_for_prompt(
+                        prompt, plugin, eval_dict, storage
+                    )
+                    progress.update(RUNS)
+    finally:
+        await storage.close()
+
+    # compute average metrics across all prompts
+    if EVAL_TOOL:
+        avg_metrics = {k: sum(v) / len(v) for k, v in eval_dict.items()}
+        print(
+            f"\n=== Average metrics [in %] across all prompts ({RUNS} runs/prompt) ==="
+        )
+        for i, (k, v) in enumerate(avg_metrics.items()):
+            print(f"  {k:<17}: {v:.1%}")
+            if i == len(avg_metrics) // 2 - 1:
+                print()
+
+    print("\nEvaluation completed.")
+    # plot metrics as bar charts (one for tool, one for plugin)
+    if PLOT_METRICS and EVAL_TOOL:
+        eval_dir = Path(__file__).parent / "evaluation"
+        eval_dir.mkdir(parents=True, exist_ok=True)
+        plot_metrics(avg_metrics, eval_dir)
+        print(f"Results saved in {Path(__file__).parent / 'evaluation'}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import os
-import pathlib
 import sys
+from pathlib import Path
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 os.environ["CLIMATECLAW_DEV"] = "1"
 os.environ["CLIMATECLAW_LITE_LLM_ADDRESS"] = "http://localhost:4000"
 os.environ["CLIMATECLAW_RAG_SERVER_URL"] = "http://localhost:8050"
 os.environ["CLIMATECLAW_CODE_SERVER_URL"] = "http://localhost:8051"
 os.environ["CLIMATECLAW_WEB_SEARCH_SERVER_URL"] = "http://localhost:8052"
+os.environ["CLIMATECLAW_PLUGIN_CODE_SEARCH_SERVER_URL"] = "http://localhost:8053"
 os.environ["CLIMATECLAW_MONGODB_HOST"] = "localhost"
 
 
@@ -19,6 +20,7 @@ import logging
 from typing import Any
 
 from climateclaw.api.chatbot.streamresponse import _sse_data
+from climateclaw.core.available_chatbots import default_chatbot
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.prompting import get_entire_prompt
 from climateclaw.core.settings import get_settings
@@ -69,7 +71,7 @@ settings = get_settings()
 # CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
 
-MODEL = "gpt-4.1"
+MODEL = default_chatbot()  # model to use
 USER_ID = "janedoe"
 
 PRINT_DEBUG = False  # Print non-Assistant stream variants (ServerHint, etc.)

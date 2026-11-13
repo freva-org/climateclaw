@@ -1,0 +1,52 @@
+{
+  "leadtimeselektor": [
+    "How does the 'leadtimeselektor' plugin work from a high-level perspective?",
+    "How can I best extract lead times from decadal climate predictions?",
+    "How can I select and aggregate specific lead times from decadal prediction ensembles?"
+  ],
+  "problems": [
+    "How does the 'problems' plugin evaluate the predictive skill of a decadal climate experiment?",
+    "I want to perform skill score evaluation for climate data against observations. How can I do that?",
+    "How can I calculate climate prediction skill scores against observations or reanalysis data?"
+  ],
+  "psi": [
+    "What precipitation indices can I compute using the 'psi' plugin?",
+    "How can I calculate precipitation indices from a precipitation time series?",
+    "How can I analyse precipitation characteristics with the 'psi' plugin?"
+  ],
+  "crops": [
+    "What kind of crop impact analysis can I perform with the 'crops' plugin?",
+    "How can I assess the impact of extreme climate events on crop productivity?",
+    "How can I evaluate the effects of extreme and compound climate events on crops?"
+  ],
+  "hwmid": [
+    "How does the 'hwmid' plugin work from a high-level perspective?",
+    "How can I evaluate heat waves using the Heat Wave Magnitude Index?",
+    "How can I calculate the Heat Wave Magnitude Index from climate data?"
+  ],
+  "climdexcalc2": [
+    "What is the purpose of the 'climdexcalc2' plugin?",
+    "How can I calculate climate and extreme indices from daily temperature and precipitation data?",
+    "How can I derive climate indices from daily temperature and precipitation datasets?"
+  ],
+  "Regionmatch": [
+    "How can I use 'Regionmatch' to find comparable districts based on climate and other regional characteristics?",
+    "How can I identify German districts that are climatically similar to a region of interest?",
+    "What criteria does the 'Regionmatch' plugin use to identify similar regions?"
+  ],
+  "Heat2UrbanImpact": [
+    "How does the 'Heat2UrbanImpact' plugin work from a high-level perspective?",
+    "How can I identify heatwaves from regional climate model data for urban impact studies?",
+    "How can I prepare regional climate data for use in urban impact models?"
+  ],
+  "WayDown": [
+    "How can I generate sub-hourly precipitation data from daily values with 'WayDown'?",
+    "How can I disaggregate daily precipitation data to the sub-hourly scale?",
+    "What is the purpose of the 'WayDown' plugin for urban hydrological impact studies?"
+  ],
+  "freva-plugin-template": [
+    "I want to create a new Freva plugin. How can I do that?",
+    "What files and structure are required to create a plugin that is recognized by Freva?",
+    "How can I get started with developing a new Freva plugin using the template?"
+  ]
+}
