@@ -13,6 +13,7 @@ import httpx
 from async_lru import alru_cache
 from fastmcp import FastMCP
 
+from climateclaw.core.available_chatbots import available_chatbots, default_chatbot
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
 from climateclaw.tools.active_requests import ACTIVE_REQUESTS
@@ -72,7 +73,7 @@ HOST = os.getenv("CLIMATECLAW_MCP_HOST", "0.0.0.0")
 PORT = int(os.getenv("CLIMATECLAW_MCP_PORT", "8053"))
 PATH = os.getenv("CLIMATECLAW_MCP_PATH", "/mcp")  # standard path
 USERNAME = "username"
-MODEL = "model"
+MODEL = "deepseek-v4.1"
 
 
 # ─── App ────────────────────────────────────────────────────────────────────
@@ -82,13 +83,12 @@ logger.info("Starting Freva-Plugin Code Search MCP server on %s:%s%s", HOST, POR
 
 # Per-request header context
 username_ctx: ContextVar[str | None] = ContextVar("username_ctx", default=None)
-model_ctx: ContextVar[str | None] = ContextVar("model_ctx", default=None)
 
 # Start the MCP server using Streamable HTTP transport
 app = make_header_gate(
     mcp.http_app(),
-    ctx_list=[username_ctx, model_ctx],
-    header_name_list=[USERNAME, MODEL],
+    ctx_list=[username_ctx],
+    header_name_list=[USERNAME],
     logger=logger,
     mcp_path=PATH,
     on_cancel_request=ACTIVE_REQUESTS.cancel,
@@ -104,17 +104,9 @@ def _get_user():
         return user
 
 
-def _get_model():
-    model = model_ctx.get()
-    if not model:
-        logger.error(f"Missing required header '{MODEL}'! ")
-        return MODEL
-    else:
-        return model
-
-
 async def call_llm(prompt: str) -> str:
-    model = _get_model()
+    model = MODEL if MODEL in available_chatbots() else default_chatbot()
+
     for attempt in range(2):
         try:
             resp = await acomplete(

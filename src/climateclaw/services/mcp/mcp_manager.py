@@ -4,7 +4,6 @@ import asyncio
 import os
 from typing import Any, Literal
 
-from climateclaw.core.available_chatbots import available_chatbots, default_chatbot
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.core.settings import get_settings
 from climateclaw.services.authentication.auth import Authenticator
@@ -235,8 +234,6 @@ def get_mcp_headers(
 ) -> dict[str, dict[str, str | None]]:
     mongodb_uri = get_mongodb_uri()
 
-    model = "gpt-5.6-luna"
-
     headers: dict[str, dict[str, str | None]] = {
         "rag-server": {
             "mongodb-uri": mongodb_uri,
@@ -246,7 +243,6 @@ def get_mcp_headers(
         },
         "plugin-code-search-server": {
             "username": auth.username or "unknown_user",
-            "model": model if model in available_chatbots() else default_chatbot(),
         },
     }
     return headers

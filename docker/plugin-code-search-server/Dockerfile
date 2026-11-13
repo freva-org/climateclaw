@@ -12,6 +12,8 @@ RUN conda run -n env uv pip install --no-cache-dir --system \
 
 EXPOSE ${CLIMATECLAW_MCP_PORT:-8053}
 
+COPY litellm_config.yaml litellm_config.dev.yaml /app/
+
 COPY src /app/src
 
 # Launch server
