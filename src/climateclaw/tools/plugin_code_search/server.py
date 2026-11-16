@@ -68,12 +68,13 @@ Workflow Guidelines:
 """
 
 
-# ── Server Config ────────────────────────────────────────────────────────────────
+# ── MCP Server Config ───────────────────────────────────────────────────────
 HOST = os.getenv("CLIMATECLAW_MCP_HOST", "0.0.0.0")
 PORT = int(os.getenv("CLIMATECLAW_MCP_PORT", "8053"))
 PATH = os.getenv("CLIMATECLAW_MCP_PATH", "/mcp")  # standard path
 USERNAME = "username"
 MODEL = "deepseek-v4.1"
+MODEL = MODEL if MODEL in available_chatbots() else default_chatbot()
 
 
 # ─── App ────────────────────────────────────────────────────────────────────
@@ -105,12 +106,11 @@ def _get_user():
 
 
 async def call_llm(prompt: str) -> str:
-    model = MODEL if MODEL in available_chatbots() else default_chatbot()
-
+    """Call the language model with the given prompt and return the response as a string."""
     for attempt in range(2):
         try:
             resp = await acomplete(
-                model=model,
+                model=MODEL,
                 messages=[{"role": "user", "content": prompt}],
             )
             raw_text = first_text(resp).strip()
