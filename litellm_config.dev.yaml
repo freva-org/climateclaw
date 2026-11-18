@@ -29,6 +29,13 @@ model_list:
       api_base: "http://host.docker.internal:11434"
     model_info:
       supports_function_calling: true
+  - model_name: "deepseek-v4.1"
+    litellm_params:
+      model: "hosted_vllm/deepseek-v4.1-flash"
+      api_base: "os.environ/CLIMATECLAW_VLLM_API_BASE"
+      api_key: "os.environ/CLIMATECLAW_VLLM_API_KEY"
+    model_info:
+      supports_function_calling: true
 
 
 litellm_settings:
