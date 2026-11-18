@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Tuple
 from urllib.parse import quote as urlquote
+from urllib.parse import unquote, urlsplit
 
 import httpx
 from async_lru import alru_cache
@@ -237,12 +238,59 @@ async def fetch_repo_tree_and_branch(project_id: int) -> tuple[list[str], str]:
     return paths, default_branch
 
 
+def file_paths_from_urls(
+    file_urls: list[str], plugin: str, project: str, allowed_paths: set[str]
+) -> tuple[list[str], str]:
+    """
+    Return unique repository paths named by valid GitLab file URLs,
+    next to the branch they belong to.
+    """
+    expected_host = urlsplit(GITLAB_BASE_URL).hostname
+    expected_prefix = f"/{project}/plugins4freva/{plugin}"
+
+    selected_paths: list[str] = []
+    branch = ""
+    for fl_url in file_urls:
+        try:
+            parsed_url = urlsplit(fl_url)
+            hostname = parsed_url.hostname
+        except ValueError:
+            continue
+        url_path = unquote(parsed_url.path)
+        if (
+            hostname != expected_host
+            or parsed_url.scheme not in {"http", "https"}
+            or not url_path.startswith(expected_prefix)
+        ):
+            continue
+
+        repo_url_path = url_path[len(expected_prefix) :]
+        marker = "/-/blob/"
+        marker_position = repo_url_path.find(marker)
+        if marker_position < 0:
+            marker = "/-/raw/"
+            marker_position = repo_url_path.find(marker)
+        if marker_position < 0:
+            continue
+
+        branch_file = repo_url_path[marker_position + len(marker) :]
+        branch = branch_file.partition("/")[0]
+        matches = [path for path in allowed_paths if branch_file.endswith(f"/{path}")]
+        if matches:
+            # Choose the longest matching path to avoid partial matches
+            sel_path = max(matches, key=len)
+            if sel_path not in selected_paths:
+                selected_paths.append(sel_path)
+
+    return selected_paths, branch
+
+
 async def fetch_files(
     project_id: int, branch: str, selected_files: list[str], max_chars: int
 ) -> dict[str, str]:
     """
     Fetch the raw content of selected files in parallel and truncate them if applicable
-    to fit within the character budget. Returns a mapping of file path -> content.
+    to fit within the character budget. Returns a mapping of file_path -> file_content.
     """
     collected: dict[str, str] = {}
     budget = max_chars
@@ -410,15 +458,15 @@ async def select_dependency_files(
 
 
 async def collect_plugin_context(
-    plugin: str, project: str, project_id: int, user_query: str
+    plugin: str,
+    project: str,
+    project_id: int,
+    user_query: str,
+    file_urls: list[str] | None = None,
 ) -> GenericToolResult:
     """
-    Entry-point-driven context retrieval of the plugin code base:
-        1. Deterministically find the plugin entry files ('*wrapper*.py' / '*api*.py')
-           in the repo tree.
-        2. Let the LLM select the direct dependencies of the entry files plus other
-           modules relevant for the user's query, and fetch those.
-        3. Let the LLM resolve the direct dependencies of the newly fetched files.
+    Retrieve context from explicitly provided files, or use the plugin entry
+    point when no files are provided, then resolve direct dependencies.
     Returns a GenericToolResult object containing the concatenated relevant source code files,
         separated by file and with a header.
     """
@@ -445,50 +493,63 @@ async def collect_plugin_context(
             error=f"repository is empty for plugin '{plugin}' in branch '{branch}'"
         )
 
-    # ── Stage 1: find & fetch plugin entry ─────────────────────
-    entry_file = find_entry_file(file_paths)
+    # ── Stage 1: find & fetch (provided) plugin entry ─────────────────────
+    if file_urls:
+        context_files, branch = file_paths_from_urls(
+            file_urls, plugin, project, set(file_paths)
+        )
+        if not context_files:
+            return GenericToolResult(
+                error="None of the provided file URLs matched files in the plugin repository."
+            )
 
-    entry_source = await fetch_file_raw(project_id, entry_file, branch)
-    exec_code = extract_method(entry_source, method_name="run_tool")
-    entry_code = format_files(
-        {entry_file: exec_code if exec_code is not None else entry_source}
-    )
+        init_code = await fetch_files(
+            project_id, branch, context_files, MAX_TOTAL_CODE_CHARS
+        )
+        budget = MAX_TOTAL_CODE_CHARS - sum(len(c) for c in init_code.values())
+        _log_stage("Provided", context_files)
+    else:
+        entry_file = find_entry_file(file_paths)
+        entry_source = await fetch_file_raw(project_id, entry_file, branch)
+        exec_code = extract_method(entry_source, method_name="run_tool")
+        entry_code = format_files(
+            {entry_file: exec_code if exec_code is not None else entry_source}
+        )
 
-    # ── Stage 2: find & fetch useful files, based on entry file + user context ───────
-    remaining = [p for p in file_paths if p != entry_file]
-    init_files = await select_init_files(
-        plugin, user_query, entry_code, remaining, MAX_FILES // 2
-    )
-    _log_stage("Initial", [entry_file] + init_files)
-    init_code = {entry_file: entry_source}
-    base_code = await fetch_files(
-        project_id,
-        branch,
-        init_files,
-        MAX_TOTAL_CODE_CHARS,
-    )
-    init_code.update(base_code)
+        # ── Stage 2: find & fetch useful files, based on entry file + user context ───────
+        remaining = [path for path in file_paths if path != entry_file]
+        init_files = await select_init_files(
+            plugin, user_query, entry_code, remaining, MAX_FILES // 2
+        )
+        _log_stage("Initial", [entry_file] + init_files)
+        init_code = {entry_file: entry_source}
+        base_code = await fetch_files(
+            project_id,
+            branch,
+            init_files,
+            MAX_TOTAL_CODE_CHARS,
+        )
+        init_code.update(base_code)
+        budget = MAX_TOTAL_CODE_CHARS - sum(len(c) for c in base_code.values())
 
-    # ── Stage 3: resolve dependencies ───────────────────────────────────
-    budget = MAX_TOTAL_CODE_CHARS - sum(len(c) for c in base_code.values())
-    remaining = [p for p in file_paths if p not in init_code]
-    max_deps = MAX_FILES - len(init_code)
+    # ── Stage 2/3: resolve dependencies ───────────────────────────────────
+    code_content = format_files(init_code)
+    if budget <= 0:
+        return GenericToolResult(result=header + code_content)
+
+    remaining = [path for path in file_paths if path not in init_code]
+    max_deps = max(0, MAX_FILES - len(init_code))
     dep_files = await select_dependency_files(
         plugin,
         user_query,
-        format_files(init_code),
+        code_content,
         remaining,
         max_deps,
     )
     _log_stage("Dependency", dep_files)
     deps_code = await fetch_files(project_id, branch, dep_files, budget)
+    code_content += "\n\n### ── Dependency files ── ###\n\n" + format_files(deps_code)
 
-    # Format the final output with header and fetched code, including dependencies
-    code_content = format_files(init_code)
-    if deps_code:
-        code_content += "\n\n### ── Dependency files ── ###\n\n" + format_files(
-            deps_code
-        )
     return GenericToolResult(result=header + code_content)
 
 
@@ -580,7 +641,9 @@ async def detect_plugin_project(user_query: str) -> tuple[str | None, str | None
 
 
 @mcp.tool()
-async def plugin_code_search(user_query: str) -> GenericToolResult:
+async def plugin_code_search(
+    user_query: str, file_urls: list[str] | None = None
+) -> GenericToolResult:
     """
     Fetch relevant source code and documentation for a Freva data analysis
     plugin. Use this tool for questions answerable from plugin source code,
@@ -619,7 +682,9 @@ async def plugin_code_search(user_query: str) -> GenericToolResult:
     Args:
     -----
         user_query (str): What the user wants to know about or do with a dedicated Freva
-        plugin regarding climate or weather data analysis. Always the only argument.
+            plugin regarding climate or weather data analysis.
+        file_urls (list[str] | None): Optional GitLab file URLs to fetch in full
+            before tracing their plugin-local dependencies.
 
     Returns:
     --------
@@ -653,7 +718,9 @@ async def plugin_code_search(user_query: str) -> GenericToolResult:
     # Fetch the plugin code and return it with a header
     logger.info("Fetching source code for plugin '%s'", plugin)
     try:
-        return await collect_plugin_context(plugin, project, project_id, user_query)
+        return await collect_plugin_context(
+            plugin, project, project_id, user_query, file_urls
+        )
     except Exception as e:
         logger.error("Failed to fetch plugin code for '%s': %s", plugin, e)
         return GenericToolResult(
