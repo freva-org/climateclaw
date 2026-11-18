@@ -6,7 +6,7 @@ import re
 import textwrap
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 from urllib.parse import quote as urlquote
 
 import httpx
@@ -24,7 +24,7 @@ logger = configure_logging(__name__)
 
 
 # ── Tool Config ────────────────────────────────────────────────────────────────
-GITLAB_ACCESS_TOKEN: Optional[str] = os.getenv("CLIMATECLAW_GITLAB_ACCESS_TOKEN")
+GITLAB_ACCESS_TOKEN = os.getenv("CLIMATECLAW_GITLAB_ACCESS_TOKEN")
 GITLAB_BASE_URL = "https://gitlab.dkrz.de/api/v4"
 GITLAB_CACHE_SECONDS = 600
 
@@ -49,23 +49,6 @@ MAX_TOTAL_CODE_CHARS = 100_000  # truncate total fetched code after this limit
 MAX_FILES = 6  # max files the LLM may select in total
 ENTRY_PATTERN = re.compile(r"(wrapper|api)[^/]*\.py$", re.IGNORECASE)
 EXCLUDE_PATTERN = re.compile(r"(^|/)(tests?/|test_|__init__\.py$)", re.IGNORECASE)
-
-EXTENDED_TOOL_DESCRIPTION = """
-Use this tool for questions about a Freva plugin's internal logic, usage, or configuration,
-requests to translate plugin code into Python examples, and complex climate or weather
-analysis questions that can be answered from plugin source code. Ground responses in the
-retrieved code context and include the plugin and project names.
-
-Workflow Guidelines:
-    1. First, always give a high-level explanation of how the plugin works and how to use
-       it, including its plugin and project names. Add specifics as needed.
-    2. Provide an implementation ONLY when requested. Translate only the plugin's core
-       logic into a lightweight Python snippet with a concise plan. Replace `cdo` with
-       `xarray` operations and prioritize workflow correctness over non-critical details
-       such as retries, fallbacks, and logging.
-    - Mention modules, classes, and functions only when asked for more detail.
-    - Call this tool again for follow-up questions not sufficiently covered by prior results.
-"""
 
 
 # ── MCP Server Config ───────────────────────────────────────────────────────
@@ -293,9 +276,7 @@ async def fetch_files(
 # ── Other helpers ────────────────────────────────────────────────
 
 
-def extract_method_from_source(
-    source_code: str, method_name: str = "run_tool"
-) -> Optional[str]:
+def extract_method(source_code: str, method_name: str = "run_tool") -> str | None:
     """Parses a Python source string and returns the code of a specific method."""
     try:
         cleaned_code = textwrap.dedent(source_code.expandtabs(4))
@@ -466,10 +447,9 @@ async def collect_plugin_context(
 
     # ── Stage 1: find & fetch plugin entry ─────────────────────
     entry_file = find_entry_file(file_paths)
-    _log_stage("Deterministic entry file", [entry_file])
 
     entry_source = await fetch_file_raw(project_id, entry_file, branch)
-    exec_code = extract_method_from_source(entry_source, method_name="run_tool")
+    exec_code = extract_method(entry_source, method_name="run_tool")
     entry_code = format_files(
         {entry_file: exec_code if exec_code is not None else entry_source}
     )
@@ -479,7 +459,7 @@ async def collect_plugin_context(
     init_files = await select_init_files(
         plugin, user_query, entry_code, remaining, MAX_FILES // 2
     )
-    _log_stage("LLM-based initial", init_files)
+    _log_stage("Initial", [entry_file] + init_files)
     init_code = {entry_file: entry_source}
     base_code = await fetch_files(
         project_id,
@@ -500,7 +480,7 @@ async def collect_plugin_context(
         remaining,
         max_deps,
     )
-    _log_stage("LLM-based dependency", dep_files)
+    _log_stage("Dependency", dep_files)
     deps_code = await fetch_files(project_id, branch, dep_files, budget)
 
     # Format the final output with header and fetched code, including dependencies
@@ -599,22 +579,42 @@ async def detect_plugin_project(user_query: str) -> tuple[str | None, str | None
     return plugin, project
 
 
-@mcp.tool(description=EXTENDED_TOOL_DESCRIPTION)
+@mcp.tool()
 async def plugin_code_search(user_query: str) -> GenericToolResult:
     """
-    Fetch relevant source code and documentation files of a Freva data analysis plugin
-    as repository-grounded code knowledge base. Use this tool whenever you think a specific climate or weather-related question can be answered by examining the plugin's source code.
+    Fetch relevant source code and documentation for a Freva data analysis
+    plugin. Use this tool for questions answerable from plugin source code,
+    including its internal logic, usage, configuration, or requests to
+    translate its code into Python examples. Ground responses in retrieved
+    code.
 
-    Use this when the user
-    1. directly asks how a plugin's internal logic works, how to run or configure it, or requests plugin code translated into Python examples; or
-    2. asks a *more complex* climate/weather question touching any of these specialized analysis topics — and in that case, **proactively call the tool** to anchor the analysis in existing plugin logic:
-        - decadal prediction: lead time selection/aggregation, skill score evaluation against reanalysis/observations, cross-validation, recalibration/bias correction, or tercile statistics
-        - climate and extreme indices from daily temperature or precipitation data, including their visualization
-        - extreme-event impact assessment: crop productivity under compound events, heat wave evaluation (HWMID), or intensity-duration-frequency analysis
-        - precipitation analysis: indices, return periods, or sub-hourly temporal disaggregation
-        - spatio-temporal data pre-processing, CMORization, or EOF/PCA analysis
-        - regional climate analysis: heatwave identification for urban impact, climatically similar district matching, or climate model output processing for impact studies
-        - creating or structuring a new Freva plugin
+    Use this tool when the user:
+    1. asks about a plugin's logic, usage, or configuration, or requests a
+            Python translation, by naming the plugin or linking its repository; or
+    2. asks a complex climate or weather question involving a specialized topic below.
+        Proactively call the tool to ground the answer in plugin logic:
+        - Decadal prediction: lead-time selection or aggregation, skill scores
+            against reanalysis or observations, cross-validation, bias correction,
+            recalibration, or tercile statistics.
+        - Climate and extreme indices from daily temperature or precipitation,
+            including visualization.
+        - Extreme-event impacts: crop productivity under compound events,
+            heat-wave evaluation (HWMID), or intensity-duration-frequency analysis.
+        - Precipitation indices, return periods, or sub-hourly disaggregation.
+        - Spatio-temporal preprocessing, CMORization, or EOF/PCA analysis.
+        - Regional climate analysis: urban heat-wave identification, matching
+            climatically similar districts, or climate-model processing for
+            impact studies.
+        - Creating or structuring a new Freva plugin.
+
+    Workflow Guidelines:
+    1. Start with a high-level explanation of how the plugin works and how to
+        use it. Mention specific details as needed.
+    2. Provide an implementation only when requested. Translate the core logic
+        into a lightweight Python snippet with a concise plan. Replace `cdo`
+        with `xarray` and prioritize workflow correctness over retries,
+        fallbacks, and logging.
+    3. Call this tool again for follow-up questions not sufficiently covered by prior results.
 
     Args:
     -----
