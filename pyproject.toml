@@ -44,17 +44,13 @@ dependencies = [
     "ansi2html",
     "psutil",
     "pip>=26.1.2",
-    "pre-commit>=4.6.0",
 ]
 
 [dependency-groups]
 dev = [
-    "pre-commit>=4.0.1",
-    "ruff>=0.11.8",
-    "mypy>=1.15.0",
-    "pytest>=8.4.2",
-    "pytest-asyncio>=1.2.0",
-    "pytest-cov>=6.0.0",
+    "pre-commit>=4.6.0",
+    { include-group = "test" },
+    { include-group = "type" },
 ]
 test = [
     "jupyter-client>=8.8.0",
