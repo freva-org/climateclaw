@@ -241,5 +241,8 @@ def get_mcp_headers(
         "code-server": {
             "working-dir": str(cache),
         },
+        "plugin-code-search-server": {
+            "username": auth.username or "unknown_user",
+        },
     }
     return headers
