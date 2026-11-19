@@ -109,14 +109,20 @@ services:
       start_period: 10s
 
   litellm:
-    image: ghcr.io/berriai/litellm:v1.102.0
+    image: ghcr.io/berriai/litellm:v1.106.6
     hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
       - ../litellm_config.dev.yaml:/app/config.yaml # Development config excludes the deployment-only vLLM model
       - ../logs/:/app/logs
     entrypoint: ["/bin/sh", "-c"]
+    # The master key is the backend's API key from .env, so the backend authenticates.
+    # Without one, LiteLLM runs without auth (see litellm_config.dev.yaml).
+    # The key is picked in the container's shell: podman-compose 1.0 can't nest defaults.
+    # LITELLM_MASTER_KEY stays unset without a key: empty would turn auth on, not off.
     command:
       - >
+        key="$${CLIMATECLAW_LITELLM_API_KEY:-$$CLIMATECLAW_LITE_LLM_API_KEY}";
+        if [ -n "$$key" ]; then export LITELLM_MASTER_KEY="$$key"; fi;
         litellm
         --config=/app/config.yaml
         --port=4000
