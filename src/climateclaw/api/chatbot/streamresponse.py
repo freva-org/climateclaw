@@ -5,13 +5,13 @@ import json
 import time
 from collections.abc import Generator
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from climateclaw.core.available_chatbots import (
     available_chatbots,
-    default_chatbot,
     default_chatbot_local,
 )
 from climateclaw.core.logging_setup import configure_logging
@@ -150,12 +150,19 @@ async def streamresponse(
             detail="Input not found. Please provide a non-empty input in the query parameters, of type String.",
         )
 
+    try:
+        available = await available_chatbots()
+    except (httpx.HTTPError, ValueError) as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not get the available chatbots from LiteLLM: {e}",
+        ) from e
+
     if chatbot == "local":
         model_name = default_chatbot_local()
     else:
-        model_name = chatbot or default_chatbot()
+        model_name = chatbot or available[0]
 
-    available = available_chatbots()
     if model_name not in available:
         raise HTTPException(
             status_code=422,

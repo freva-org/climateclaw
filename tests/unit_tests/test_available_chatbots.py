@@ -3,37 +3,51 @@ import pytest
 from climateclaw.core import available_chatbots as chatbots
 
 
-def _write_config(path, model_name):
-    path.write_text(
-        f"model_list:\n  - model_name: {model_name}\n",
-        encoding="utf-8",
-    )
+@pytest.fixture
+def proxy(monkeypatch):
+    """Fake LiteLLM model list; counts how often it is asked."""
 
+    class Proxy:
+        models = ["model-a", "model-b"]
+        calls = 0
 
-@pytest.fixture(autouse=True)
-def _refresh_chatbot_cache():
+        async def list_models(self) -> list[str]:
+            self.calls += 1
+            return list(self.models)
+
+    p = Proxy()
+    monkeypatch.setattr(chatbots, "list_models", p.list_models)
     chatbots.refresh_cache()
-    yield
+    yield p
     chatbots.refresh_cache()
 
 
-def test_available_chatbots_uses_dev_config_in_dev_mode(tmp_path, monkeypatch):
-    _write_config(tmp_path / "litellm_config.yaml", "deployment-model")
-    _write_config(tmp_path / "litellm_config.dev.yaml", "development-model")
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("LITELLM_CONFIG", raising=False)
-    monkeypatch.setenv("CLIMATECLAW_DEV", "1")
-
-    assert chatbots.available_chatbots() == ["development-model"]
+@pytest.mark.asyncio
+async def test_available_chatbots_keeps_the_proxy_order(proxy):
+    assert await chatbots.available_chatbots() == ["model-a", "model-b"]
+    assert await chatbots.default_chatbot() == "model-a"
 
 
-def test_available_chatbots_uses_deployment_config_outside_dev_mode(
-    tmp_path, monkeypatch
-):
-    _write_config(tmp_path / "litellm_config.yaml", "deployment-model")
-    _write_config(tmp_path / "litellm_config.dev.yaml", "development-model")
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("LITELLM_CONFIG", raising=False)
-    monkeypatch.setenv("CLIMATECLAW_DEV", "0")
+@pytest.mark.asyncio
+async def test_available_chatbots_asks_the_proxy_once_per_ttl(proxy, monkeypatch):
+    now = 1000.0
+    monkeypatch.setattr(chatbots.time, "monotonic", lambda: now)
 
-    assert chatbots.available_chatbots() == ["deployment-model"]
+    await chatbots.available_chatbots()
+    await chatbots.available_chatbots()
+    assert proxy.calls == 1
+
+    proxy.models = ["model-c"]
+    now += chatbots.CACHE_TTL_SECONDS
+    assert await chatbots.available_chatbots() == ["model-c"]
+    assert proxy.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_available_chatbots_raises_and_does_not_cache_an_empty_list(proxy):
+    proxy.models = []
+    with pytest.raises(ValueError):
+        await chatbots.available_chatbots()
+
+    proxy.models = ["model-a"]
+    assert await chatbots.available_chatbots() == ["model-a"]
