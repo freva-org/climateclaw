@@ -268,3 +268,48 @@ def test_responses_helpers_extract_refusal():
 def test_helpers_return_empty_defaults_for_malformed_responses(resp):
     assert first_text(resp) == ""
     assert tool_calls(resp) == []
+
+
+@pytest.mark.parametrize(
+    ("litellm_key", "openai_key", "expected"),
+    [
+        ("sk-litellm", "sk-openai", "Bearer sk-litellm"),
+        ("", "sk-openai", "Bearer sk-openai"),
+        ("", "", None),
+    ],
+    ids=["litellm key first", "then openai key", "no key"],
+)
+def test_headers_key_precedence(monkeypatch, litellm_key, openai_key, expected):
+    from climateclaw.services.streaming import litellm_client
+
+    monkeypatch.setattr(litellm_client, "LITELLM_API_KEY", litellm_key)
+    monkeypatch.setattr(litellm_client, "OPENAI_API_KEY", openai_key)
+
+    assert litellm_client._headers().get("Authorization") == expected
+
+
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [
+        ({"CLIMATECLAW_LITELLM_API_KEY": "sk-a"}, "sk-a"),
+        ({"CLIMATECLAW_LITE_LLM_API_KEY": "sk-b"}, "sk-b"),
+        (
+            {
+                "CLIMATECLAW_LITELLM_API_KEY": "sk-a",
+                "CLIMATECLAW_LITE_LLM_API_KEY": "sk-b",
+            },
+            "sk-a",
+        ),
+        ({}, ""),
+    ],
+    ids=["LITELLM", "LITE_LLM", "LITELLM wins", "neither"],
+)
+def test_api_key_reads_either_spelling(monkeypatch, env, expected):
+    from climateclaw.services.streaming import litellm_client
+
+    for name in ("CLIMATECLAW_LITELLM_API_KEY", "CLIMATECLAW_LITE_LLM_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+
+    assert litellm_client._getenv_litellm("API_KEY") == expected
