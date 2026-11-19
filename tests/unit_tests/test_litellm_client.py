@@ -313,3 +313,43 @@ def test_api_key_reads_either_spelling(monkeypatch, env, expected):
         monkeypatch.setenv(name, value)
 
     assert litellm_client._getenv_litellm("API_KEY") == expected
+
+
+@pytest.mark.asyncio
+async def test_list_models_returns_ids_in_proxy_order(monkeypatch):
+    from climateclaw.services.streaming import litellm_client
+
+    monkeypatch.setattr(litellm_client, "LITELLM_API_KEY", "sk-litellm")
+    captured = {}
+
+    async def fake_get(self, url, headers):
+        captured["url"] = url
+        captured["auth"] = headers.get("Authorization")
+        return httpx.Response(
+            200,
+            json={"data": [{"id": "model-b"}, {"id": "model-a"}, {"object": "model"}]},
+            request=httpx.Request("GET", url),
+        )
+
+    with patch.object(httpx.AsyncClient, "get", new=fake_get):
+        models = await litellm_client.list_models()
+
+    assert models == ["model-b", "model-a"]
+    assert captured["url"].endswith("/v1/models")
+    assert captured["auth"] == "Bearer sk-litellm"
+
+
+@pytest.mark.asyncio
+async def test_list_models_raises_when_the_proxy_rejects_the_key():
+    from climateclaw.services.streaming import litellm_client
+
+    async def fake_get(self, url, headers):
+        return httpx.Response(
+            401,
+            json={"error": {"message": "Invalid proxy server token passed"}},
+            request=httpx.Request("GET", url),
+        )
+
+    with patch.object(httpx.AsyncClient, "get", new=fake_get):
+        with pytest.raises(httpx.HTTPStatusError, match="HTTP 401"):
+            await litellm_client.list_models()
