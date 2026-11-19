@@ -46,6 +46,34 @@ def client(app):
     return httpx.AsyncClient(transport=transport, base_url="http://test")
 
 
+# What a LiteLLM proxy with litellm_config.yaml lists.
+FAKE_LITELLM_MODELS = [
+    "gpt-4.1",
+    "gpt-5.6-luna",
+    "gpt-5.6-sol",
+    "gpt-4.1-mini",
+    "deepseek-v4.1",
+]
+
+
+@pytest.fixture(autouse=True)
+def _fake_litellm_models(request, monkeypatch):
+    """Serve the chatbot list without a LiteLLM proxy, except in integration tests."""
+    from climateclaw.core import available_chatbots
+
+    if request.node.get_closest_marker("integration"):
+        yield
+        return
+
+    async def list_models() -> list[str]:
+        return list(FAKE_LITELLM_MODELS)
+
+    monkeypatch.setattr(available_chatbots, "list_models", list_models)
+    available_chatbots.refresh_cache()
+    yield
+    available_chatbots.refresh_cache()
+
+
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
     monkeypatch.setenv("CLIMATECLAW_HOST", "localhost")

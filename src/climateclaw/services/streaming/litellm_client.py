@@ -95,7 +95,22 @@ async def _post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
         return r.json()
 
 
-# ──── Public API - supports v1/chat/completions and v1/responses ────────────────
+# ──── Public API ────────────────────────────────────────────────────────────────
+
+
+async def list_models() -> list[str]:
+    """Return the ids of the models the LiteLLM proxy serves, in the proxy's order."""
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+        r = await client.get(_api_url("v1/models"), headers=_headers())
+        await _raise_for_status(r)
+        body = r.json()
+
+    return [
+        m["id"] for m in body.get("data", []) if isinstance(m, dict) and m.get("id")
+    ]
+
+
+# ──── Completions - supports v1/chat/completions and v1/responses ───────────────
 
 
 async def acomplete(
