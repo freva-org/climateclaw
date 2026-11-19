@@ -109,6 +109,8 @@ jobs:
           CLIMATECLAW_MONGODB_DATABASE_NAME=ci-db
           CLIMATECLAW_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           EOF
+          # Production LiteLLM refuses to start without a key.
+          echo "CLIMATECLAW_LITELLM_API_KEY=sk-$(openssl rand -hex 32)" >> .env
 
       - name: Build production base image
         run: docker compose --profile build-only build climateclaw-base
