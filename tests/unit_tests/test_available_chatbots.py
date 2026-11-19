@@ -51,3 +51,32 @@ async def test_available_chatbots_raises_and_does_not_cache_an_empty_list(proxy)
 
     proxy.models = ["model-a"]
     assert await chatbots.available_chatbots() == ["model-a"]
+
+
+@pytest.mark.asyncio
+async def test_available_chatbots_picks_up_proxy_changes_when_the_cache_expires(
+    proxy, monkeypatch
+):
+    now = 1000.0
+    monkeypatch.setattr(chatbots.time, "monotonic", lambda: now)
+    assert await chatbots.available_chatbots() == ["model-a", "model-b"]
+
+    proxy.models = ["model-c", "model-a"]
+
+    now += chatbots.CACHE_TTL_SECONDS - 1
+    assert await chatbots.available_chatbots() == ["model-a", "model-b"]
+    assert await chatbots.default_chatbot() == "model-a"
+
+    now += 1
+    assert await chatbots.available_chatbots() == ["model-c", "model-a"]
+    assert await chatbots.default_chatbot() == "model-c"
+
+
+@pytest.mark.asyncio
+async def test_refresh_cache_picks_up_proxy_changes_at_once(proxy):
+    assert await chatbots.available_chatbots() == ["model-a", "model-b"]
+
+    proxy.models = ["model-c"]
+    chatbots.refresh_cache()
+
+    assert await chatbots.available_chatbots() == ["model-c"]
