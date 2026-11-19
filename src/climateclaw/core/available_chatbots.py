@@ -5,6 +5,7 @@ import logging
 import os
 import time
 
+from climateclaw.core.settings import get_settings
 from climateclaw.services.streaming.litellm_client import list_models
 
 """
@@ -23,7 +24,8 @@ Behavior:
 
 logger = logging.getLogger(__name__)
 
-CACHE_TTL_SECONDS = 300.0
+# Read once at import time; override via CLIMATECLAW_MODEL_LIST_CACHE_SECONDS.
+CACHE_TTL_SECONDS = get_settings().MODEL_LIST_CACHE_SECONDS
 
 # Read once at import time; override via the CLIMATECLAW_DEFAULT_LOCAL_MODEL env variable.
 DEFAULT_LOCAL_MODEL = os.getenv("CLIMATECLAW_DEFAULT_LOCAL_MODEL") or "deepseek-v4.1"

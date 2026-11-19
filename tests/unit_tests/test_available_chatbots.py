@@ -1,3 +1,7 @@
+import os
+import subprocess
+import sys
+
 import pytest
 
 from climateclaw.core import available_chatbots as chatbots
@@ -80,3 +84,23 @@ async def test_refresh_cache_picks_up_proxy_changes_at_once(proxy):
     chatbots.refresh_cache()
 
     assert await chatbots.available_chatbots() == ["model-c"]
+
+
+@pytest.mark.parametrize("seconds", ["45", "0"])
+def test_cache_time_comes_from_the_environment(seconds):
+    """Settings read the environment at import, so check it in a fresh interpreter."""
+    env = {**os.environ, "CLIMATECLAW_MODEL_LIST_CACHE_SECONDS": seconds}
+    out = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from climateclaw.core import available_chatbots as c; "
+            "print(c.CACHE_TTL_SECONDS)",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+    assert float(out.strip().splitlines()[-1]) == float(seconds)
