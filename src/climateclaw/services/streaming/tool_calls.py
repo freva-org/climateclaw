@@ -371,7 +371,7 @@ def parse_code_interpreter_result(
         result.stdout = "Execution completed successfully."
 
     codeout_v = SVCodeOutput(content=normalize_code_output(result), id=id)
-    code_msgs.extend(help_convert_sv_ccrm([codeout_v]))
+    code_msgs.extend(help_convert_sv_ccrm([codeout_v], include_images=include_images))
     code_block.append(codeout_v)
     yield codeout_v
 

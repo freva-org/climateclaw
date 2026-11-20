@@ -61,6 +61,7 @@ class StreamState:
     tool_call: dict[str, Any] | None = None
     finished: bool = False
     replay_gate: ReplayGate | None = None
+    model_messages: list[dict[str, Any]] | None = None
 
 
 async def _yield_heartbeats_until(
@@ -93,6 +94,8 @@ async def stream_with_tools(
 ) -> AsyncIterator[StreamVariant]:
     """
     Stream a tool-enabled conversation using Chat Completions.
+    Keep the model transcript across rounds so assistant text and tool calls
+    from the same response stay together, independent of the streamed variants.
 
     This orchestrator targets `/v1/chat/completions` and expects Chat Completions
     stream chunks (`choices[].delta`). Responses API events are not supported.
@@ -100,14 +103,15 @@ async def stream_with_tools(
 
     log = logger or DEFAULT_LOGGER
 
-    # Append the conversation history to system prompt
-    conv_sv = await get_conv_messages(thread_id)
-    msg_hist = help_convert_sv_ccrm(
-        conv_sv,  # type: ignore[arg-type]
-        include_images=model_supports_images(model),
-        include_meta=False,
-    )
-    messages.extend(msg_hist)  # type: ignore[arg-type]
+    if stream_state.model_messages is None:
+        conv_sv = await get_conv_messages(thread_id)
+        msg_hist = help_convert_sv_ccrm(
+            conv_sv,  # type: ignore[arg-type]
+            include_images=model_supports_images(model),
+            include_meta=False,
+        )
+        stream_state.model_messages = [*messages, *(dict(msg) for msg in msg_hist)]
+    request_messages = stream_state.model_messages.copy()
 
     # Get MCPManager of the conversation
     mcp = await get_conv_mcpmanager(thread_id)
@@ -128,7 +132,7 @@ async def stream_with_tools(
         resp_task = asyncio.create_task(
             acomplete_func(
                 model=model,
-                messages=messages,
+                messages=request_messages,
                 stream=True,
                 tools=tools,
                 tool_choice="auto",
@@ -136,7 +140,7 @@ async def stream_with_tools(
         )
     else:
         resp_task = asyncio.create_task(
-            acomplete_func(model=model, messages=messages, stream=True)
+            acomplete_func(model=model, messages=request_messages, stream=True)
         )
 
     try:
@@ -149,12 +153,13 @@ async def stream_with_tools(
         raise
 
     accumulated_asst_text: list[str] = []
+    assistant_text_started = False
 
     if hasattr(resp, "__aiter__"):
         call_id = ""
-        stream_iter = resp.__aiter__()
+        stream_iter = aiter(resp)
         while True:
-            chunk_task = asyncio.create_task(stream_iter.__anext__())
+            chunk_task = asyncio.create_task(anext(stream_iter))
 
             try:
                 async for hb in _yield_heartbeats_until(chunk_task):
@@ -174,7 +179,12 @@ async def stream_with_tools(
             piece = delta.get("content") or ""
             if piece:
                 accumulated_asst_text.append(piece)
-                yield SVAssistant(content=piece)
+                if assistant_text_started:
+                    yield SVAssistant(content=piece)
+                elif piece.strip():
+                    # Preserve leading whitespace without opening a blank chat bubble
+                    assistant_text_started = True
+                    yield SVAssistant(content="".join(accumulated_asst_text))
 
             # tool call: stream code chunks live and accumulate deltas
             tc_list = delta.get("tool_calls") or []
@@ -209,14 +219,16 @@ async def stream_with_tools(
         for p in re.findall(r"\S+\s*", full_txt):
             if p:
                 accumulated_asst_text.append(full_txt)
+                assistant_text_started = True
                 yield SVAssistant(content=full_txt)
 
     # 2) Any tool calls?
     tool_calls = finalize_tool_calls(tool_agg)
     log.debug(f"Finalized tool calls: {tool_calls}")
 
-    if accumulated_asst_text:
-        asst_v = SVAssistant(content="".join(accumulated_asst_text))
+    assistant_text = "".join(accumulated_asst_text) if assistant_text_started else ""
+    if assistant_text:
+        asst_v = SVAssistant(content=assistant_text)
         await add_to_conversation(
             thread_id, [asst_v], storage=storage, store_thread=store_thread
         )
@@ -232,11 +244,12 @@ async def stream_with_tools(
         return
 
     # 3) Run tools
-    id = ""
+    tool_results: list[OpenAIMessage] = []
+    tool_follow_ups: list[OpenAIMessage] = []
     for tc in tool_calls:
         function = tc.get("function") or {}
         name = function.get("name", "")
-        id = tc.get("id", id)
+        call_id = tc["id"]
         raw_args_txt = function.get("arguments", "")
 
         log.info(
@@ -263,7 +276,7 @@ async def stream_with_tools(
                     "Normalized one-level tool argument wrapper: "
                     "tool=%r id=%r wrapper=%r raw_arguments=%r",
                     name,
-                    id,
+                    call_id,
                     normalized.wrapper_key,
                     raw_args_txt,
                 )
@@ -293,13 +306,10 @@ async def stream_with_tools(
             log.warning(
                 "Rejected malformed tool call: tool=%r id=%r arguments=%r error=%s",
                 name,
-                id,
+                call_id,
                 raw_args_txt,
                 exc,
             )
-
-        # Append assistant tool-call message
-        messages.append({"role": "assistant", "content": "", "tool_calls": [tc]})
 
         # Store valid, normalized arguments in MongoDB and stream them to the frontend.
         # Otherwise some client may break.
@@ -448,7 +458,7 @@ async def stream_with_tools(
         for r in parse_tool_result(
             result_text,
             tool_name=name,
-            call_id=id,
+            call_id=call_id,
             thread_id=thread_id,
             include_images=model_supports_images(model),
         ):
@@ -468,11 +478,26 @@ async def stream_with_tools(
         if hint := stream_state.replay_gate.done_hint_if_ready():
             yield hint
 
-        if tool_msgs:
-            messages.extend(tool_msgs)  # type: ignore[arg-type]
+        for msg in tool_msgs:
+            if msg.get("role") == "tool":
+                tool_results.append(msg)
+            else:
+                tool_follow_ups.append(msg)
 
         if await get_conversation_state(thread_id) == ConversationState.STOPPING:
             return
+
+    # After each tool round, append assistant message, tool calls and results to stream state
+    stream_state.model_messages.append(
+        {
+            "role": "assistant",
+            "content": assistant_text or None,
+            "tool_calls": tool_calls,
+        }
+    )
+    stream_state.model_messages.extend(dict(msg) for msg in tool_results)
+    # Image prompts must follow all tool results for the assistant message.
+    stream_state.model_messages.extend(dict(msg) for msg in tool_follow_ups)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
