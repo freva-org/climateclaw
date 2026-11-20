@@ -160,6 +160,104 @@ async def test_stream_with_tools_consumes_async_iterator_response(
     ]
 
 
+@pytest.mark.parametrize("call_count", [1, 2])
+@pytest.mark.parametrize("has_text", [True, False])
+@pytest.mark.asyncio
+async def test_run_stream_sends_text_and_tool_calls_as_one_assistant_message(
+    patch_registry, patch_thread_storage, monkeypatch, call_count, has_text
+):
+    thread_id = "t-mixed-response"
+    register_fake_mcp(
+        patch_registry,
+        thread_id,
+        DummyMcpManager(
+            [tool_schema("lookup", {"query": {"type": "string"}}, ["query"])]
+        ),
+    )
+    calls = [
+        {
+            "id": f"call_{i}",
+            "type": "function",
+            "function": {"name": "lookup", "arguments": json.dumps({"query": str(i)})},
+        }
+        for i in range(call_count)
+    ]
+
+    async def mixed_response():
+        yield {"choices": [{"delta": {"content": "\n\n"}}]}
+        if has_text:
+            yield {"choices": [{"delta": {"content": "Let"}}]}
+            yield {"choices": [{"delta": {"content": " "}}]}
+        yield {
+            "choices": [
+                {
+                    "delta": {
+                        "content": "me check." if has_text else "\t",
+                        "tool_calls": [
+                            dict(call, index=i) for i, call in enumerate(calls)
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ]
+        }
+
+    requests = []
+
+    async def fake_acomplete(**kwargs):
+        requests.append(list(kwargs["messages"]))
+        if len(requests) == 1:
+            return mixed_response()
+        return fake_assistant_stream()
+
+    async def fake_run_tool_via_mcp(**kwargs):
+        return json.dumps({"structuredContent": {"result": kwargs["arguments_json"]}})
+
+    monkeypatch.setattr(stream_orchestrator, "acomplete", fake_acomplete)
+    monkeypatch.setattr(stream_orchestrator, "run_tool_via_mcp", fake_run_tool_via_mcp)
+    system_message = {"role": "system", "content": "Use lookup."}
+    system_prompt = [system_message]
+    items = [
+        item
+        async for item in stream_orchestrator.run_stream(
+            model="gpt-4.1",
+            thread_id=thread_id,
+            user_input="Find the data.",
+            system_prompt=system_prompt,
+            storage=patch_thread_storage,
+            store_thread=False,
+        )
+    ]
+
+    first, follow_up = requests
+    assert first == [system_message, {"role": "user", "content": "Find the data."}]
+    assert follow_up[: len(first)] == first
+    assistant, *results = follow_up[len(first) :]
+    assert assistant == {
+        "role": "assistant",
+        "content": "\n\nLet me check." if has_text else None,
+        "tool_calls": calls,
+    }
+    assert [result["role"] for result in results] == ["tool"] * call_count
+    assert [result["tool_call_id"] for result in results] == [
+        call["id"] for call in calls
+    ]
+    assert [item.id for item in items if isinstance(item, SVToolCall)] == [
+        call["id"] for call in calls
+    ]
+    assert [item.content for item in items if isinstance(item, SVAssistant)] == [
+        *(["\n\nLet", " ", "me check."] if has_text else []),
+        "hello ",
+        "world",
+    ]
+    history = await stream_orchestrator.get_conv_messages(thread_id)
+    assert [
+        item.content for item in history or [] if isinstance(item, SVAssistant)
+    ] == (["\n\nLet me check.", "hello world"] if has_text else ["hello world"])
+    assert isinstance(items[-1], SVStreamEnd)
+    assert system_prompt == [system_message]
+
+
 @pytest.mark.asyncio
 async def test_stream_with_tools_rejects_malformed_code_arguments_without_mcp_call(
     patch_registry,
