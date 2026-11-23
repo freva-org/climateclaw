@@ -13,6 +13,7 @@ wheels/
 .coverage
 
 .env
+scripts/evaluation/*.png
 
 # Virtual environments
 .venv
