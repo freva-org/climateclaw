@@ -89,7 +89,13 @@ async def test_refresh_cache_picks_up_proxy_changes_at_once(proxy):
 @pytest.mark.parametrize("seconds", ["45", "0"])
 def test_cache_time_comes_from_the_environment(seconds):
     """Settings read the environment at import, so check it in a fresh interpreter."""
-    env = {**os.environ, "CLIMATECLAW_MODEL_LIST_CACHE_SECONDS": seconds}
+    env = {
+        **os.environ,
+        "CLIMATECLAW_MODEL_LIST_CACHE_SECONDS": seconds,
+        # The package isn't installed (uv package = false); pytest finds it via its
+        # pythonpath setting, which the child doesn't inherit.
+        "PYTHONPATH": os.pathsep.join(sys.path),
+    }
     out = subprocess.run(
         [
             sys.executable,
