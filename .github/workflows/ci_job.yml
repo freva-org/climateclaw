@@ -6,8 +6,8 @@ permissions:
 on: [push, pull_request, workflow_call]
 
 jobs:
-  ruff:
-    name: Ruff
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
 
     steps:
@@ -25,10 +25,8 @@ jobs:
       - name: Sync dev dependencies
         run: uv sync --group dev
 
-      - name: Run Ruff
-        run: |
-          uv run ruff check .
-          uv run ruff format --check .
+      - name: Run pre-commit hooks
+        run: make lint
 
   dev-tests:
     name: Full test suite on dev stack (Python 3.13)
@@ -64,7 +62,7 @@ jobs:
           EOF
 
       - name: Sync dependencies
-        run: uv sync --group dev --group test --group type
+        run: uv sync --group dev
 
       - name: Start dev stack
         run: |
@@ -76,7 +74,7 @@ jobs:
           }
 
       - name: Run mypy
-        run: uv run --group type mypy
+        run: make type
 
       - name: Run pytest
         run: uv run --group test pytest
