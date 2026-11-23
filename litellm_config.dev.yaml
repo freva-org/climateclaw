@@ -33,3 +33,8 @@ model_list:
 
 litellm_settings:
   drop_params: true
+
+general_settings:
+  # The master key comes from LITELLM_MASTER_KEY (see docker-compose.dev.yml):
+  # with an API key in .env, auth is on; without one, the proxy runs without auth.
+  dangerously_permit_weak_or_unset_master_key: true

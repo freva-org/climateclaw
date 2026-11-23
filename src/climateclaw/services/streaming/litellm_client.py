@@ -12,6 +12,18 @@ from climateclaw.core.settings import get_settings
 
 # ──── Settings ──────────────────────────────────────────────────────────────────
 
+
+def _getenv_litellm(name: str) -> str:
+    """Read CLIMATECLAW_LITELLM_<name>, else CLIMATECLAW_LITE_LLM_<name>."""
+    return (
+        os.getenv(f"CLIMATECLAW_LITELLM_{name}")
+        or os.getenv(f"CLIMATECLAW_LITE_LLM_{name}")
+        or ""
+    )
+
+
+# Key to call the LiteLLM proxy with.
+LITELLM_API_KEY = _getenv_litellm("API_KEY")
 # Optional bearer to satisfy proxies that require it.
 OPENAI_API_KEY = os.getenv("CLIMATECLAW_OPENAI_API_KEY", "")
 
@@ -36,10 +48,11 @@ def _headers() -> dict[str, str]:
     if request_id:
         h[REQUEST_ID_HEADER] = request_id
 
-    # Authorization header is not required for local models,
-    # but sending it (when available) doesn’t hurt and satisfies OpenAI-routed calls.
-    if OPENAI_API_KEY:
-        h["Authorization"] = f"Bearer {OPENAI_API_KEY}"
+    # The LiteLLM key wins. Without one, the OpenAI key (when available)
+    # doesn't hurt and satisfies OpenAI-routed calls.
+    api_key = LITELLM_API_KEY or OPENAI_API_KEY
+    if api_key:
+        h["Authorization"] = f"Bearer {api_key}"
 
     return h
 
