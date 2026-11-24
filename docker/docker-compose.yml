@@ -1,5 +1,4 @@
 services:
-
   climateclaw-base:
     # Build manually with:
     # docker compose -f docker/docker-compose.dev.yml --profile build-only build climateclaw-base
@@ -26,7 +25,11 @@ services:
     networks:
       - climateclaw
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${CLIMATECLAW_BACKEND_PORT:-8502}/healthz')\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:${CLIMATECLAW_BACKEND_PORT:-8502}/healthz'')"',
+        ]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -53,7 +56,11 @@ services:
     networks:
       - climateclaw
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8051/healthz')\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8051/healthz'')"',
+        ]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -74,21 +81,31 @@ services:
     volumes:
       - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8052/healthz')\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8052/healthz'')"',
+        ]
       interval: 5s
       timeout: 3s
       retries: 20
       start_period: 10s
 
   litellm:
-    image: ghcr.io/berriai/litellm:v1.102.0
+    image: ghcr.io/berriai/litellm:v1.106.6
     hostname: litellm-${CLIMATECLAW_INSTANCE_NAME}
     volumes:
       - ../litellm_config.yaml:/app/config.yaml # Mount the local litellm_config.yaml file to the container
       - /container/da/climateclaw-links/${CLIMATECLAW_INSTANCE_NAME}/logs:/app/logs
     entrypoint: ["/bin/sh", "-c"]
+    # The master key is the backend's API key from .env, so the backend authenticates.
+    # Without one, LiteLLM refuses to start.
+    # The key is picked in the container's shell: podman-compose 1.0 can't nest defaults.
+    # LITELLM_MASTER_KEY stays unset without a key: empty would be a valid key.
     command:
       - >
+        key="$${CLIMATECLAW_LITELLM_API_KEY:-$$CLIMATECLAW_LITE_LLM_API_KEY}";
+        if [ -n "$$key" ]; then export LITELLM_MASTER_KEY="$$key"; fi;
         litellm
         --config=/app/config.yaml
         --port=4000
@@ -101,7 +118,11 @@ services:
     networks:
       - climateclaw
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:4000/health/liveliness'')"',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
