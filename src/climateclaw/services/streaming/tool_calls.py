@@ -84,6 +84,7 @@ def accumulate_tool_calls(delta: Dict[str, Any], agg: Dict[str, Any]) -> None:
     choices = delta.get("choices") or []
     if not choices:
         return
+
     d = choices[0].get("delta") or {}
     tc_list = d.get("tool_calls") or []
     if not tc_list:
@@ -94,11 +95,14 @@ def accumulate_tool_calls(delta: Dict[str, Any], agg: Dict[str, Any]) -> None:
         idx = item.get("index")
         if idx is None:
             continue
+
         entry = store.setdefault(
             idx, {"type": "function", "function": {"name": "", "arguments": ""}}
         )
-        if item.get("id"):
-            entry["id"] = item["id"]
+        if not item.get("id"):
+            raise ValueError(f"Tool call at index {idx} is missing an ID.")
+
+        entry["id"] = item["id"]
         f = item.get("function") or {}
         if f.get("name"):
             entry["function"]["name"] = f["name"]
