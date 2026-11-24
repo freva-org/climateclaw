@@ -12,6 +12,7 @@ from starlette.responses import StreamingResponse
 
 from climateclaw.core.available_chatbots import (
     available_chatbots,
+    default_chatbot,
     default_chatbot_local,
 )
 from climateclaw.core.logging_setup import configure_logging
@@ -161,7 +162,7 @@ async def streamresponse(
     if chatbot == "local":
         model_name = default_chatbot_local()
     else:
-        model_name = chatbot or available[0]
+        model_name = chatbot or (await default_chatbot())
 
     if model_name not in available:
         raise HTTPException(
