@@ -14,7 +14,11 @@ import httpx
 from async_lru import alru_cache
 from fastmcp import FastMCP
 
-from climateclaw.core.available_chatbots import available_chatbots, default_chatbot
+from climateclaw.core.available_chatbots import (
+    available_chatbots,
+    default_chatbot,
+    default_chatbot_local,
+)
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
 from climateclaw.tools.active_requests import ACTIVE_REQUESTS
@@ -57,8 +61,6 @@ HOST = os.getenv("CLIMATECLAW_MCP_HOST", "0.0.0.0")
 PORT = int(os.getenv("CLIMATECLAW_MCP_PORT", "8053"))
 PATH = os.getenv("CLIMATECLAW_MCP_PATH", "/mcp")  # standard path
 USERNAME = "username"
-MODEL = "deepseek-v4.1"
-MODEL = MODEL if MODEL in available_chatbots() else default_chatbot()
 
 
 # ─── App ────────────────────────────────────────────────────────────────────
@@ -89,12 +91,20 @@ def _get_user():
         return user
 
 
+async def _model() -> str:
+    """The default local model if the proxy serves it, else the proxy's default model."""
+    preferred = default_chatbot_local()
+    if preferred in await available_chatbots():
+        return preferred
+    return await default_chatbot()
+
+
 async def call_llm(prompt: str) -> str:
     """Call the language model with the given prompt and return the response as a string."""
     for attempt in range(2):
         try:
             resp = await acomplete(
-                model=MODEL,
+                model=await _model(),
                 messages=[{"role": "user", "content": prompt}],
             )
             raw_text = first_text(resp).strip()
