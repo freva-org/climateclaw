@@ -84,6 +84,7 @@ def accumulate_tool_calls(delta: Dict[str, Any], agg: Dict[str, Any]) -> None:
     choices = delta.get("choices") or []
     if not choices:
         return
+
     d = choices[0].get("delta") or {}
     tc_list = d.get("tool_calls") or []
     if not tc_list:
@@ -94,11 +95,14 @@ def accumulate_tool_calls(delta: Dict[str, Any], agg: Dict[str, Any]) -> None:
         idx = item.get("index")
         if idx is None:
             continue
+
         entry = store.setdefault(
             idx, {"type": "function", "function": {"name": "", "arguments": ""}}
         )
-        if item.get("id"):
-            entry["id"] = item["id"]
+        if not item.get("id"):
+            raise ValueError(f"Tool call at index {idx} is missing an ID.")
+
+        entry["id"] = item["id"]
         fn = item.get("function") or {}
         if fn.get("name"):
             entry["function"]["name"] = fn["name"]
@@ -371,7 +375,7 @@ def parse_code_interpreter_result(
         result.stdout = "Execution completed successfully."
 
     codeout_v = SVCodeOutput(content=normalize_code_output(result), id=id)
-    code_msgs.extend(help_convert_sv_ccrm([codeout_v]))
+    code_msgs.extend(help_convert_sv_ccrm([codeout_v], include_images=include_images))
     code_block.append(codeout_v)
     yield codeout_v
 
