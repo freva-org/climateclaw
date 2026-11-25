@@ -14,11 +14,7 @@ import httpx
 from async_lru import alru_cache
 from fastmcp import FastMCP
 
-from climateclaw.core.available_chatbots import (
-    available_chatbots,
-    default_chatbot,
-    default_chatbot_local,
-)
+from climateclaw.core.available_chatbots import default_chatbot, default_chatbot_local
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
 from climateclaw.tools.active_requests import ACTIVE_REQUESTS
@@ -91,20 +87,12 @@ def _get_user():
         return user
 
 
-async def _model() -> str:
-    """The default local model if the proxy serves it, else the proxy's default model."""
-    preferred = default_chatbot_local()
-    if preferred in await available_chatbots():
-        return preferred
-    return await default_chatbot()
-
-
 async def call_llm(prompt: str) -> str:
     """Call the language model with the given prompt and return the response as a string."""
     for attempt in range(2):
         try:
             resp = await acomplete(
-                model=await _model(),
+                model=await default_chatbot(keyword=default_chatbot_local()),
                 messages=[{"role": "user", "content": prompt}],
             )
             raw_text = first_text(resp).strip()

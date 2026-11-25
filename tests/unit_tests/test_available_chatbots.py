@@ -33,6 +33,39 @@ async def test_available_chatbots_keeps_the_proxy_order(proxy):
 
 
 @pytest.mark.asyncio
+async def test_default_chatbot_picks_the_first_model_matching_the_keyword(proxy):
+    proxy.models = ["gpt-4.1", "deepseek-v4.1", "DeepSeek-v5"]
+    assert await chatbots.default_chatbot(keyword="deepseek") == "deepseek-v4.1"
+    assert await chatbots.default_chatbot(keyword="SEEK-V5") == "DeepSeek-v5"
+
+
+@pytest.mark.asyncio
+async def test_default_chatbot_falls_back_to_the_first_model_without_a_match(proxy):
+    assert await chatbots.default_chatbot(keyword="llama") == "model-a"
+    assert await chatbots.default_chatbot(keyword="") == "model-a"
+
+
+@pytest.mark.asyncio
+async def test_default_chatbot_warns_when_no_model_matches_the_keyword(proxy, caplog):
+    with caplog.at_level("WARNING", logger=chatbots.__name__):
+        await chatbots.default_chatbot(keyword="-a")
+        assert not caplog.records
+
+        await chatbots.default_chatbot(keyword="llama")
+    assert len(caplog.records) == 1
+    assert "'llama'" in caplog.text
+    assert "model-a" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_default_chatbot_uses_the_configured_keyword(proxy, monkeypatch):
+    monkeypatch.setattr(chatbots, "DEFAULT_MODEL", "-b")
+    assert await chatbots.default_chatbot() == "model-b"
+    assert await chatbots.default_chatbot(keyword="-a") == "model-a"
+    assert await chatbots.default_chatbot(keyword="") == "model-a"
+
+
+@pytest.mark.asyncio
 async def test_available_chatbots_asks_the_proxy_once_per_ttl(proxy, monkeypatch):
     now = 1000.0
     monkeypatch.setattr(chatbots.time, "monotonic", lambda: now)
@@ -110,3 +143,26 @@ def test_cache_time_comes_from_the_environment(seconds):
     ).stdout
 
     assert float(out.strip().splitlines()[-1]) == float(seconds)
+
+
+def test_default_model_keyword_comes_from_the_environment():
+    """Settings read the environment at import, so check it in a fresh interpreter."""
+    env = {
+        **os.environ,
+        "CLIMATECLAW_DEFAULT_MODEL": "deepseek",
+        "PYTHONPATH": os.pathsep.join(sys.path),
+    }
+    out = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from climateclaw.core import available_chatbots as c; "
+            "print(c.DEFAULT_MODEL)",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+    assert out.strip().splitlines()[-1] == "deepseek"

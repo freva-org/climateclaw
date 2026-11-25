@@ -15,6 +15,8 @@ Behavior:
 - Keep the proxy's order: the first model is the default
 - Cache the list for CACHE_TTL_SECONDS, so requests don't each query the proxy
 - Raise ValueError if the proxy lists no models
+- default_chatbot(keyword): the first model whose name contains the keyword, else the first model;
+  the keyword defaults to CLIMATECLAW_DEFAULT_MODEL
 
 - model_is_reasoning: names starting with 'o3', 'o4', or 'gpt-5'
 - model_is_gpt_5:    names starting with 'gpt-5'
@@ -26,6 +28,9 @@ logger = logging.getLogger(__name__)
 
 # Read once at import time; override via CLIMATECLAW_MODEL_LIST_CACHE_SECONDS.
 CACHE_TTL_SECONDS = get_settings().MODEL_LIST_CACHE_SECONDS
+
+# Read once at import time; override via CLIMATECLAW_DEFAULT_MODEL.
+DEFAULT_MODEL = get_settings().DEFAULT_MODEL
 
 # Read once at import time; override via the CLIMATECLAW_DEFAULT_LOCAL_MODEL env variable.
 DEFAULT_LOCAL_MODEL = os.getenv("CLIMATECLAW_DEFAULT_LOCAL_MODEL") or "deepseek-v4.1"
@@ -54,11 +59,27 @@ async def available_chatbots() -> list[str]:
     return models
 
 
-async def default_chatbot() -> str:
+async def default_chatbot(keyword: str | None = None) -> str:
     """
     Default chatbot is the first entry.
+
+    With ``keyword``, the first entry whose name contains it (case-insensitive),
+    falling back to the first entry if none does. Without one, ``DEFAULT_MODEL``
+    (from ``CLIMATECLAW_DEFAULT_MODEL``) is used; pass ``""`` to skip it.
     """
     models = await available_chatbots()
+    if keyword is None:
+        keyword = DEFAULT_MODEL
+    if keyword:
+        for model in models:
+            if keyword.lower() in model.lower():
+                return model
+        logger.warning(
+            "No available chatbot matches keyword %r; using %s. Available: %s",
+            keyword,
+            models[0],
+            models,
+        )
     return models[0]
 
 
