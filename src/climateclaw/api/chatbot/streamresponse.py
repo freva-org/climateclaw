@@ -125,8 +125,11 @@ async def streamresponse(
             - If the thread id is missing or empty.
             - If the user input is missing or empty.
             - If the specified chatbot model is not found in the available chatbots.
+        HTTPException (502):
+            - If LiteLLM can't be reached or rejects the request.
         HTTPException (503):
             - If the storage backend (e.g., MongoDB) connection fails.
+            - If LiteLLM lists no models.
         HTTPException (500):
             - If stream preparation fails or an internal server error occurs
               before streaming begins.
@@ -153,10 +156,15 @@ async def streamresponse(
 
     try:
         available = await available_chatbots()
-    except (httpx.HTTPError, ValueError) as e:
+    except httpx.HTTPError as e:
         raise HTTPException(
             status_code=502,
             detail=f"Could not get the available chatbots from LiteLLM: {e}",
+        ) from e
+    except ValueError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"No chatbots available: {e}",
         ) from e
 
     if chatbot == "local":

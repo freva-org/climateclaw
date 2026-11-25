@@ -25,14 +25,20 @@ async def available_chatbots_endpoint() -> list[str]:
     Raises:
         HTTPException (502):
             - If LiteLLM can't be reached or rejects the request.
+        HTTPException (503):
             - If LiteLLM lists no models.
     """
     try:
         chatbot_list = await available_chatbots()
-    except (httpx.HTTPError, ValueError) as e:
+    except httpx.HTTPError as e:
         raise HTTPException(
             status_code=502,
             detail=f"Could not get the available chatbots from LiteLLM: {e}",
+        ) from e
+    except ValueError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"No chatbots available: {e}",
         ) from e
 
     return [c for c in chatbot_list if "embed" not in c]
