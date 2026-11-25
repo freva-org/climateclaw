@@ -133,6 +133,7 @@ Generated artifacts that persist across runs:
 ### Streaming contract
 - Response type: `application/x-ndjson`
 - Each `data:` line is a JSON object with `variant` discriminators (`Assistant`, `Code`, `CodeOutput`, `CodeError`, `Image`, `ServerHint`, `StreamEnd`, etc.).
+- Assistant text starts streaming once the model emits non-whitespace text. Leading whitespace is then included with the first text chunk; a tool-only round does not emit an `Assistant` event.
 - Code tool calls stream incremental chunks while LiteLLM emits `tool_calls`. When the MCP tool resolves, results are converted back into JSON events and appended to Mongo/disk storage.
 - The first chunk is a `ServerHint` carrying the `thread_id`; conversation variants are stored in-memory during streaming and flushed to MongoDB at the end, ensuring replay safety.
 - Clients can call `/api/chatbot/stop?thread_id=...` to move a conversation into `STOPPING`; the streaming loop exits and cancels in-flight MCP requests (code, rag, web-search) via the shared `ActiveRequest` registry.
