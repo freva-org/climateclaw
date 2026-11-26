@@ -344,6 +344,97 @@ async def test_stream_with_tools_streams_raw_code_chunks_for_non_local_models(
     ]
 
 
+@pytest.mark.asyncio
+async def test_stream_with_tools_handles_arguments_streamed_across_chunks(
+    patch_registry,
+    patch_thread_storage,
+    monkeypatch,
+):
+    # gpt-4.1 streams tool-call arguments incrementally: only the first delta
+    # carries the call ID and name; later deltas have no "id" key.
+    thread_id = "t-streamed-args"
+    register_fake_mcp(
+        patch_registry,
+        thread_id,
+        DummyMcpManager(
+            [tool_schema("code_interpreter", {"code": {"type": "string"}}, ["code"])]
+        ),
+    )
+    arg_chunks = ['{"', 'code": "', 'print(1)"}']
+
+    async def streamed_tool_call():
+        yield {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "function": {
+                                    "arguments": "",
+                                    "name": "code_interpreter",
+                                },
+                                "type": "function",
+                                "index": 0,
+                            }
+                        ]
+                    },
+                    "finish_reason": None,
+                }
+            ]
+        }
+        for i, chunk in enumerate(arg_chunks):
+            yield {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "function": {"arguments": chunk},
+                                    "type": "function",
+                                    "index": 0,
+                                }
+                            ]
+                        },
+                        "finish_reason": (
+                            "tool_calls" if i == len(arg_chunks) - 1 else None
+                        ),
+                    }
+                ]
+            }
+
+    async def fake_acomplete(**kwargs):
+        return streamed_tool_call()
+
+    executed_arguments = None
+
+    async def fake_run_tool_via_mcp(**kwargs):
+        nonlocal executed_arguments
+        executed_arguments = kwargs["arguments_json"]
+        return json.dumps({"structuredContent": {"stdout": "ok"}})
+
+    monkeypatch.setattr(stream_orchestrator, "run_tool_via_mcp", fake_run_tool_via_mcp)
+
+    items = [
+        item
+        async for item in stream_with_tools(
+            model="gpt-4.1",
+            thread_id=thread_id,
+            messages=[],
+            acomplete_func=fake_acomplete,
+            stream_state=StreamState(),
+            storage=patch_thread_storage,
+            store_thread=False,
+        )
+    ]
+
+    assert json.loads(executed_arguments) == {"code": "print(1)"}
+    assert [item for item in items if isinstance(item, SVCode)] == [
+        SVCode(content=chunk, id="call_1") for chunk in arg_chunks
+    ]
+    assert [item.id for item in items if isinstance(item, SVCodeOutput)] == ["call_1"]
+
+
 @pytest.mark.parametrize(
     "model",
     [
