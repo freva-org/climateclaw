@@ -14,7 +14,7 @@ import httpx
 from async_lru import alru_cache
 from fastmcp import FastMCP
 
-from climateclaw.core.available_chatbots import available_chatbots, default_chatbot
+from climateclaw.core.available_chatbots import default_chatbot, default_chatbot_local
 from climateclaw.core.logging_setup import configure_logging
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
 from climateclaw.tools.active_requests import ACTIVE_REQUESTS
@@ -57,8 +57,6 @@ HOST = os.getenv("CLIMATECLAW_MCP_HOST", "0.0.0.0")
 PORT = int(os.getenv("CLIMATECLAW_MCP_PORT", "8053"))
 PATH = os.getenv("CLIMATECLAW_MCP_PATH", "/mcp")  # standard path
 USERNAME = "username"
-MODEL = "deepseek-v4.1"
-MODEL = MODEL if MODEL in available_chatbots() else default_chatbot()
 
 
 # ─── App ────────────────────────────────────────────────────────────────────
@@ -94,7 +92,7 @@ async def call_llm(prompt: str) -> str:
     for attempt in range(2):
         try:
             resp = await acomplete(
-                model=MODEL,
+                model=await default_chatbot(keyword=default_chatbot_local()),
                 messages=[{"role": "user", "content": prompt}],
             )
             raw_text = first_text(resp).strip()

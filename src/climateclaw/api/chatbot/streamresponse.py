@@ -5,6 +5,7 @@ import json
 import time
 from collections.abc import Generator
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
@@ -124,8 +125,11 @@ async def streamresponse(
             - If the thread id is missing or empty.
             - If the user input is missing or empty.
             - If the specified chatbot model is not found in the available chatbots.
+        HTTPException (502):
+            - If LiteLLM can't be reached or rejects the request.
         HTTPException (503):
             - If the storage backend (e.g., MongoDB) connection fails.
+            - If LiteLLM lists no models.
         HTTPException (500):
             - If stream preparation fails or an internal server error occurs
               before streaming begins.
@@ -150,12 +154,24 @@ async def streamresponse(
             detail="Input not found. Please provide a non-empty input in the query parameters, of type String.",
         )
 
+    try:
+        available = await available_chatbots()
+    except httpx.HTTPError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not get the available chatbots from LiteLLM: {e}",
+        ) from e
+    except ValueError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"No chatbots available: {e}",
+        ) from e
+
     if chatbot == "local":
         model_name = default_chatbot_local()
     else:
-        model_name = chatbot or default_chatbot()
+        model_name = chatbot or (await default_chatbot())
 
-    available = available_chatbots()
     if model_name not in available:
         raise HTTPException(
             status_code=422,

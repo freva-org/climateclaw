@@ -3,21 +3,20 @@ from __future__ import annotations
 
 import logging
 import os
-from functools import lru_cache
-from pathlib import Path
-from typing import Any
+import time
 
-import yaml
+from climateclaw.core.settings import get_settings
+from climateclaw.services.streaming.litellm_client import list_models
 
 """
-Model catalog loader for LiteLLM config (YAML-based).
+Model catalog: the models the LiteLLM proxy serves, as listed by its /v1/models.
 
 Behavior:
-- Parse YAML with yaml.safe_load
-- Collect every value found under any "model_name" key (string-like), anywhere in the document
-- Preserve list order as encountered in YAML
-- Ignore comments naturally (YAML parser drops them)
-- Fatal (SystemExit) if the resulting list is empty
+- Keep the proxy's order: the first model is the default
+- Cache the list for CACHE_TTL_SECONDS, so requests don't each query the proxy
+- Raise ValueError if the proxy lists no models
+- default_chatbot(keyword): the first model whose name contains the keyword, else the first model;
+  the keyword defaults to CLIMATECLAW_DEFAULT_MODEL
 
 - model_is_reasoning: names starting with 'o3', 'o4', or 'gpt-5'
 - model_is_gpt_5:    names starting with 'gpt-5'
@@ -27,140 +26,60 @@ Behavior:
 
 logger = logging.getLogger(__name__)
 
-CLIMATECLAW_LITELLM_CONFIG_PATH = "LITELLM_CONFIG"
-DEFAULT_CONFIG_BASENAME = "litellm_config.yaml"
-DEV_CONFIG_BASENAME = "litellm_config.dev.yaml"
+# Read once at import time; override via CLIMATECLAW_MODEL_LIST_CACHE_SECONDS.
+CACHE_TTL_SECONDS = get_settings().MODEL_LIST_CACHE_SECONDS
+
+# Read once at import time; override via CLIMATECLAW_DEFAULT_MODEL.
+DEFAULT_MODEL = get_settings().DEFAULT_MODEL
 
 # Read once at import time; override via the CLIMATECLAW_DEFAULT_LOCAL_MODEL env variable.
 DEFAULT_LOCAL_MODEL = os.getenv("CLIMATECLAW_DEFAULT_LOCAL_MODEL") or "deepseek-v4.1"
 
-
-def _config_basename() -> str:
-    """Select the development catalog when the application runs in dev mode."""
-    is_dev = os.getenv("CLIMATECLAW_DEV", "").lower() in {"1", "true", "yes"}
-    return DEV_CONFIG_BASENAME if is_dev else DEFAULT_CONFIG_BASENAME
+# (time fetched, models)
+_cache: tuple[float, list[str]] | None = None
 
 
-def _as_str_or_none(value: Any) -> str | None:
-    """Coerce simple scalars to string; ignore complex types."""
-    if isinstance(value, str):
-        return value.strip()
-    # If someone wrote model_name: 123, accept but coerce to str (and warn).
-    if isinstance(value, (int, float)):
-        s = str(value).strip()
-        if s:
-            logger.warning(
-                "Coercing non-string model_name=%r to string '%s'.", value, s
-            )
-            return s
-    return None
-
-
-def _collect_model_names(node: Any) -> list[str]:
+async def available_chatbots() -> list[str]:
     """
-    Recursively traverse loaded YAML and collect values under 'model_name' keys
-    (mimicking Rust's 'scan anywhere' behavior, but structured).
+    Returns the ordered list of models the LiteLLM proxy serves.
+    Raises httpx.HTTPError if the proxy can't be reached, ValueError if it lists none.
     """
-    sink: list[str] = []
-    if isinstance(node, dict):
-        # If we see a model_name at this level, collect it.
-        if "model_name" in node:
-            name = _as_str_or_none(node.get("model_name"))
-            if name:
-                sink.append(name)
-            else:
-                logger.warning(
-                    "Ignoring non-string/empty model_name: %r", node.get("model_name")
-                )
+    global _cache
+    if _cache and time.monotonic() - _cache[0] < CACHE_TTL_SECONDS:
+        return _cache[1]
 
-        # Recurse into all values to catch nested occurrences.
-        for v in node.values():
-            sink.extend(_collect_model_names(v))
+    models = await list_models()
+    if not models:
+        logger.error("LiteLLM lists no models.")
+        raise ValueError("LiteLLM lists no models.")
 
-    elif isinstance(node, list):
-        for item in node:
-            sink.extend(_collect_model_names(item))
-    # Other scalar types are ignored.
-
-    return sink
+    if _cache is None or _cache[1] != models:
+        logger.info("Available chatbots (%d): %s", len(models), models)
+    _cache = (time.monotonic(), models)
+    return models
 
 
-def _discover_config_path() -> Path:
-    """
-    Resolve the LiteLLM YAML path with the following priority:
-    1) LITELLM_CONFIG env var (absolute or relative)
-    2) {CWD}/litellm_config[.dev].yaml, according to CLIMATECLAW_DEV
-    3) Walk parents from this file and the CWD to find the first matching config
-    """
-    # 1) ENV override
-    env_path = os.environ.get(CLIMATECLAW_LITELLM_CONFIG_PATH)
-    if env_path:
-        p = Path(env_path).expanduser().resolve()
-        if p.is_file():
-            return p
-        logger.warning("LITELLM_CONFIG is set but not a file: %s", p)
-
-    config_basename = _config_basename()
-
-    # 2) CWD
-    cwd_candidate = Path.cwd() / config_basename
-    if cwd_candidate.is_file():
-        return cwd_candidate.resolve()
-
-    # 3) Walk up from this file
-    here = Path(__file__).resolve()
-    for parent in [*here.parents, *Path.cwd().resolve().parents]:
-        candidate = parent / config_basename
-        if candidate.is_file():
-            return candidate.resolve()
-
-    # Fallback to CWD for error messaging
-    return cwd_candidate.resolve()
-
-
-def _load_yaml(path: Path) -> Any:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        logger.error(f"LiteLLM config not found at: {path}")
-        raise
-    except Exception as e:
-        logger.exception(f"Failed to read LiteLLM config at {path}: {e}")
-        raise
-
-    try:
-        return yaml.safe_load(text)
-    except Exception as e:
-        logger.exception(f"Failed to parse YAML at {path}: {e}")
-        raise
-
-
-@lru_cache(maxsize=1)
-def available_chatbots() -> list[str]:
-    """
-    Returns an ordered list of model names discovered under 'model_name' keys
-    in the active LiteLLM config. Fatal if empty.
-    """
-    path: Path = _discover_config_path()
-    data = _load_yaml(path)
-    names: list[str] = _collect_model_names(data)
-
-    # Preserve order; do not deduplicate (matches the spirit of the Rust scan).
-    filtered = [n for n in names if n]  # already warned on invalids
-
-    if not filtered:
-        logger.error(f"No available chatbots found in LiteLLM file at {path}.")
-        raise ValueError(f"No available chatbots found in LiteLLM file at {path}.")
-
-    logger.info("Available chatbots (%d): %s", len(filtered), filtered)
-    return filtered
-
-
-def default_chatbot() -> str:
+async def default_chatbot(keyword: str | None = None) -> str:
     """
     Default chatbot is the first entry.
+
+    With ``keyword``, the first entry whose name contains it (case-insensitive),
+    falling back to the first entry if none does. Without one, ``DEFAULT_MODEL``
+    (from ``CLIMATECLAW_DEFAULT_MODEL``) is used; pass ``""`` to skip it.
     """
-    models = available_chatbots()
+    models = await available_chatbots()
+    if keyword is None:
+        keyword = DEFAULT_MODEL
+    if keyword:
+        for model in models:
+            if keyword.lower() in model.lower():
+                return model
+        logger.warning(
+            "No available chatbot matches keyword %r; using %s. Available: %s",
+            keyword,
+            models[0],
+            models,
+        )
     return models[0]
 
 
@@ -217,9 +136,10 @@ def model_supports_images(model: str) -> bool:
 
 def refresh_cache() -> None:
     """
-    Clear memoized results (useful in tests or after config changes).
+    Forget the cached model list, so the next call asks the proxy again.
     """
-    available_chatbots.cache_clear()
+    global _cache
+    _cache = None
 
 
 __all__ = [

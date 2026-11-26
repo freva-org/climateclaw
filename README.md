@@ -123,7 +123,7 @@ Generated artifacts that persist across runs:
 | `GET` | `/api/chatbot/ping` | Static ping stub | Placeholder |
 | `GET` | `/api/chatbot/docs` | Docs payload stub | Placeholder |
 | `GET` | `/api/chatbot/help` | Help payload stub | Placeholder |
-| `GET` | `/api/chatbot/availablechatbots` | Returns model names from `litellm_config.yaml` | Requires auth |
+| `GET` | `/api/chatbot/availablechatbots` | Returns the chat models the LiteLLM proxy serves (its `/v1/models`, without embedding models) | Requires auth |
 | `GET` | `/api/chatbot/newthread` | Generates a fresh `thread_id` | Requires auth |
 | `POST` | `/api/chatbot/getthread` | Fetches thread contents omitting prompts + redundant StreamEnd variants | Requires auth |
 | `POST` | `/api/chatbot/getuserthreads` | Returns recent threads for authenticated user | JSON body: `num_threads`, `page` |
