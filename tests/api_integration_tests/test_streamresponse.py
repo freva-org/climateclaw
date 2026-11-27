@@ -27,3 +27,4 @@ async def test_streamresponse_returns_500_on_prepare_failure(
 
             assert r.status_code == 500
             assert "Internal Server Error" in r.json()["detail"]
+            assert "prep failed" not in r.json()["detail"]

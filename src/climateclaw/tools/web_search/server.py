@@ -2,9 +2,10 @@ import asyncio
 import os
 from typing import Any
 
+import httpx
 from fastmcp import FastMCP
 
-from climateclaw.core.logging_setup import configure_logging
+from climateclaw.core.logging_setup import client_error_message, configure_logging
 from climateclaw.services.streaming.litellm_client import acomplete, first_text
 from climateclaw.tools.active_requests import (
     ACTIVE_REQUESTS,
@@ -45,6 +46,16 @@ app = make_header_gate(
     mcp_path=PATH,
     on_cancel_request=ACTIVE_REQUESTS.cancel,
 )
+
+
+def _unavailable() -> GenericToolResult:
+    # The result reaches the model and the user, so details (which may echo part
+    # of a key) only go to the server log.
+    return GenericToolResult(
+        error=client_error_message(
+            "Web search is unavailable at the moment. Please try again later."
+        )
+    )
 
 
 @mcp.tool()
@@ -161,6 +172,18 @@ async def web_search(query: str) -> GenericToolResult:
         logger.info("Web-search cancelled by client. sid=%s rid=%s", sid, rid)
         return GenericToolResult(error="Request cancelled by client.")
 
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in (401, 403):
+            logger.error(
+                "Web-search authentication failed: %s. Check "
+                "CLIMATECLAW_OPENAI_API_KEY for the model provider and "
+                "CLIMATECLAW_LITELLM_MASTER_KEY for the LiteLLM proxy.",
+                e,
+            )
+        else:
+            logger.exception("Web-search failed due to error: %s", e)
+        return _unavailable()
+
     except Exception as e:
-        logger.warning("Web-search failed due to error: %s", e)
-        raise RuntimeError(f"Web-search failed: {e}") from e
+        logger.exception("Web-search failed due to error: %s", e)
+        return _unavailable()

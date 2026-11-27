@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from climateclaw.core.logging_setup import configure_logging
+from climateclaw.core.logging_setup import client_error_message, configure_logging
 from climateclaw.services.service_factory import (
     Authenticator,
     AuthRequired,
@@ -102,7 +102,9 @@ async def get_thread(
         logger.exception(
             f"Error reading thread file: {e}", extra={"thread_id": thread_id}
         )
-        raise HTTPException(status_code=500, detail=f"Error reading thread file: {e}")
+        raise HTTPException(
+            status_code=500, detail=client_error_message("Error reading thread file")
+        )
 
     content: list[SVDict] = _post_process(messages)
 

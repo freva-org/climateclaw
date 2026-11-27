@@ -58,3 +58,4 @@ async def test_getthread_returns_500_when_history_invalid(
 
             assert r.status_code == 500
             assert "Error reading thread file" in r.json()["detail"]
+            assert "broken history" not in r.json()["detail"]
