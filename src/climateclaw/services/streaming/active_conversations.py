@@ -260,8 +260,9 @@ async def _replay_code_history(
     Replays all SVCode blocks for a conversation into the code-interpreter MCP server,
     to reconstruct the kernel state when a conversation has been reloaded from storage.
 
-    If `progress` is given, it is advanced to the index of each block before
-    that block runs, so the stream can report "Progress: (k/n)".
+    If `progress` is given, it is advanced to the 1-based index of each block
+    before that block runs. ReplayGate sends this as the `progress` key
+    ({"current": k, "total": n}) of the busy server hints.
 
     This is best-effort: failures are logged and we continue or stop depending on the error.
     """
