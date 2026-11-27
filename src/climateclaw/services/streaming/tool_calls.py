@@ -99,10 +99,10 @@ def accumulate_tool_calls(delta: Dict[str, Any], agg: Dict[str, Any]) -> None:
         entry = store.setdefault(
             idx, {"type": "function", "function": {"name": "", "arguments": ""}}
         )
-        if not item.get("id"):
-            raise ValueError(f"Tool call at index {idx} is missing an ID.")
-
-        entry["id"] = item["id"]
+        # When arguments are streamed, only the first delta for an index
+        # carries the ID; later deltas only append argument chunks.
+        if item.get("id"):
+            entry["id"] = item["id"]
         fn = item.get("function") or {}
         if fn.get("name"):
             entry["function"]["name"] = fn["name"]
@@ -117,6 +117,8 @@ def finalize_tool_calls(agg: Dict[str, Any]) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for idx in sorted(store.keys()):
         tc = store[idx]
+        if not tc.get("id"):
+            raise ValueError(f"Tool call at index {idx} is missing an ID.")
         fn = tc.get("function") or {}
         tc.setdefault("type", "function")
         tc["function"] = {

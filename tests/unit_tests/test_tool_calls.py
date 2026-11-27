@@ -9,7 +9,9 @@ from climateclaw.services.streaming.stream_variants import (
 )
 from climateclaw.services.streaming.tool_calls import (
     InvalidToolArguments,
+    accumulate_tool_calls,
     code_variant_content,
+    finalize_tool_calls,
     normalize_tool_arguments,
 )
 
@@ -19,6 +21,62 @@ CODE_SCHEMA = {
     "required": ["code"],
     "additionalProperties": False,
 }
+
+
+def _tool_call_chunk(*tool_calls):
+    return {"choices": [{"delta": {"tool_calls": list(tool_calls)}}]}
+
+
+def test_accumulate_tool_calls_handles_streamed_deltas_without_id():
+    # Shape sent by gpt-4.1: only the first delta per index carries the ID
+    # and name; later deltas have no "id" key and only append arguments.
+    chunks = [
+        _tool_call_chunk(
+            {
+                "id": "call_abc",
+                "function": {"arguments": "", "name": "code_interpreter"},
+                "type": "function",
+                "index": 0,
+            }
+        ),
+        _tool_call_chunk(
+            {"function": {"arguments": '{"'}, "type": "function", "index": 0}
+        ),
+        _tool_call_chunk(
+            {"function": {"arguments": 'code": "'}, "type": "function", "index": 0}
+        ),
+        _tool_call_chunk(
+            {"function": {"arguments": 'print(1)"}'}, "type": "function", "index": 0}
+        ),
+    ]
+
+    agg: dict = {}
+    for chunk in chunks:
+        accumulate_tool_calls(chunk, agg)
+
+    assert finalize_tool_calls(agg) == [
+        {
+            "id": "call_abc",
+            "type": "function",
+            "function": {
+                "name": "code_interpreter",
+                "arguments": '{"code": "print(1)"}',
+            },
+        }
+    ]
+
+
+def test_finalize_tool_calls_rejects_call_that_never_received_an_id():
+    agg: dict = {}
+    accumulate_tool_calls(
+        _tool_call_chunk(
+            {"function": {"name": "code_interpreter", "arguments": "{}"}, "index": 0}
+        ),
+        agg,
+    )
+
+    with pytest.raises(ValueError, match="index 0 is missing an ID"):
+        finalize_tool_calls(agg)
 
 
 def test_normalize_tool_arguments_accepts_direct_arguments():
