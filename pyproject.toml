@@ -25,7 +25,7 @@ dependencies = [
     "anyio",
     "fastapi",
     "fastmcp==3.4.2",
-    "mcp==1.28.1",
+    "mcp==1.30.0",
     "httpx",
     "ipython",
     "langchain-community>=0.3.31",
