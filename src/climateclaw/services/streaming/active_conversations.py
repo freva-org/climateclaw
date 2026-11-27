@@ -12,6 +12,7 @@ from climateclaw.services.service_factory import (
     ThreadStorage,
     get_mcp_manager,
 )
+from climateclaw.services.streaming.replay_gate import ReplayProgress
 from climateclaw.services.streaming.stream_variants import (
     StreamVariant,
     SVCode,
@@ -36,6 +37,7 @@ class ActiveConversation:
     state: ConversationState
     mcp_manager: McpManager | None
     replay_task: asyncio.Task | None = None
+    replay_progress: ReplayProgress | None = None
     tool_tasks: set[asyncio.Task] = field(default_factory=set)
     messages: list[StreamVariant] = field(default_factory=list)
     last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -124,10 +126,12 @@ async def initialize_conversation(
     log.debug("Initialized the conversation and saved to Registry. ")
 
     # send tool calls to MCP server if there are Code variants present in messages
-    if mcp_mgr is not None and any(isinstance(v, SVCode) for v in messages):
+    code_blocks = _extract_code_blocks(messages)
+    if mcp_mgr is not None and code_blocks:
+        progress = ReplayProgress(total=len(code_blocks))
         loop = asyncio.get_running_loop()
-        task = loop.create_task(_replay_code_history(thread_id))
-        await set_replay_task(thread_id, task)
+        task = loop.create_task(_replay_code_history(thread_id, progress))
+        await set_replay_task(thread_id, task, progress)
         await register_tool_task(thread_id, task)
         task.add_done_callback(
             # to be unregistered when done
@@ -240,10 +244,24 @@ async def remove_conversation(thread_id: str) -> bool:
     return True
 
 
-async def _replay_code_history(thread_id: str) -> None:
+def _extract_code_blocks(messages: list[StreamVariant]) -> list[str]:
+    """Return all non-empty SVCode contents in chronological order."""
+    return [
+        v.content
+        for v in messages
+        if isinstance(v, SVCode) and isinstance(v.content, str) and v.content.strip()
+    ]
+
+
+async def _replay_code_history(
+    thread_id: str, progress: ReplayProgress | None = None
+) -> None:
     """
     Replays all SVCode blocks for a conversation into the code-interpreter MCP server,
     to reconstruct the kernel state when a conversation has been reloaded from storage.
+
+    If `progress` is given, it is advanced to the index of each block before
+    that block runs, so the stream can report "Progress: (k/n)".
 
     This is best-effort: failures are logged and we continue or stop depending on the error.
     """
@@ -254,12 +272,7 @@ async def _replay_code_history(thread_id: str) -> None:
         mcp = conv.mcp_manager
         messages = list(conv.messages)
 
-    # Extract all code blocks in chronological order
-    code_blocks: list[str] = [
-        v.content
-        for v in messages
-        if isinstance(v, SVCode) and isinstance(v.content, str) and v.content.strip()
-    ]
+    code_blocks = _extract_code_blocks(messages)
 
     log = configure_logging(__name__, thread_id=thread_id)
 
@@ -280,7 +293,9 @@ async def _replay_code_history(thread_id: str) -> None:
         f"Replaying {len(code_blocks)} code blocks to code_interpreter for thread {thread_id}"
     )
 
-    for code in code_blocks:
+    for step, code in enumerate(code_blocks, start=1):
+        if progress is not None:
+            progress.advance(step)
         try:
             # Run the MCP call asynchronously, reusing helper from stream_orchestrator
             await run_tool_via_mcp(
@@ -300,7 +315,9 @@ async def _replay_code_history(thread_id: str) -> None:
             break
 
 
-async def set_replay_task(thread_id: str, task: asyncio.Task) -> None:
+async def set_replay_task(
+    thread_id: str, task: asyncio.Task, progress: ReplayProgress | None = None
+) -> None:
     """
     Store the active replay task for this conversation so later code tool calls
     can wait for kernel state restoration before using the same MCP client.
@@ -309,6 +326,7 @@ async def set_replay_task(thread_id: str, task: asyncio.Task) -> None:
         conv = Registry.get(thread_id)
         if conv:
             conv.replay_task = task
+            conv.replay_progress = progress
 
 
 async def get_replay_task(thread_id: str) -> asyncio.Task | None:
@@ -323,6 +341,15 @@ async def get_replay_task(thread_id: str) -> asyncio.Task | None:
     return task
 
 
+async def get_replay_progress(thread_id: str) -> ReplayProgress | None:
+    """
+    Return the progress tracker of the active replay task, if any.
+    """
+    async with RegistryLock:
+        conv = Registry.get(thread_id)
+        return conv.replay_progress if conv else None
+
+
 async def clear_replay_task(thread_id: str, task: asyncio.Task) -> None:
     """
     Clear the replay task reference, but only if it still points at this task.
@@ -331,6 +358,7 @@ async def clear_replay_task(thread_id: str, task: asyncio.Task) -> None:
         conv = Registry.get(thread_id)
         if conv and conv.replay_task is task:
             conv.replay_task = None
+            conv.replay_progress = None
 
 
 async def _cleanup_replay_task(thread_id: str, task: asyncio.Task) -> None:

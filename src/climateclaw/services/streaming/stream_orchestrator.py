@@ -17,6 +17,7 @@ from climateclaw.services.streaming.active_conversations import (
     get_conv_mcpmanager,
     get_conv_messages,
     get_conversation_state,
+    get_replay_progress,
     get_replay_task,
     initialize_conversation,
     register_tool_task,
@@ -117,7 +118,9 @@ async def stream_with_tools(
     mcp = await get_conv_mcpmanager(thread_id)
 
     if stream_state.replay_gate is None:
-        stream_state.replay_gate = ReplayGate(await get_replay_task(thread_id))
+        stream_state.replay_gate = ReplayGate(
+            await get_replay_task(thread_id), await get_replay_progress(thread_id)
+        )
 
     if hint := stream_state.replay_gate.start_hint():
         yield hint
@@ -171,6 +174,9 @@ async def stream_with_tools(
                 chunk_task.cancel()
                 await asyncio.gather(chunk_task, return_exceptions=True)
                 raise
+
+            if hint := stream_state.replay_gate.progress_hint_if_changed():
+                yield hint
 
             choice = (chunk.get("choices") or [{}])[0]
             delta = choice.get("delta") or {}
@@ -235,7 +241,7 @@ async def stream_with_tools(
 
     # If no tool calls, wrap up everything and return
     if not tool_calls:
-        if hint := await stream_state.replay_gate.wait_done_hint():
+        async for hint in stream_state.replay_gate.wait_done_hints():
             yield hint
 
         end_v = SVStreamEnd(content="Stream ended.")
@@ -314,7 +320,7 @@ async def stream_with_tools(
         # Store valid, normalized arguments in MongoDB and stream them to the frontend.
         # Otherwise some client may break.
         if name == "code_interpreter":
-            if hint := await stream_state.replay_gate.wait_done_hint():
+            async for hint in stream_state.replay_gate.wait_done_hints():
                 yield hint
 
             # accumulated code text to be appended to thread
@@ -473,7 +479,7 @@ async def stream_with_tools(
             thread_id, tool_out_v, storage=storage, store_thread=store_thread
         )
 
-        if hint := stream_state.replay_gate.done_hint_if_ready():
+        if hint := stream_state.replay_gate.pending_hint_if_ready():
             yield hint
 
         for msg in tool_msgs:
