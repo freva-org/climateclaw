@@ -337,7 +337,7 @@ These paths can be accessed directly.
 
 2. Use the built-in `open` function for file operations.
 
-3. Do not import `os`.
+3. Do not import `os`. Instead of `os`, use `pathlib`.
 
 ---
 
